@@ -80,3 +80,37 @@ Required:
 - [ ] A new game resets the run state (full HP, Fists in D).
 - [ ] The HUD, GAME OVER screen and menu fit on screen at 1280×720, 640×360 and 1024×768.
 - [ ] `PROJECT_STATE.md` and `GAME_SPEC.md` describe the corrected design.
+
+# Phase 4 — Inventory, World Loot, Consumable Action and Floor 2
+
+The Phase 3 control model and design corrections still apply (arrow keys move; W/A/S/D are
+configurable slots with Fists on D in a new game; downward-only; GAME OVER waits for Enter).
+
+Required:
+- [ ] One current-run inventory holds every quantity. The HUD, menu and pickups only read it
+      or change it through its methods.
+- [ ] Fists are innate: always available, no quantity, never used up, still assignable.
+- [ ] A new run has 0 Small Health Potions, W/A/S empty and D = Fists.
+- [ ] Floor 1 has a Small Health Potion pickup. Walking over it gives exactly 2 potions,
+      once, and it disappears. Donut and enemies cannot collect it.
+- [ ] The menu lists "Small Health Potion x2" only after the pickup, and the potion can be
+      put on W, A, S or D. It is in one slot at a time, and Fists can stay on another key.
+- [ ] The potion is used through the same slot dispatch as Fists. It heals 30 HP, capped at
+      the maximum, and each successful use spends exactly one.
+- [ ] At full HP the potion does nothing and is not used up. One short key press uses at
+      most one potion.
+- [ ] The HUD shows quantities (for example `A: Potion x2`), and the HUD and menu update
+      after every use.
+- [ ] Using the last potion removes it from the inventory and empties its slot.
+- [ ] Floor 1 has stairs down to Floor 2. Inventory quantities and slot assignments survive
+      the trip, and Carl and Donut arrive together on Floor 2 without a transition loop.
+- [ ] Floor 2 is a playable, walled level with a clear "Floor 2" sign, the HUD and the menu.
+      Nothing on Floor 2 leads to Floor 1, and nothing on Floor 1 leads to the Surface.
+- [ ] The floor-entry state includes the inventory. A retry restores it: items picked up
+      since entry are taken back and their pickup is back in the level, and items used
+      since entry are returned.
+- [ ] Retrying (any number of times) never duplicates items. A slot holding an item that
+      the retry took back becomes empty.
+- [ ] GAME OVER still freezes the game, blocks the menu, and waits for Enter.
+- [ ] The HUD and the menu with a potion fit at 1280×720, 640×360 and 1024×768.
+- [ ] No disk saving, Floor 3, new enemy species or Donut combat were added.

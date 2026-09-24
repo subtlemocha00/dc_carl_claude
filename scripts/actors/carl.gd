@@ -5,7 +5,9 @@ extends CharacterBody2D
 ##   slot's key uses the action in that slot toward his facing direction. Carl does not decide
 ##   which action is in which slot: he asks `action_slots`, the run's ActionSlots.
 ## - Each action is carried out by an ActionPerformer made from the action's performer_scene,
-##   so new weapons and items need no changes to this script.
+##   so new weapons and items need no changes to this script. Using a consumable (a potion)
+##   spends one from `inventory`, but only when the use really happened.
+## - Pickups he walks over call collect_item(), which adds to `inventory`.
 
 const HURT_FLASH_COLOR := Color(1.0, 0.35, 0.35)
 const DOWN_COLOR := Color(0.45, 0.45, 0.45, 0.8)
@@ -24,6 +26,9 @@ var action_slots: ActionSlots:
 		if action_slots != null:
 			action_slots.changed.connect(_add_missing_performers)
 			_add_missing_performers()
+
+## Carl's inventory. Levels set this to GameState.inventory.
+var inventory: Inventory
 
 ## Most recent non-zero movement direction (unit length). Carl keeps facing this way
 ## after the keys are released, and his actions go this way.
@@ -91,11 +96,21 @@ func get_action_performer(action: ActionDefinition) -> ActionPerformer:
 	return _performers.get(action.id)
 
 
+## Gives Carl `quantity` of `item`. ItemPickup calls this when Carl walks over it.
+func collect_item(item: ActionDefinition, quantity: int) -> void:
+	inventory.add(item, quantity)
+
+
 ## Uses the action in `slot` toward Carl's facing direction. An empty slot does nothing.
+## A consumable needs at least one in the inventory, and a successful use spends one.
 func _use_slot(slot: StringName) -> void:
 	var action := action_slots.get_action(slot) if action_slots != null else null
-	if action != null:
-		_performers[action.id].perform(facing_direction)
+	if action == null:
+		return
+	if action.consumable and (inventory == null or inventory.get_quantity(action) == 0):
+		return
+	if _performers[action.id].perform(facing_direction) and action.consumable:
+		inventory.remove(action, 1)
 
 
 ## Creates a performer for every action in a slot that does not have one yet, so an action
@@ -111,6 +126,7 @@ func _add_missing_performers() -> void:
 			push_error("The performer_scene of action '%s' must have an ActionPerformer root." % action.id)
 			node.free()
 			continue
+		performer.user = self
 		add_child(performer)
 		_performers[action.id] = performer
 

@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="ActionDefinition" format=3 uid="uid://dwfvybkwc6ydu"]
+
+[ext_resource type="Script" uid="uid://5sgq82s8oqjb" path="res://scripts/actions/action_definition.gd" id="1_definition"]
+[ext_resource type="PackedScene" uid="uid://bv8u4dtasnsnr" path="res://scenes/actions/small_health_potion.tscn" id="2_performer"]
+
+[resource]
+script = ExtResource("1_definition")
+id = &"small_health_potion"
+display_name = "Small Health Potion"
+short_name = "Potion"
+description = "Heals 30 HP, up to Carl's maximum. It is not used up when Carl is already at full health."
+consumable = true
+performer_scene = ExtResource("2_performer")

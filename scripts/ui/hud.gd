@@ -1,6 +1,7 @@
 extends CanvasLayer
-## The in-game HUD: Carl's hit points, what each W/A/S/D action slot holds, and the GAME OVER
-## screen. It sits on its own canvas layer, so it stays fixed on screen while the camera moves.
+## The in-game HUD: Carl's hit points, what each W/A/S/D action slot holds (with the quantity
+## of a carried item, for example "A: Potion x2"), and the GAME OVER screen. It sits on its own
+## canvas layer, so it stays fixed on screen while the camera moves.
 ## It keeps running while the game is paused (process_mode Always), so the GAME OVER screen
 ## can react to Enter.
 
@@ -28,10 +29,12 @@ func show_health(health: Health) -> void:
 	game_over_message.visible = health.is_dead()
 
 
-## Starts displaying what each action slot holds, and updates as soon as that changes.
-func show_action_slots(action_slots: ActionSlots) -> void:
+## Starts displaying what each action slot holds, and updates as soon as a slot or a quantity
+## in `inventory` changes.
+func show_action_slots(action_slots: ActionSlots, inventory: Inventory) -> void:
 	_action_slots = action_slots
 	action_slots.changed.connect(_on_action_slots_changed)
+	inventory.changed.connect(_on_action_slots_changed)
 	_on_action_slots_changed()
 
 
@@ -42,7 +45,7 @@ func _on_health_changed(current: int, maximum: int) -> void:
 func _on_action_slots_changed() -> void:
 	var parts := PackedStringArray()
 	for slot in ActionSlots.SLOTS:
-		parts.append("%s: %s" % [ActionSlots.KEY_LABELS[slot], _action_slots.get_display_name(slot)])
+		parts.append("%s: %s" % [ActionSlots.KEY_LABELS[slot], _action_slots.get_display_name(slot, true)])
 	action_slots_label.text = "   ".join(parts)
 
 

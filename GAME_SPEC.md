@@ -102,6 +102,8 @@ W/A/S/D are four hot-action slots.
 The player can assign usable inventory items/actions to these slots through the inventory UI.
 An action sits in one slot at a time: assigning it to another slot empties its old slot.
 An empty slot does nothing when its key is pressed.
+A slot can only hold something Carl has. When the last of a consumable is used up, its slot
+becomes empty; a newly found one must be assigned again.
 
 Examples:
 - W = Steel Pipe
@@ -148,6 +150,13 @@ From an inventory item, the player must eventually be able to choose Equip and a
 The first version of this menu assigns directly: select an action with Up/Down, then press
 W, A, S or D to put it in that slot. Escape also closes the menu.
 
+Inventory contents:
+- Innate actions (Fists) are always available, have no quantity and are never used up.
+- Carried items have a quantity, shown in the menu and the HUD (for example "x2"). An item
+  whose quantity reaches 0 leaves the inventory.
+- Items are found as pickups in levels. Carl collects one by walking over it; there is no
+  interaction key. Donut and enemies never collect pickups.
+
 HUD must eventually show all four action slots and their assigned items.
 
 ## 9. Example prototype items
@@ -163,6 +172,12 @@ Planned prototype pool:
 - Strange Alien Device — Floor 3 special item.
 
 These are baseline design targets, not a demand to implement all items in early phases.
+
+The health potion is implemented as the **Small Health Potion**:
+- a consumable;
+- it heals 30 HP, never above Carl's maximum;
+- each use that heals spends exactly one;
+- using it at full HP does nothing and spends nothing.
 
 ## 10. Dungeon structure
 
@@ -273,6 +288,11 @@ Initial save design:
   Retrying after GAME OVER does this. Carl's HP returns to what he had on entering the
   floor, and the floor's enemies start over. The action-slot layout stays as the player
   last set it.
+  Carl's inventory also returns to what he had on entering the floor:
+  - items picked up since are taken back, and their pickups are back in the level;
+  - items used since are returned;
+  - a slot holding an item Carl no longer has becomes empty.
+  Retrying never creates extra items.
 
 Current-run state (what survives level changes during one playthrough, held in memory) is
 separate from disk save data. A later SaveManager writes the needed parts of the run state

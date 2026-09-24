@@ -1,6 +1,7 @@
 extends "res://tests/support/game_test.gd"
 ## Checks the HUD, the action menu and the camera on Floor 1 at the supported window sizes, in
-## a real window.
+## a real window. Carl carries potions assigned to a slot, so the HUD and the menu show their
+## longest texts (with quantities).
 ##
 ## Run from the project folder (NOT headless; a game window opens briefly):
 ##     godot --path . -s res://tests/test_windowed_resolutions.gd
@@ -9,6 +10,7 @@ extends "res://tests/support/game_test.gd"
 ## Exits with code 0 when every check passes and 1 otherwise.
 
 const FLOOR_1_PATH := "res://scenes/levels/floor_01.tscn"
+const POTION: ActionDefinition = preload("res://resources/actions/small_health_potion.tres")
 const WINDOW_SIZES: Array[Vector2i] = [Vector2i(1280, 720), Vector2i(640, 360), Vector2i(1024, 768)]
 ## The project's base size (Project Settings > Display > Window).
 const BASE_SIZE := Vector2(1280, 720)
@@ -33,6 +35,10 @@ func _run_checks() -> void:
 	var menu_panel: Control = action_menu.get_node("%Panel")
 	var game_over_message: Control = hud.get_node("%GameOverMessage")
 	var carl: CharacterBody2D = current_scene.get_node("Actors/Carl")
+	game_state().inventory.add(POTION, 2)
+	game_state().action_slots.assign(POTION, ActionSlots.SLOT_A)
+	check((action_slots_label as Label).text == "W: —   A: Potion x2   S: —   D: Fists", "the HUD shows the potion on A",
+			(action_slots_label as Label).text)
 
 	for window_size in WINDOW_SIZES:
 		DisplayServer.window_set_size(window_size)

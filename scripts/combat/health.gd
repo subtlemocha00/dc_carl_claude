@@ -33,6 +33,19 @@ func set_health(current: int, maximum: int) -> void:
 	health_changed.emit(current_health, max_health)
 
 
+## Restores up to `amount` health, never above max_health, and returns how much was restored.
+## Does nothing once the actor is dead: healing cannot bring it back.
+func heal(amount: int) -> int:
+	if is_dead() or amount <= 0:
+		return 0
+	var applied := mini(amount, max_health - current_health)
+	if applied == 0:
+		return 0
+	current_health += applied
+	health_changed.emit(current_health, max_health)
+	return applied
+
+
 ## Removes up to `amount` health and returns how much was actually removed.
 ## Does nothing once the actor is dead, so a dead actor cannot "die" twice.
 func take_damage(amount: int) -> int:

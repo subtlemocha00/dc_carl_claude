@@ -8,6 +8,9 @@
 [ext_resource type="PackedScene" uid="uid://b3qj7webupb5k" path="res://scenes/ui/hud.tscn" id="7_hud"]
 [ext_resource type="PackedScene" uid="uid://cgljnpejjrnny" path="res://scenes/enemies/gelatinous_blob.tscn" id="8_blob"]
 [ext_resource type="PackedScene" uid="uid://ct41gcr0xgp3i" path="res://scenes/ui/action_menu.tscn" id="9_menu"]
+[ext_resource type="PackedScene" uid="uid://b1uxff71rwat4" path="res://scenes/props/stairs.tscn" id="10_stairs"]
+[ext_resource type="PackedScene" uid="uid://bnm72g20yeqty" path="res://scenes/props/item_pickup.tscn" id="11_pickup"]
+[ext_resource type="Resource" uid="uid://dwfvybkwc6ydu" path="res://resources/actions/small_health_potion.tres" id="12_potion"]
 
 [sub_resource type="NavigationPolygon" id="NavigationPolygon_level"]
 outlines = Array[PackedVector2Array]([PackedVector2Array(0, 0, 960, 0, 960, 640, 0, 640)])
@@ -53,6 +56,28 @@ theme_override_constants/outline_size = 4
 theme_override_font_sizes/font_size = 12
 text = "W/A/S/D use the actions shown top-left. Space: change them."
 horizontal_alignment = 1
+
+[node name="StairsSign" type="Label" parent="Signs"]
+offset_left = 36.0
+offset_top = 130.0
+offset_right = 156.0
+offset_bottom = 150.0
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 4
+theme_override_font_sizes/font_size = 12
+text = "Down to Floor 2"
+horizontal_alignment = 1
+
+[node name="Stairs" parent="." instance=ExtResource("10_stairs")]
+position = Vector2(96, 96)
+destination_scene_path = "res://scenes/levels/floor_02.tscn"
+
+[node name="Pickups" type="Node2D" parent="."]
+
+[node name="SmallHealthPotions" parent="Pickups" instance=ExtResource("11_pickup")]
+position = Vector2(128, 320)
+item = ExtResource("12_potion")
+quantity = 2
 
 [node name="Actors" type="Node2D" parent="."]
 y_sort_enabled = true

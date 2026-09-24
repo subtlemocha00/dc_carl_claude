@@ -47,15 +47,20 @@ func _check_new_game_layout() -> void:
 	check(slots.get_action(W) == null and slots.get_action(A) == null and slots.get_action(S) == null,
 			"W, A and S start empty")
 	check(slots.get_action(D) != null and slots.get_action(D).id == &"fists", "D starts with Fists")
-	check(state.available_actions.size() == 1 and state.available_actions[0].id == &"fists",
-			"Carl starts with one action: Fists", str(state.available_actions.map(func(a: ActionDefinition) -> StringName: return a.id)))
+	var actions: Array[ActionDefinition] = state.inventory.get_actions()
+	check(actions.size() == 1 and actions[0].id == &"fists",
+			"Carl starts with one action: Fists", str(actions.map(func(a: ActionDefinition) -> StringName: return a.id)))
 	check(FISTS.display_name == "Fists" and FISTS.assignable and FISTS.performer_scene != null,
 			"Fists has a name, can be assigned, and has a performer scene")
 
 
 func _check_assignment_rules() -> void:
 	print("-- ActionSlots rules")
-	var slots := ActionSlots.new()
+	# Since Phase 4, slots only hold actions Carl has, so they need an inventory. Fists is innate,
+	# and the test-only actions below are added as carried items.
+	var inventory := Inventory.new()
+	inventory.reset([FISTS])
+	var slots := ActionSlots.new(inventory)
 	var changes := [0]
 	slots.changed.connect(func() -> void: changes[0] += 1)
 	slots.assign(FISTS, D)
@@ -74,17 +79,19 @@ func _check_assignment_rules() -> void:
 	locked.id = &"test_locked"
 	locked.display_name = "Locked"
 	locked.assignable = false
+	inventory.add(locked, 1)
 	check(not slots.assign(locked, A) and slots.get_action(A) == null and changes[0] == 3,
 			"an action that is not assignable is refused and nothing changes")
 
 	var other := ActionDefinition.new()
 	other.id = &"test_other"
 	other.display_name = "Other"
+	inventory.add(other, 1)
 	slots.assign(other, S)
 	check(slots.get_action(S) == other and slots.find_slot(FISTS) == &"",
 			"putting another action in Fists' slot leaves Fists unassigned")
-	check(slots.get_display_name(S) == "Other" and slots.get_display_name(A) == ActionSlots.EMPTY_LABEL,
-			"display names: the action's name, or the empty label", "%s / %s" % [slots.get_display_name(S), slots.get_display_name(A)])
+	check(slots.get_display_name(S) == "Other x1" and slots.get_display_name(A) == ActionSlots.EMPTY_LABEL,
+			"display names: the action's name (with the quantity of a carried item), or the empty label", "%s / %s" % [slots.get_display_name(S), slots.get_display_name(A)])
 	slots.clear_all()
 	check(ActionSlots.SLOTS.all(func(slot: StringName) -> bool: return slots.get_action(slot) == null), "clear_all empties every slot")
 
@@ -96,7 +103,7 @@ func _check_carl_follows_the_slots() -> void:
 	var blob := _spawn_blob(Vector2(45, 0), carl)
 	var hud: CanvasLayer = HUD_SCENE.instantiate()
 	_arena.add_child(hud)
-	hud.show_action_slots(slots)
+	hud.show_action_slots(slots, game_state().inventory)
 	var slot_bar: Label = hud.get_node("%ActionSlotsLabel")
 	var fists: MeleeAttack = carl.get_action_performer(FISTS)
 	var punches := []
@@ -157,6 +164,7 @@ func _check_a_second_action() -> void:
 	jab.id = &"test_jab"
 	jab.display_name = "Test Jab"
 	jab.performer_scene = jab_scene
+	game_state().inventory.add(jab, 1)
 
 	var carl := _spawn_carl()
 	var blob := _spawn_blob(Vector2(45, 0), carl)

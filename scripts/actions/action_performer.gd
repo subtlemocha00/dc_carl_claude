@@ -6,9 +6,14 @@ extends Node2D
 ## Subclasses override perform() and keep their own state, such as a cooldown. Moving an
 ## action to another slot keeps the same performer, so it never resets that state.
 
+## The actor this performer works for (Carl). Set by the actor before adding it as a child.
+var user: Node2D
+
 
 ## Carries out the action toward `direction` (Carl's facing direction, a unit vector).
-## Returns false if the action could not happen right now, for example during a cooldown.
+## Returns true only if the action really happened. It returns false if it could not happen
+## right now, for example during a cooldown or when a potion would have no effect. A
+## consumable item is used up only when this returns true.
 func perform(_direction: Vector2) -> bool:
 	push_error("'%s' does not override ActionPerformer.perform()." % name)
 	return false

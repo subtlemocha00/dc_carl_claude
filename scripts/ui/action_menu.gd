@@ -1,10 +1,12 @@
 extends CanvasLayer
-## The action menu, opened and closed with Space. While it is open the game is paused and the
-## player chooses which action each W/A/S/D slot holds:
+## The action menu (Carl's inventory), opened and closed with Space. While it is open the game
+## is paused. It lists everything Carl has, with quantities for carried items (for example
+## "Small Health Potion x2"), and the player chooses which action each W/A/S/D slot holds:
 ## - Up/Down select one of Carl's actions;
 ## - W, A, S or D puts the selected action in that slot (and takes it out of its old slot);
 ## - Space or Escape closes the menu, and the game carries on.
-## The menu only shows and edits the ActionSlots it is given. It has no gameplay rules.
+## The menu only shows the Inventory and edits the ActionSlots it is given. It has no gameplay
+## rules and stores no quantities of its own.
 ##
 ## Input notes:
 ## - It keeps running while the game is paused (process_mode Always). It only opens while the
@@ -17,9 +19,9 @@ extends CanvasLayer
 const ROW_COLOR := Color(0.9, 0.91, 0.94)
 const SELECTED_ROW_COLOR := Color(1.0, 0.86, 0.35)
 const UNASSIGNABLE_ROW_COLOR := Color(0.55, 0.56, 0.6)
-const ROW_FONT_SIZE := 20
+const ROW_FONT_SIZE := 18
 
-var _available_actions: Array[ActionDefinition] = []
+var _inventory: Inventory
 var _action_slots: ActionSlots
 var _selected_index := 0
 var _selected_row_style := StyleBoxFlat.new()
@@ -58,10 +60,11 @@ func _unhandled_input(event: InputEvent) -> void:
 				_assign_selected_action(slot)
 
 
-## Gives the menu Carl's actions and the slots it edits. The level calls this.
-func setup(available_actions: Array[ActionDefinition], action_slots: ActionSlots) -> void:
-	_available_actions = available_actions
+## Gives the menu Carl's inventory and the slots it edits. The level calls this.
+func setup(inventory: Inventory, action_slots: ActionSlots) -> void:
+	_inventory = inventory
 	_action_slots = action_slots
+	_inventory.changed.connect(_refresh)
 	_action_slots.changed.connect(_refresh)
 
 
@@ -71,9 +74,10 @@ func is_open() -> bool:
 
 ## The highlighted action, or null if Carl has none.
 func get_selected_action() -> ActionDefinition:
-	if _available_actions.is_empty():
+	var actions := _inventory.get_actions()
+	if actions.is_empty():
 		return null
-	return _available_actions[_selected_index]
+	return actions[mini(_selected_index, actions.size() - 1)]
 
 
 ## Pauses the game and shows the menu. Does nothing if the game is already paused.
@@ -94,7 +98,7 @@ func close() -> void:
 
 
 func _select(index: int) -> void:
-	_selected_index = clampi(index, 0, maxi(0, _available_actions.size() - 1))
+	_selected_index = clampi(index, 0, maxi(0, _inventory.get_actions().size() - 1))
 	var action := get_selected_action()
 	details_label.text = action.description if action != null else "Carl has no actions yet."
 	_refresh()
@@ -110,24 +114,27 @@ func _assign_selected_action(slot: StringName) -> void:
 		details_label.text = "%s cannot be put in a slot." % action.display_name
 
 
-## Rewrites every row from the current slots, actions and selection.
+## Rewrites every row from the current slots, inventory and selection.
 func _refresh() -> void:
 	for i in ActionSlots.SLOTS.size():
 		var slot := ActionSlots.SLOTS[i]
 		var text := "%s   %s" % [ActionSlots.KEY_LABELS[slot], _action_slots.get_display_name(slot)]
 		_update_row(_get_row(slot_list, i), text, ROW_COLOR, false)
 
-	for i in _available_actions.size():
-		var action := _available_actions[i]
+	var actions := _inventory.get_actions()
+	# The list can shrink (for example after a retry takes an item back).
+	_selected_index = clampi(_selected_index, 0, maxi(0, actions.size() - 1))
+	for i in actions.size():
+		var action := actions[i]
 		var slot := _action_slots.find_slot(action)
 		var where := "on " + ActionSlots.KEY_LABELS[slot] if slot != &"" else "no slot"
 		var is_selected := i == _selected_index
 		var color := SELECTED_ROW_COLOR if is_selected else ROW_COLOR
 		if not action.assignable:
 			color = UNASSIGNABLE_ROW_COLOR
-		var text := "%s%s   (%s)" % ["> " if is_selected else "", action.display_name, where]
+		var text := "%s%s   (%s)" % ["> " if is_selected else "", _inventory.get_label(action), where]
 		_update_row(_get_row(action_list, i), text, color, is_selected)
-	while action_list.get_child_count() > _available_actions.size():
+	while action_list.get_child_count() > actions.size():
 		var extra_row := action_list.get_child(action_list.get_child_count() - 1)
 		action_list.remove_child(extra_row)
 		extra_row.queue_free()
