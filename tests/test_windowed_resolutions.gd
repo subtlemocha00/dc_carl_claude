@@ -1,8 +1,11 @@
 extends "res://tests/support/game_test.gd"
 ## Checks the HUD, the action menu and the camera on Floor 1 at the supported window sizes, in
-## a real window. Carl carries potions assigned to a slot, so the HUD and the menu show their
-## longest texts (with quantities). Then the title screen at each size: Continue and New Game
-## with a save, the "could not be loaded" message, and the New Game confirmation.
+## a real window. Carl carries potions and the Slingshot, both assigned to slots, so the HUD and
+## the menu show their longest texts ("W: Slingshot   A: Potion x2 ..."). Phase 6 adds, at each
+## size: Floor 2's Slingshot pickup (icon and label) on screen from the spawn point, and on
+## Floor 3 the floor signs clear of the HUD and a flying stone on screen and drawn.
+## Then the title screen at each size: Continue and New Game with a save, the "could not be
+## loaded" message, and the New Game confirmation.
 ##
 ## Run from the project folder (NOT headless; a game window opens briefly):
 ##     godot --path . -s res://tests/test_windowed_resolutions.gd
@@ -11,7 +14,10 @@ extends "res://tests/support/game_test.gd"
 ## Exits with code 0 when every check passes and 1 otherwise.
 
 const FLOOR_1_PATH := "res://scenes/levels/floor_01.tscn"
+const FLOOR_2_PATH := "res://scenes/levels/floor_02.tscn"
+const FLOOR_3_PATH := "res://scenes/levels/floor_03.tscn"
 const POTION: ActionDefinition = preload("res://resources/actions/small_health_potion.tres")
+const SLINGSHOT: ActionDefinition = preload("res://resources/actions/slingshot.tres")
 const WINDOW_SIZES: Array[Vector2i] = [Vector2i(1280, 720), Vector2i(640, 360), Vector2i(1024, 768)]
 ## The project's base size (Project Settings > Display > Window).
 const BASE_SIZE := Vector2(1280, 720)
@@ -38,8 +44,10 @@ func _run_checks() -> void:
 	var carl: CharacterBody2D = current_scene.get_node("Actors/Carl")
 	game_state().inventory.add(POTION, 2)
 	game_state().action_slots.assign(POTION, ActionSlots.SLOT_A)
-	check((action_slots_label as Label).text == "W: —   A: Potion x2   S: —   D: Fists", "the HUD shows the potion on A",
-			(action_slots_label as Label).text)
+	game_state().inventory.add(SLINGSHOT, 1)
+	game_state().action_slots.assign(SLINGSHOT, ActionSlots.SLOT_W)
+	check((action_slots_label as Label).text == "W: Slingshot   A: Potion x2   S: —   D: Fists",
+			"the HUD shows the Slingshot on W and the potion on A", (action_slots_label as Label).text)
 
 	for window_size in WINDOW_SIZES:
 		DisplayServer.window_set_size(window_size)
@@ -85,8 +93,65 @@ func _run_checks() -> void:
 	var final_offset := camera.get_screen_center_position().distance_to(carl.global_position)
 	check(largest_lag > 1.0 and largest_lag < 60.0, "the camera follows a walking Carl with a small lag", "%.1f px" % largest_lag)
 	check(final_offset < 0.5, "the camera re-centres on Carl after he stops", "%.2f px off" % final_offset)
+	await _check_slingshot_pickup()
+	await _check_floor_3()
 	await _check_title_screen()
 	finish()
+
+
+## Floor 2's Slingshot pickup (its icon and its label) is on screen from Carl's spawn point.
+func _check_slingshot_pickup() -> void:
+	game_state().start_new_run()
+	change_scene_to_file(FLOOR_2_PATH)
+	await wait_for_scene(FLOOR_2_PATH)
+	var pickup: Node2D = current_scene.get_node("Pickups/Slingshot")
+	var icon: Sprite2D = pickup.get_node("Marker/Icon")
+	var label: Label = pickup.get_node("Label")
+	for window_size in WINDOW_SIZES:
+		DisplayServer.window_set_size(window_size)
+		await wait_physics_frames(10)
+		var visible_rect := root.get_visible_rect()
+		var icon_rect := icon.get_global_transform_with_canvas() * icon.get_rect()
+		check(icon.is_visible_in_tree() and visible_rect.encloses(icon_rect) and visible_rect.encloses(_on_screen(label)),
+				"%dx%d: the Slingshot pickup and its label are on screen from the spawn point" % [window_size.x, window_size.y],
+				str(icon_rect))
+
+
+## Floor 3: its signs are on screen and clear of the HUD, and a stone in flight is on screen.
+func _check_floor_3() -> void:
+	game_state().inventory.add(SLINGSHOT, 1)
+	game_state().action_slots.assign(SLINGSHOT, ActionSlots.SLOT_W)
+	change_scene_to_file(FLOOR_3_PATH)
+	await wait_for_scene(FLOOR_3_PATH)
+	var hud := current_scene.get_node("HUD")
+	var hud_rects: Array[Rect2] = []
+	for node_path: String in ["%HealthLabel", "%ActionSlotsLabel", "MenuHint"]:
+		hud_rects.append((hud.get_node(node_path) as Control).get_global_rect())
+	var launcher: ProjectileLauncher = current_scene.get_node("Actors/Carl").get_action_performer(SLINGSHOT)
+	for window_size in WINDOW_SIZES:
+		DisplayServer.window_set_size(window_size)
+		await wait_physics_frames(10)
+		var label := "%dx%d" % [window_size.x, window_size.y]
+		var visible_rect := root.get_visible_rect()
+		for sign_path: String in ["Signs/FloorTitle", "Signs/PrototypeNote"]:
+			var sign_rect := _on_screen(current_scene.get_node(sign_path))
+			check(visible_rect.encloses(sign_rect) and hud_rects.all(func(r: Rect2) -> bool: return not r.intersects(sign_rect)),
+					"%s: Floor 3's %s is on screen and clear of the HUD" % [label, sign_path.get_file()], str(sign_rect))
+		var stones := []
+		launcher.fired.connect(func(fired_stone: Projectile) -> void: stones.append(fired_stone), CONNECT_ONE_SHOT)
+		await wait_seconds(0.7)
+		await tap_key(KEY_W)
+		await wait_physics_frames(8)
+		var stone: Projectile = stones[0] if stones.size() == 1 else null
+		check(stone != null and is_instance_valid(stone) and stone.is_visible_in_tree()
+				and visible_rect.has_point(stone.get_global_transform_with_canvas().origin),
+				label + ": a flying stone is drawn on screen")
+		await wait_seconds(0.8)
+
+
+## A world-space Control's rectangle on screen (after the camera).
+func _on_screen(control: Control) -> Rect2:
+	return control.get_global_transform_with_canvas() * Rect2(Vector2.ZERO, control.size)
 
 
 ## The title menu fits at every size. Floor 1 above already saved a checkpoint, so Continue is

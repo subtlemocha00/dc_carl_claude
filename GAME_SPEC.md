@@ -154,7 +154,10 @@ W, A, S or D to put it in that slot. Escape also closes the menu.
 
 Inventory contents:
 - Innate actions (Fists) are always available, have no quantity and are never used up.
-- Carried items have a quantity, shown in the menu and the HUD (for example "x2"). An item
+- Reusable items (the Slingshot) are found once and then owned. They have no quantity, are
+  never used up, and the menu and the HUD show only their name. Finding one Carl already
+  owns changes nothing.
+- Consumables have a quantity, shown in the menu and the HUD (for example "x2"). A consumable
   whose quantity reaches 0 leaves the inventory.
 - Items are found as pickups in levels. Carl collects one by walking over it; there is no
   interaction key. Donut and enemies never collect pickups.
@@ -180,6 +183,19 @@ The health potion is implemented as the **Small Health Potion**:
 - it heals 30 HP, never above Carl's maximum;
 - each use that heals spends exactly one;
 - using it at full HP does nothing and spends nothing.
+
+The first ranged weapon is the **Slingshot** (stable id `slingshot`):
+- a reusable item, found on Floor 2: once found it is owned, with no quantity, and never used
+  up. There is no ammunition;
+- it can be put on any of W, A, S or D;
+- each use fires one stone in Carl's facing direction. Holding the key fires once every
+  0.6 s (its cooldown); a short press fires once;
+- a stone deals 10 damage to the first enemy it hits and disappears. It never hits more than
+  one enemy;
+- a stone stops at walls and solid obstacles, so nothing behind them is hit. It flies at
+  480 px/s and disappears after 320 px (10 tiles);
+- stones never hurt Carl or Donut, never collect pickups and never trigger stairs. Like
+  everything else in play, they freeze while the game is paused.
 
 ## 10. Dungeon structure
 
@@ -297,10 +313,14 @@ Initial save design:
   - a slot that is empty at the retry gets back what it held on entering the floor, if Carl
     has that item again (for example a potion slot that emptied when the last potion was drunk).
   Retrying never creates extra items.
+  Reusable items follow the same rule. A Slingshot found after entering Floor 2 is taken back
+  by a Floor 2 retry (its pickup is back, and its slot empties). Once Carl enters Floor 3
+  with it, it is part of the Floor 3 checkpoint and a retry keeps it, with its slot.
 
 Persistent save (canonical since Phase 5):
 - There is one save slot, holding one floor-entry checkpoint: the floor Carl last entered,
-  and his HP, inventory and slot assignments at that moment.
+  and his HP, inventory (consumable quantities and owned reusable items) and slot
+  assignments at that moment.
 - It is written when a new game starts on the Surface and each time Carl enters a floor.
   Nothing during play writes it: not damage, pickups, potions or death. Death never saves
   progress.
@@ -312,6 +332,10 @@ Persistent save (canonical since Phase 5):
 - A save that is corrupt, from an unsupported version, or otherwise invalid is never loaded:
   Continue is unavailable, and New Game still works. Invalid slot assignments inside an
   otherwise valid save are emptied.
+- The save format has a version number. A save from an older version the game still
+  supports is upgraded when it is loaded, and keeps its progress. (Since Phase 6, saves are
+  version 2. Version 1 saves from Phase 5 load with the same floor, HP, potions and slots, and
+  no Slingshot.)
 - No mid-floor saving, multiple save slots or cloud saves in the prototype.
 
 Current-run state (what survives level changes during one playthrough, held in memory) is

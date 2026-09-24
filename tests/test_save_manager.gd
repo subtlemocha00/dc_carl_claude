@@ -1,16 +1,21 @@
 extends "res://tests/support/game_test.gd"
-## Phase 5 SaveManager checks, on this test's own save file (never the player's):
-## - the registries: every floor and action id maps back to itself;
-## - a checkpoint is written as JSON with the save version and stable ids only, and loads
-##   back unchanged; a new save replaces the old one and leaves no temporary file;
+## Phase 5-6 SaveManager checks, on this test's own save file (never the player's):
+## - the registries: every floor and action id maps back to itself, and the known floors are
+##   exactly surface, floor_01, floor_02 and floor_03;
+## - a checkpoint is written as JSON (save_version 2) with stable ids only, and loads back
+##   unchanged; a Floor 3 checkpoint keeps the owned Slingshot in owned_items, with no
+##   quantity; a new save replaces the old one and leaves no temporary file;
 ## - untrusted data is rejected without a crash or an engine error: malformed JSON, wrong
 ##   root type, unsupported or missing version, missing fields, unknown floor (or a scene
 ##   path instead of an id), bad HP, negative/fractional/string quantities, unknown or innate
-##   items, and a wrong slot structure. A rejected file is left untouched;
+##   items, a reusable item with a quantity, bad owned_items (not a list, unknown, not a
+##   string, consumable, innate, listed twice), and a wrong slot structure. A rejected file is
+##   left untouched;
 ## - slots are sanitized, the rest of the save kept: unknown actions, items Carl would not
-##   have, and one action in two slots;
+##   have (a potion with none left, a Slingshot he does not own), and one action in two slots;
 ## - deleting works with and without a save, and a save interrupted before its final rename
 ##   is still found.
+## Loading version 1 saves (migration) is covered by test_save_migration.gd.
 ##
 ## Run from the project folder:
 ##     godot --headless --path . -s res://tests/test_save_manager.gd
@@ -19,7 +24,9 @@ extends "res://tests/support/game_test.gd"
 
 const FISTS: ActionDefinition = preload("res://resources/actions/fists.tres")
 const POTION: ActionDefinition = preload("res://resources/actions/small_health_potion.tres")
+const SLINGSHOT: ActionDefinition = preload("res://resources/actions/slingshot.tres")
 const FLOOR_2_PATH := "res://scenes/levels/floor_02.tscn"
+const FLOOR_3_PATH := "res://scenes/levels/floor_03.tscn"
 
 
 func _initialize() -> void:
@@ -46,6 +53,8 @@ func _check_registries() -> void:
 		check(ResourceLoader.exists(scene_path) and FloorRegistry.get_floor_id(scene_path) == floor_id,
 				"floor '%s' maps to an existing scene and back" % floor_id)
 	check(FloorRegistry.get_scene_path(&"floor_99") == "" and not FloorRegistry.has_floor(&"floor_99"), "an unknown floor has no scene")
+	check(FloorRegistry.FLOORS.keys() == [&"surface", &"floor_01", &"floor_02", &"floor_03"],
+			"the known floors are surface, floor_01, floor_02 and floor_03", str(FloorRegistry.FLOORS.keys()))
 
 
 func _check_round_trip() -> void:
@@ -57,10 +66,11 @@ func _check_round_trip() -> void:
 			"the save file exists and no temporary file is left")
 	var text := FileAccess.get_file_as_string(saves.save_path)
 	var data: Variant = JSON.parse_string(text)
-	check(data is Dictionary and data["save_version"] == 1, "the file is JSON with save_version 1")
+	check(data is Dictionary and data["save_version"] == 2, "the file is JSON with save_version 2")
 	check(data["floor_id"] == "floor_02" and data["carl"]["health"] == 90 and data["carl"]["max_health"] == 100,
 			"it stores the floor id and Carl's HP")
 	check(data["inventory"] == {"small_health_potion": 1.0}, "it stores item quantities by id", str(data["inventory"]))
+	check(data["owned_items"] == [], "it stores an empty owned_items list when Carl owns no reusable item", str(data.get("owned_items")))
 	check(data["action_slots"] == {"action_w": null, "action_a": "small_health_potion", "action_s": null, "action_d": "fists"},
 			"it stores the four slots as action ids or null", str(data["action_slots"]))
 	check(not text.contains("res://") and not text.contains("Object"), "no scene paths or objects are written")
@@ -73,6 +83,26 @@ func _check_round_trip() -> void:
 		check(_quantity(loaded, POTION) == 1, "the potion quantity comes back")
 		check(loaded.action_slots == {ActionSlots.SLOT_A: POTION, ActionSlots.SLOT_D: FISTS}, "the slot layout comes back",
 				str(loaded.action_slots))
+
+	print("-- A Floor 3 checkpoint with the Slingshot")
+	check(saves.save_checkpoint(_floor_3_checkpoint()), "a Floor 3 checkpoint is saved")
+	data = JSON.parse_string(FileAccess.get_file_as_string(saves.save_path))
+	check(data["save_version"] == 2 and data["floor_id"] == "floor_03" and data["carl"]["health"] == 80,
+			"it stores floor_03 and 80 HP")
+	check(data["owned_items"] == ["slingshot"] and data["inventory"] == {"small_health_potion": 1.0},
+			"the Slingshot is stored as an owned item, with no quantity; the potion keeps its quantity",
+			"%s / %s" % [data["owned_items"], data["inventory"]])
+	check(data["action_slots"] == {"action_w": "slingshot", "action_a": "small_health_potion", "action_s": null, "action_d": "fists"},
+			"W = Slingshot is stored", str(data["action_slots"]))
+	loaded = saves.load_checkpoint()
+	check(loaded != null and loaded.scene_path == FLOOR_3_PATH, "the Floor 3 checkpoint loads", saves.last_error)
+	if loaded != null:
+		var inventory := Inventory.new()
+		inventory.restore_snapshot(loaded.inventory)
+		check(inventory.has(SLINGSHOT) and inventory.get_quantity(SLINGSHOT) == 0 and inventory.get_quantity(POTION) == 1,
+				"the loaded inventory owns the Slingshot (no quantity) and has 1 potion")
+		check(loaded.action_slots == {ActionSlots.SLOT_W: SLINGSHOT, ActionSlots.SLOT_A: POTION, ActionSlots.SLOT_D: FISTS},
+				"the loaded layout has W = Slingshot, A = potion, D = Fists", str(loaded.action_slots))
 
 	var surface := _floor_2_checkpoint()
 	surface.scene_path = FloorRegistry.get_scene_path(&"surface")
@@ -91,7 +121,8 @@ func _check_rejected_data() -> void:
 	for label: String in cases:
 		_expect_rejected(cases[label], label)
 	var edits := {
-		"unsupported save_version 2": func(d: Dictionary) -> void: d["save_version"] = 2,
+		"unsupported save_version 3": func(d: Dictionary) -> void: d["save_version"] = 3,
+		"unsupported save_version 999": func(d: Dictionary) -> void: d["save_version"] = 999,
 		"save_version 0": func(d: Dictionary) -> void: d["save_version"] = 0,
 		"save_version as a string": func(d: Dictionary) -> void: d["save_version"] = "1",
 		"no save_version": func(d: Dictionary) -> void: d.erase("save_version"),
@@ -111,6 +142,16 @@ func _check_rejected_data() -> void:
 		"a quantity as a string": func(d: Dictionary) -> void: d["inventory"]["small_health_potion"] = "2",
 		"an unknown item": func(d: Dictionary) -> void: d["inventory"]["mystery_item"] = 1,
 		"innate Fists carried as an item": func(d: Dictionary) -> void: d["inventory"]["fists"] = 1,
+		"the reusable Slingshot with a quantity": func(d: Dictionary) -> void: d["inventory"]["slingshot"] = 1,
+		"no owned_items": func(d: Dictionary) -> void: d.erase("owned_items"),
+		"owned_items as an object": func(d: Dictionary) -> void: d["owned_items"] = {"slingshot": 1},
+		"owned_items as a string": func(d: Dictionary) -> void: d["owned_items"] = "slingshot",
+		"an unknown owned item": func(d: Dictionary) -> void: d["owned_items"] = ["laser_sword"],
+		"a scene path as an owned item": func(d: Dictionary) -> void: d["owned_items"] = ["res://scenes/actions/slingshot.tscn"],
+		"an owned item that is a number": func(d: Dictionary) -> void: d["owned_items"] = [5],
+		"a consumable in owned_items": func(d: Dictionary) -> void: d["owned_items"] = ["small_health_potion"],
+		"innate Fists in owned_items": func(d: Dictionary) -> void: d["owned_items"] = ["fists"],
+		"an owned item listed twice": func(d: Dictionary) -> void: d["owned_items"] = ["slingshot", "slingshot"],
 		"no action_slots": func(d: Dictionary) -> void: d.erase("action_slots"),
 		"action_slots as a list": func(d: Dictionary) -> void: d["action_slots"] = [],
 		"a missing slot": func(d: Dictionary) -> void: d["action_slots"].erase("action_d"),
@@ -155,6 +196,14 @@ func _check_sanitized_slots() -> void:
 	check(loaded != null and loaded.action_slots.values().count(FISTS) == 1 and loaded.action_slots.get(ActionSlots.SLOT_W) == FISTS,
 			"an action named in two slots keeps only the first", str(loaded.action_slots) if loaded != null else "not loaded")
 	data = _valid_data()
+	data["action_slots"]["action_w"] = "slingshot"
+	loaded = _load_data(data)
+	check(loaded != null and not loaded.action_slots.has(ActionSlots.SLOT_W) and loaded.action_slots.get(ActionSlots.SLOT_A) == POTION,
+			"a Slingshot slot without owning the Slingshot is emptied, the rest is kept")
+	data["owned_items"] = ["slingshot"]
+	loaded = _load_data(data)
+	check(loaded != null and loaded.action_slots.get(ActionSlots.SLOT_W) == SLINGSHOT, "with the Slingshot owned, W = Slingshot is kept")
+	data = _valid_data()
 	data["carl"]["health"] = 90.0
 	check(_load_data(data) != null, "whole numbers written as 90.0 are accepted")
 
@@ -194,6 +243,21 @@ func _floor_2_checkpoint() -> FloorEntry:
 	checkpoint.carl_max_health = 100
 	checkpoint.inventory = inventory.get_snapshot()
 	checkpoint.action_slots = {ActionSlots.SLOT_A: POTION, ActionSlots.SLOT_D: FISTS}
+	return checkpoint
+
+
+## A Floor 3 checkpoint: 80/100 HP, 1 potion on A, the Slingshot owned and on W, Fists on D.
+func _floor_3_checkpoint() -> FloorEntry:
+	var inventory := Inventory.new()
+	inventory.reset([FISTS])
+	inventory.add(POTION, 1)
+	inventory.add(SLINGSHOT, 1)
+	var checkpoint := FloorEntry.new()
+	checkpoint.scene_path = FLOOR_3_PATH
+	checkpoint.carl_health = 80
+	checkpoint.carl_max_health = 100
+	checkpoint.inventory = inventory.get_snapshot()
+	checkpoint.action_slots = {ActionSlots.SLOT_W: SLINGSHOT, ActionSlots.SLOT_A: POTION, ActionSlots.SLOT_D: FISTS}
 	return checkpoint
 
 

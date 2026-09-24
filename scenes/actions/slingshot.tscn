@@ -1,0 +1,8 @@
+[gd_scene format=3 uid="uid://ci6dq5cfxvedw"]
+
+[ext_resource type="Script" uid="uid://cr44fhhfv1mw7" path="res://scripts/combat/projectile_launcher.gd" id="1_launcher"]
+[ext_resource type="PackedScene" uid="uid://b6ah1pkskv52u" path="res://scenes/projectiles/slingshot_stone.tscn" id="2_stone"]
+
+[node name="Slingshot" type="Node2D"]
+script = ExtResource("1_launcher")
+projectile_scene = ExtResource("2_stone")

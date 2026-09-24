@@ -5,7 +5,8 @@ extends Node
 ##
 ## It holds:
 ## - Carl's hit points (the current level keeps them up to date);
-## - Carl's inventory: his innate actions (Fists) and how many of each item he carries;
+## - Carl's inventory: his innate actions (Fists), the reusable items he owns (the Slingshot)
+##   and how many of each consumable he carries;
 ## - which W/A/S/D slot holds which of those actions;
 ## - the floor-entry state (a FloorEntry): what Carl had when he entered the current level.
 ##   After GAME OVER, retrying the level restores it; Continue on the title screen starts from it.
@@ -36,7 +37,7 @@ func _init() -> void:
 
 
 ## Resets everything for a new game: full health, only Fists (in slot D), slots W, A and S
-## empty, no items.
+## empty, no items (no consumables and no owned reusable items such as the Slingshot).
 func start_new_run() -> void:
 	carl_max_health = NEW_RUN_CARL_MAX_HEALTH
 	carl_health = carl_max_health

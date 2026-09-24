@@ -7,7 +7,8 @@ extends "res://tests/support/game_test.gd"
 ##   slot A, and put the pickup back; retrying again never creates potions;
 ## - he picks them up again, uses one (60 -> 90 HP), and takes the stairs down to Floor 2;
 ## - Floor 2: Carl and Donut arrive, the potion (x1) and slot A are still there, the entry
-##   state records 1 potion, and nothing leads back up;
+##   state records 1 potion, and nothing leads back up (its only exit, since Phase 6, leads
+##   down to Floor 3);
 ## - on Floor 2 he uses his last potion and dies: the retry gives the potion back, once, and
 ##   (since Phase 5) puts it back on A, as it was when he entered Floor 2.
 ## Damage is applied directly where it only stands in for a fight; test_floor_loop.gd covers
@@ -21,6 +22,7 @@ extends "res://tests/support/game_test.gd"
 const SURFACE_PATH := "res://scenes/levels/surface.tscn"
 const FLOOR_1_PATH := "res://scenes/levels/floor_01.tscn"
 const FLOOR_2_PATH := "res://scenes/levels/floor_02.tscn"
+const FLOOR_3_PATH := "res://scenes/levels/floor_03.tscn"
 const FISTS: ActionDefinition = preload("res://resources/actions/fists.tres")
 const POTION: ActionDefinition = preload("res://resources/actions/small_health_potion.tres")
 ## Carl's position in floor_02.tscn.
@@ -164,10 +166,12 @@ func _check_floor_2_arrival() -> void:
 	var entry = game_state().floor_entry
 	check(entry.scene_path == FLOOR_2_PATH and entry.carl_health == 90 and _snapshot_quantity(entry) == 1,
 			"Floor 2's entry state records 90 HP and 1 potion")
+	# Since Phase 6 Floor 2 has stairs down to Floor 3. Nothing leads back up.
 	var exits := current_scene.find_children("*", "", true, false).filter(
 			func(node: Node) -> bool: return "destination_scene_path" in node)
-	check(exits.is_empty(), "nothing on Floor 2 leads anywhere, and certainly not back up",
-			str(exits.map(func(node: Node) -> String: return node.destination_scene_path)))
+	var destinations := exits.map(func(node: Node) -> String: return node.destination_scene_path)
+	check(destinations == [FLOOR_3_PATH], "Floor 2's only exit leads down to Floor 3, and nothing leads back up",
+			str(destinations))
 
 
 func _retry_restores_floor_2_potion() -> void:

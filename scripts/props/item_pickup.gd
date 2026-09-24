@@ -1,9 +1,13 @@
 extends Area2D
 ## An item lying in a level. Carl picks it up by walking over it: he gets `quantity` of `item`,
 ## and the pickup disappears. No key is needed.
+## - A consumable gives `quantity` more (label "Potion x2").
+## - A reusable item gives ownership (label "Slingshot"; `quantity` just stays 1). Owning it
+##   twice is impossible: the Inventory ignores a second one.
 ## To place loot, add an item_pickup.tscn instance to a level and set `item` and `quantity`;
-## no code changes. The collision mask only detects the "player" physics layer, so Donut and
-## enemies walk over pickups without taking them.
+## no code changes. An item with an icon shows it; others show the default pink gem. The
+## collision mask only detects the "player" physics layer, so Donut, enemies and projectiles
+## pass over pickups without taking them.
 ## Nothing remembers a picked-up pickup. Retrying a floor loads the level again, so its
 ## pickups are back, and the retry also takes back what Carl picked up there.
 
@@ -14,13 +18,18 @@ var _collected := false
 
 @onready var label: Label = $Label
 @onready var marker: Node2D = $Marker
+@onready var default_gem: Node2D = $Marker/DefaultGem
+@onready var icon: Sprite2D = $Marker/Icon
 
 
 func _ready() -> void:
 	if item == null:
 		push_error("ItemPickup '%s' has no item set." % get_path())
 		return
-	label.text = "%s x%d" % [item.get_short_name(), quantity]
+	label.text = item.get_label(quantity, true)
+	icon.texture = item.icon
+	icon.visible = item.icon != null
+	default_gem.visible = item.icon == null
 	body_entered.connect(_on_body_entered)
 	# Placeholder feedback: the marker bobs gently so the pickup stands out.
 	var bob := create_tween().set_loops()

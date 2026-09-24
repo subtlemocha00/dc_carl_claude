@@ -7,6 +7,7 @@ extends RefCounted
 const ACTIONS: Dictionary[StringName, ActionDefinition] = {
 	&"fists": preload("res://resources/actions/fists.tres"),
 	&"small_health_potion": preload("res://resources/actions/small_health_potion.tres"),
+	&"slingshot": preload("res://resources/actions/slingshot.tres"),
 }
 
 

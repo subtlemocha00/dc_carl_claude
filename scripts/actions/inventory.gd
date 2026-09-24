@@ -1,10 +1,15 @@
 class_name Inventory
 extends RefCounted
-## Everything Carl has during the current run, and how many of each item.
-## - Innate actions (Fists) are always there. They have no quantity and are never used up.
-## - Carried items (Small Health Potion) are counted. An item leaves the inventory when its
-##   quantity drops to 0, and comes back when Carl picks up more.
-## GameState owns the run's single Inventory, so each quantity is stored in exactly one place:
+## Everything Carl has during the current run. It holds three kinds of things:
+## - Innate actions (Fists) are always there. They are never found, have no quantity and are
+##   never used up.
+## - Reusable items (Slingshot: ActionDefinition.consumable is false) are found once and then
+##   owned. They have no quantity and are never used up; finding one again changes nothing.
+## - Consumables (Small Health Potion: consumable is true) are counted. A consumable leaves the
+##   inventory when its quantity drops to 0, and comes back when Carl picks up more.
+## Reusable items and consumables are both "carried items": found in levels, and taken back
+## by a floor retry. Only consumables have a quantity.
+## GameState owns the run's single Inventory, so each item is stored in exactly one place:
 ## - pickups add to it (through Carl);
 ## - using a consumable removes from it;
 ## - a floor retry restores a snapshot of it;
@@ -14,8 +19,10 @@ extends RefCounted
 signal changed
 
 var _innate: Array[ActionDefinition] = []
-## Carried items by id, in the order Carl got them.
+## Carried items (reusable items and consumables) by id, in the order Carl got them.
 var _items: Dictionary[StringName, ActionDefinition] = {}
+## How many of each consumable Carl carries. Reusable items are owned, not counted, so they
+## are never in here.
 var _quantities: Dictionary[StringName, int] = {}
 
 
@@ -34,26 +41,40 @@ func get_actions() -> Array[ActionDefinition]:
 	return actions
 
 
-## True if Carl has `action`: it is innate, or he carries at least one.
+## True if Carl has `action`: it is innate, he owns it (a reusable item), or he carries at
+## least one (a consumable).
 func has(action: ActionDefinition) -> bool:
-	return is_innate(action) or get_quantity(action) > 0
+	if is_innate(action):
+		return true
+	if action.consumable:
+		return get_quantity(action) > 0
+	return _items.has(action.id)
 
 
 func is_innate(action: ActionDefinition) -> bool:
 	return _innate.any(func(innate: ActionDefinition) -> bool: return innate.id == action.id)
 
 
-## How many of a carried item Carl has. 0 if he has none, and for innate actions.
+## How many of a consumable Carl has. 0 if he has none, and always 0 for innate actions and
+## reusable items, which are not counted.
 func get_quantity(action: ActionDefinition) -> int:
 	return _quantities.get(action.id, 0)
 
 
-## Gives Carl `amount` more of a carried item.
+## Gives Carl an item he found: `amount` more of a consumable, or a reusable item to own (for
+## a reusable item `amount` only has to be positive). Finding a reusable item he already owns
+## changes nothing, so he can never own two.
 func add(item: ActionDefinition, amount: int) -> void:
 	if amount <= 0:
 		return
 	if is_innate(item):
 		push_error("'%s' is innate, so it cannot also be carried." % item.id)
+		return
+	if not item.consumable:
+		if _items.has(item.id):
+			return
+		_items[item.id] = item
+		changed.emit()
 		return
 	if not _items.has(item.id):
 		_items[item.id] = item
@@ -62,7 +83,9 @@ func add(item: ActionDefinition, amount: int) -> void:
 	changed.emit()
 
 
-## Takes `amount` of a carried item away. Returns false, taking nothing, if Carl has fewer.
+## Takes `amount` of a consumable away. Returns false, taking nothing, if Carl has fewer.
+## Reusable items have no quantity, so they can never be removed this way: they are never
+## used up.
 func remove(item: ActionDefinition, amount: int) -> bool:
 	if amount <= 0 or get_quantity(item) < amount:
 		return false
@@ -74,17 +97,16 @@ func remove(item: ActionDefinition, amount: int) -> bool:
 	return true
 
 
-## The action's name for the HUD and menus, with " xN" after a carried item.
-## With `short` true it uses the action's short name.
+## The action's name for the HUD and menus: " xN" after a consumable, the plain name for
+## anything reusable (see ActionDefinition.get_label()). With `short` true it uses the
+## action's short name.
 func get_label(action: ActionDefinition, short: bool = false) -> String:
-	var action_name := action.get_short_name() if short else action.display_name
-	if is_innate(action):
-		return action_name
-	return "%s x%d" % [action_name, get_quantity(action)]
+	return action.get_label(get_quantity(action), short)
 
 
-## A copy of the carried items, to give back to restore_snapshot() later. The floor-entry
-## state keeps one. Innate actions never change during a run, so they are not included.
+## A copy of the carried items (reusable items and consumable quantities), to give back to
+## restore_snapshot() later. The floor-entry state keeps one. Innate actions never change
+## during a run, so they are not included.
 func get_snapshot() -> Dictionary:
 	return {"items": _items.duplicate(), "quantities": _quantities.duplicate()}
 

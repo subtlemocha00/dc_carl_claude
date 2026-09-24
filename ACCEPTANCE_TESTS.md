@@ -148,3 +148,49 @@ Required:
 - [ ] Tests use their own save files, never the player's save.
 - [ ] A real process restart continues correctly, a corrupt save leaves the title usable,
       and the title screen fits at 1280×720, 640×360 and 1024×768.
+
+# Phase 6 — Reusable Weapon, Projectile Combat, Save Migration and Floor 3
+
+The Phase 3–5 rules still apply (arrow keys move; W/A/S/D are configurable slots with Fists on
+D in a new game; downward-only; GAME OVER waits for Enter; one floor-entry checkpoint).
+
+Required:
+- [ ] The action/inventory model has three explicit kinds: innate (Fists: always there, no
+      quantity), owned reusable items (Slingshot: found once, no quantity, never used up) and
+      consumables (Small Health Potion: counted). No code checks item ids to tell them apart.
+- [ ] A new game owns no Slingshot. Floor 2 has one Slingshot pickup. Walking over it owns the
+      Slingshot exactly once, and the pickup disappears. Donut and enemies cannot collect it.
+- [ ] The menu and the HUD show "Slingshot", never "Slingshot x1". It can only be assigned once
+      owned; it can go on W, A, S or D, is in one slot at a time, and sits next to Fists and
+      the potion.
+- [ ] Its key fires one stone in Carl's facing direction through the normal slot dispatch
+      (slot → action → launcher → projectile). Carl's script has no Slingshot code.
+- [ ] A stone deals exactly 10 damage to the first enemy it hits, then disappears. Three hits
+      kill a 30 HP Gelatinous Blob. It never hits two enemies.
+- [ ] Walls stop stones; an enemy behind a wall is not hit. A stone disappears after 320 px.
+- [ ] Stones never hurt Carl or Donut, never collect pickups, never trigger stairs.
+- [ ] Cooldown 0.6 s: a short press fires once, holding fires every 0.6 s, taps cannot fire faster.
+      Using the Slingshot never changes the inventory or its HUD label.
+- [ ] While the menu is open nothing fires and stones in flight freeze; they fly on when it
+      closes. Opening or closing the menu never fires a stone, even with a key held.
+- [ ] Floor 2 has stairs down to Floor 3. Floor 3 is a playable, walled level with a "Floor 3"
+      sign, the HUD, the menu, Gelatinous Blobs and a wall where stones can be seen to stop.
+      Carl and Donut arrive together without a transition loop. Floor 3 has no exits.
+- [ ] Nothing leads up: not Floor 1 → Surface, Floor 2 → Floor 1 or Floor 3 → Floor 2.
+- [ ] A Slingshot collected on Floor 2 is not in the Floor 2 checkpoint. Dying there (or
+      quitting and continuing) takes it back: not owned, pickup back, its slot empty. Repeated
+      retries never duplicate it.
+- [ ] Entering Floor 3 with it puts it (and W = Slingshot) in the Floor 3 checkpoint. A Floor 3
+      retry and Continue both keep it on W, and it fires.
+- [ ] The save is `save_version: 2` and stores owned reusable items as a list of stable ids
+      (`owned_items`), never as a quantity. `floor_03` is a known floor.
+- [ ] Version 1 (Phase 5) saves still load: floor, HP, potions and slots are kept, with no
+      Slingshot. Loading never changes the file; the next checkpoint rewrites it as version 2.
+- [ ] Malformed version 1 or 2 data, unsupported versions (0, 3, 999) and unknown, consumable,
+      innate or duplicate owned items are rejected safely. A Slingshot slot without owning the
+      Slingshot is emptied.
+- [ ] New Game clears the Slingshot: no items, W/A/S empty, D = Fists, the Surface.
+- [ ] HUD, menu, Slingshot pickup, stones, Floor 3 signs and the title fit at 1280×720, 640×360
+      and 1024×768.
+- [ ] No ammunition, other weapons, equipment stats, Floor 4, new enemy species, Donut combat or
+      enemy-AI rewrite were added.

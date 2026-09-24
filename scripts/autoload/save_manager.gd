@@ -3,27 +3,39 @@ extends Node
 ## of the floor Carl last entered. GameState keeps the run in memory; this is the only script
 ## that touches the save file.
 ##
-## The file is JSON with stable ids only, never scene paths or resources:
-##     {"save_version": 1, "floor_id": "floor_02",
-##      "carl": {"health": 90, "max_health": 100},
+## The file is JSON with stable ids only, never scene paths or resources (version 2):
+##     {"save_version": 2, "floor_id": "floor_03",
+##      "carl": {"health": 80, "max_health": 100},
 ##      "inventory": {"small_health_potion": 1},
-##      "action_slots": {"action_w": null, "action_a": "small_health_potion",
+##      "owned_items": ["slingshot"],
+##      "action_slots": {"action_w": "slingshot", "action_a": "small_health_potion",
 ##                       "action_s": null, "action_d": "fists"}}
+## - "inventory" holds the quantity of each consumable Carl carries.
+## - "owned_items" lists the reusable items Carl owns. They have no quantity.
+## - Innate actions (Fists) are never saved in either: every run has them.
+##
+## Version 1 (Phase 5) had no "owned_items", because there were no reusable items yet. Loading
+## a version 1 file migrates it to version 2 in memory (see _migrate_version_1()). The file on
+## disk is not touched by loading. It becomes version 2 at the next checkpoint save, which
+## happens as soon as Continue opens the saved floor (or a new game starts).
 ##
 ## A save file is untrusted input. Loading it:
 ## - rejects the whole file (the title screen then offers no Continue) if it is not valid JSON,
-##   has a different save_version, an unknown floor, HP that is not a whole number in range,
-##   an unknown or innate item, a quantity that is not a whole number from 0 to MAX_QUANTITY,
-##   or slots that are not exactly the four slot names with an id or null each;
+##   has an unsupported save_version, an unknown floor, HP that is not a whole number in range,
+##   an unknown item, an innate item, a reusable item with a quantity, a consumable or unknown
+##   item in owned_items, an owned item listed twice, a quantity that is not a whole number
+##   from 0 to MAX_QUANTITY, or slots that are not exactly the four slot names with an id or
+##   null each;
 ## - empties a slot, but keeps the rest of the save, if the slot names an unknown action or
-##   an action Carl would not have. The same rules as in the game decide that
-##   (ActionSlots.assign()).
-## A rejected file is never changed, and loading reports why in `last_error` instead of logging
-## an engine error.
+##   an action Carl would not have (a potion with quantity 0, a Slingshot he does not own).
+##   The same rules as in the game decide that (ActionSlots.assign()).
+## Ids are only ever looked up in ActionRegistry and FloorRegistry; nothing in the file is ever
+## used as a path. A rejected file is never changed, and loading reports why in `last_error`
+## instead of logging an engine error.
 
-## The format written by this version. A future format bumps this, and decode() is where
-## older files would be migrated before being read.
-const SAVE_VERSION := 1
+## The format written by this version. A future format bumps this and adds a migration from
+## the previous version in decode().
+const SAVE_VERSION := 2
 const DEFAULT_SAVE_PATH := "user://savegame.json"
 const MAX_HEALTH_LIMIT := 1000
 const MAX_QUANTITY := 999
@@ -98,8 +110,12 @@ func encode(checkpoint: FloorEntry) -> Dictionary:
 	var inventory := Inventory.new()
 	inventory.restore_snapshot(checkpoint.inventory)
 	var quantities := {}
+	var owned_items := []
 	for item in inventory.get_actions():
-		quantities[String(item.id)] = inventory.get_quantity(item)
+		if item.consumable:
+			quantities[String(item.id)] = inventory.get_quantity(item)
+		else:
+			owned_items.append(String(item.id))
 	var slots := {}
 	for slot in ActionSlots.SLOTS:
 		var action: ActionDefinition = checkpoint.action_slots.get(slot)
@@ -111,21 +127,40 @@ func encode(checkpoint: FloorEntry) -> Dictionary:
 		"floor_id": String(floor_id),
 		"carl": {"health": checkpoint.carl_health, "max_health": checkpoint.carl_max_health},
 		"inventory": quantities,
+		"owned_items": owned_items,
 		"action_slots": slots,
 	}
 
 
-## Turns save data back into a checkpoint, or returns null (reason in last_error).
+## Turns save data back into a checkpoint, or returns null (reason in last_error). Data from an
+## older version is migrated first, then checked like current data. `data` itself is never
+## changed.
 func decode(data: Variant) -> FloorEntry:
 	if not data is Dictionary:
 		return _reject("the save data is not a JSON object")
 	var version: Variant = data.get("save_version")
 	if not _is_whole_number(version):
 		return _reject("save_version is missing or not a whole number")
-	if int(version) != SAVE_VERSION:
-		# Older formats would be migrated to the current one here, before reading them.
-		return _reject("save_version %d is not supported (this game reads version %d)" % [int(version), SAVE_VERSION])
-	return _decode_current_version(data)
+	match int(version):
+		1:
+			return _decode_current_version(_migrate_version_1(data))
+		SAVE_VERSION:
+			return _decode_current_version(data)
+	return _reject("save_version %d is not supported (this game reads versions 1 to %d)" % [int(version), SAVE_VERSION])
+
+
+## Version 1 -> version 2. Version 1 had no reusable items (the Slingshot did not exist yet),
+## so its "inventory" only held consumable quantities, which mean the same in version 2.
+## Migrating only adds an empty "owned_items" list; anything else a version 1 file might hold
+## under that name is ignored, so a migrated save never owns a reusable item. The result is
+## then checked by the version 2 rules, which are version 1's rules plus the owned items: for
+## example, a slot holding the Slingshot is emptied, because Carl does not own it.
+## Returns a changed copy.
+func _migrate_version_1(data: Dictionary) -> Dictionary:
+	var migrated := data.duplicate(true)
+	migrated["save_version"] = 2
+	migrated["owned_items"] = []
+	return migrated
 
 
 func _decode_current_version(data: Dictionary) -> FloorEntry:
@@ -156,10 +191,26 @@ func _decode_current_version(data: Dictionary) -> FloorEntry:
 			return _reject("inventory item %s is unknown" % JSON.stringify(item_id))
 		if inventory.is_innate(item):
 			return _reject("inventory item '%s' is innate and cannot be carried" % item_id)
+		if not item.consumable:
+			return _reject("inventory item '%s' is a reusable item, which has no quantity" % item_id)
 		var quantity: Variant = saved_items[item_id]
 		if not _is_whole_number(quantity) or int(quantity) < 0 or int(quantity) > MAX_QUANTITY:
 			return _reject("the quantity of '%s' is %s, not a whole number from 0 to %d" % [item_id, JSON.stringify(quantity), MAX_QUANTITY])
 		inventory.add(item, int(quantity))
+
+	# Owned reusable items: a list of distinct ids of items that are neither innate nor consumable.
+	var owned_items: Variant = data.get("owned_items")
+	if not owned_items is Array:
+		return _reject("owned_items is missing or not a list")
+	for item_id: Variant in owned_items:
+		var item: ActionDefinition = ActionRegistry.find(item_id) if item_id is String else null
+		if item == null:
+			return _reject("owned item %s is unknown" % JSON.stringify(item_id))
+		if inventory.is_innate(item) or item.consumable:
+			return _reject("owned item '%s' is not a reusable item" % item_id)
+		if inventory.has(item):
+			return _reject("owned item '%s' is listed twice" % item_id)
+		inventory.add(item, 1)
 
 	# Slots must be exactly the four slot names. Each holds an action id or null.
 	var saved_slots: Variant = data.get("action_slots")
@@ -176,8 +227,8 @@ func _decode_current_version(data: Dictionary) -> FloorEntry:
 		if action != null:
 			layout[slot] = action
 	# Unknown actions were already dropped above. Filling fresh slots from the layout with the
-	# game's own rules drops actions Carl would not have (for example a potion with quantity 0)
-	# and keeps an action in only one slot.
+	# game's own rules drops actions Carl would not have (for example a potion with quantity 0,
+	# or a Slingshot he does not own) and keeps an action in only one slot.
 	var slots := ActionSlots.new(inventory)
 	slots.fill_empty_slots(layout)
 

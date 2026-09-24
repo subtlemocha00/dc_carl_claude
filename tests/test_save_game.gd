@@ -151,9 +151,11 @@ func _descend_to_floor_2() -> bool:
 	await wait_physics_frames(3)
 	_check_save("entering Floor 2 saves 60 HP, the potion and slot A", "floor_02", 60,
 			{"small_health_potion": 1}, {"action_a": "small_health_potion", "action_d": "fists"})
-	var exits := current_scene.find_children("*", "", true, false).filter(
-			func(node: Node) -> bool: return "destination_scene_path" in node)
-	check(exits.is_empty(), "nothing on Floor 2 leads back up")
+	# Since Phase 6 Floor 2 has stairs down to Floor 3; none lead back up.
+	var destinations := current_scene.find_children("*", "", true, false).filter(
+			func(node: Node) -> bool: return "destination_scene_path" in node).map(
+			func(node: Node) -> String: return node.destination_scene_path)
+	check(destinations == ["res://scenes/levels/floor_03.tscn"], "nothing on Floor 2 leads back up", str(destinations))
 	return true
 
 
@@ -294,6 +296,8 @@ func _wait_for_new_level(old_level_id: int) -> void:
 
 
 ## Checks the save file against the expected checkpoint. `slots` lists only filled slots.
+## (This run never finds a reusable item, so owned_items is always empty; test_slingshot_run.gd
+## covers saves with the Slingshot.)
 func _check_save(label: String, floor_id: String, health: int, inventory: Dictionary, slots: Dictionary) -> void:
 	var data: Variant = JSON.parse_string(_save_text())
 	if not data is Dictionary:
@@ -304,8 +308,9 @@ func _check_save(label: String, floor_id: String, health: int, inventory: Dictio
 	var expected_inventory := {}
 	for item_id: String in inventory:
 		expected_inventory[item_id] = float(inventory[item_id])
-	check(data.get("save_version") == 1 and data.get("floor_id") == floor_id and data["carl"]["health"] == health
-			and data["carl"]["max_health"] == 100 and data["inventory"] == expected_inventory and data["action_slots"] == expected_slots,
+	check(data.get("save_version") == 2 and data.get("floor_id") == floor_id and data["carl"]["health"] == health
+			and data["carl"]["max_health"] == 100 and data["inventory"] == expected_inventory and data.get("owned_items") == []
+			and data["action_slots"] == expected_slots,
 			label, _save_text().replace("\n", " ").replace("\t", ""))
 
 

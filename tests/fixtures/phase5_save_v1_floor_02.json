@@ -1,0 +1,17 @@
+{
+	"action_slots": {
+		"action_a": null,
+		"action_d": "fists",
+		"action_s": "small_health_potion",
+		"action_w": null
+	},
+	"carl": {
+		"health": 70,
+		"max_health": 100
+	},
+	"floor_id": "floor_02",
+	"inventory": {
+		"small_health_potion": 2
+	},
+	"save_version": 1
+}

@@ -1,0 +1,15 @@
+{
+	"action_slots": {
+		"action_a": null,
+		"action_d": null,
+		"action_s": null,
+		"action_w": "fists"
+	},
+	"carl": {
+		"health": 80,
+		"max_health": 100
+	},
+	"floor_id": "floor_01",
+	"inventory": {},
+	"save_version": 1
+}

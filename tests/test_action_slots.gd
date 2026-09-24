@@ -83,9 +83,12 @@ func _check_assignment_rules() -> void:
 	check(not slots.assign(locked, A) and slots.get_action(A) == null and changes[0] == 3,
 			"an action that is not assignable is refused and nothing changes")
 
+	# Consumable, so it is counted and its label shows a quantity. (Since Phase 6 an item that
+	# is not consumable is a reusable item, which has no quantity.)
 	var other := ActionDefinition.new()
 	other.id = &"test_other"
 	other.display_name = "Other"
+	other.consumable = true
 	inventory.add(other, 1)
 	slots.assign(other, S)
 	check(slots.get_action(S) == other and slots.find_slot(FISTS) == &"",
