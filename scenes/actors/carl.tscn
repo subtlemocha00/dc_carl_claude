@@ -1,12 +1,16 @@
 [gd_scene format=3 uid="uid://c883legabsa64"]
 
 [ext_resource type="Script" uid="uid://wpq2123khvtm" path="res://scripts/actors/carl.gd" id="1_carl"]
+[ext_resource type="Script" uid="uid://xv8lt2bxk28b" path="res://scripts/combat/melee_attack.gd" id="2_melee"]
+[ext_resource type="Script" uid="uid://bmdgbdnl4rbos" path="res://scripts/combat/health.gd" id="3_health"]
+[ext_resource type="Script" uid="uid://c1jybnwpqscpb" path="res://scripts/combat/hurtbox.gd" id="4_hurtbox"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_carl"]
 radius = 12.0
 
 [node name="Carl" type="CharacterBody2D"]
 collision_layer = 2
+collision_mask = 9
 motion_mode = 1
 script = ExtResource("1_carl")
 
@@ -28,7 +32,24 @@ unique_name_in_owner = true
 color = Color(0.95, 0.97, 1, 1)
 polygon = PackedVector2Array(3, -5.5, 11, 0, 3, 5.5)
 
+[node name="Fists" type="Node2D" parent="."]
+script = ExtResource("2_melee")
+target_layers = 32
+
 [node name="Camera2D" type="Camera2D" parent="."]
 process_callback = 0
 zoom = Vector2(1.5, 1.5)
 position_smoothing_enabled = true
+
+[node name="Health" type="Node" parent="."]
+script = ExtResource("3_health")
+
+[node name="Hurtbox" type="Area2D" parent="." node_paths=PackedStringArray("health")]
+collision_layer = 16
+collision_mask = 0
+monitoring = false
+script = ExtResource("4_hurtbox")
+health = NodePath("../Health")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Hurtbox"]
+shape = SubResource("CircleShape2D_carl")

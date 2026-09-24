@@ -1,0 +1,75 @@
+[gd_scene format=3 uid="uid://cgljnpejjrnny"]
+
+[ext_resource type="Script" uid="uid://dyloc0wgpoy3t" path="res://scripts/enemies/gelatinous_blob.gd" id="1_blob"]
+[ext_resource type="Script" uid="uid://xv8lt2bxk28b" path="res://scripts/combat/melee_attack.gd" id="2_melee"]
+[ext_resource type="Script" uid="uid://bmdgbdnl4rbos" path="res://scripts/combat/health.gd" id="3_health"]
+[ext_resource type="Script" uid="uid://c1jybnwpqscpb" path="res://scripts/combat/hurtbox.gd" id="4_hurtbox"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_body"]
+radius = 13.0
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_hurtbox"]
+radius = 14.0
+
+[node name="GelatinousBlob" type="CharacterBody2D"]
+collision_layer = 8
+collision_mask = 11
+motion_mode = 1
+script = ExtResource("1_blob")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("CircleShape2D_body")
+
+[node name="Outline" type="Polygon2D" parent="."]
+color = Color(0.12, 0.4, 0.18, 1)
+polygon = PackedVector2Array(16.5, 0, 15.24, 5.17, 11.67, 9.55, 6.31, 12.47, 0, 13.5, -6.31, 12.47, -11.67, 9.55, -15.24, 5.17, -16.5, 0, -15.24, -5.17, -11.67, -9.55, -6.31, -12.47, 0, -13.5, 6.31, -12.47, 11.67, -9.55, 15.24, -5.17)
+
+[node name="Body" type="Polygon2D" parent="."]
+color = Color(0.36, 0.8, 0.38, 1)
+polygon = PackedVector2Array(15, 0, 13.86, 4.59, 10.61, 8.49, 5.74, 11.09, 0, 12, -5.74, 11.09, -10.61, 8.49, -13.86, 4.59, -15, 0, -13.86, -4.59, -10.61, -8.49, -5.74, -11.09, 0, -12, 5.74, -11.09, 10.61, -8.49, 13.86, -4.59)
+
+[node name="Shine" type="Polygon2D" parent="."]
+color = Color(0.78, 0.96, 0.78, 0.8)
+polygon = PackedVector2Array(-2, -5, -3.17, -3.23, -6, -2.5, -8.83, -3.23, -10, -5, -8.83, -6.77, -6, -7.5, -3.17, -6.77)
+
+[node name="LeftEye" type="Polygon2D" parent="."]
+color = Color(0.06, 0.14, 0.06, 1)
+polygon = PackedVector2Array(-5.5, -1.5, -2.5, -1.5, -2.5, 2.5, -5.5, 2.5)
+
+[node name="RightEye" type="Polygon2D" parent="."]
+color = Color(0.06, 0.14, 0.06, 1)
+polygon = PackedVector2Array(2.5, -1.5, 5.5, -1.5, 5.5, 2.5, 2.5, 2.5)
+
+[node name="HealthBar" type="Node2D" parent="."]
+position = Vector2(-14, -22)
+
+[node name="Background" type="Polygon2D" parent="HealthBar"]
+color = Color(0.08, 0.08, 0.08, 0.85)
+polygon = PackedVector2Array(-1, -1, 29, -1, 29, 5, -1, 5)
+
+[node name="HealthBarFill" type="Polygon2D" parent="HealthBar"]
+unique_name_in_owner = true
+color = Color(0.9, 0.22, 0.2, 1)
+polygon = PackedVector2Array(0, 0, 28, 0, 28, 4, 0, 4)
+
+[node name="ContactAttack" type="Node2D" parent="."]
+script = ExtResource("2_melee")
+reach = 0.0
+hit_radius = 19.0
+cooldown = 0.8
+target_layers = 16
+show_flash = false
+
+[node name="Health" type="Node" parent="."]
+script = ExtResource("3_health")
+max_health = 30
+
+[node name="Hurtbox" type="Area2D" parent="." node_paths=PackedStringArray("health")]
+collision_layer = 32
+collision_mask = 0
+monitoring = false
+script = ExtResource("4_hurtbox")
+health = NodePath("../Health")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Hurtbox"]
+shape = SubResource("CircleShape2D_hurtbox")

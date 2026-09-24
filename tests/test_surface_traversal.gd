@@ -12,6 +12,7 @@ extends SceneTree
 
 const SURFACE_PATH := "res://scenes/levels/surface.tscn"
 const FLOOR_1_PATH := "res://scenes/levels/floor_01.tscn"
+const BLOB_PATH := "res://scenes/enemies/gelatinous_blob.tscn"
 ## Donut may briefly fall farther behind than her 50-100 px target while rounding corners.
 const DONUT_MAX_ALLOWED_DISTANCE := 200.0
 ## Seconds allowed to reach each point of the route before Carl counts as stuck.
@@ -75,6 +76,13 @@ func _run_checks() -> void:
 		return
 	await _wait_physics_frames(5)
 	_check_actors("Floor 1")
+	# This test covers traversal, collision and Donut only. Floor 1's enemies would
+	# chase and block Carl here, so they are removed; test_combat.gd and
+	# test_floor_loop.gd cover them.
+	for enemy in current_scene.find_children("*", "CharacterBody2D", true, false):
+		if enemy.scene_file_path == BLOB_PATH:
+			enemy.queue_free()
+	await _wait_physics_frames(2)
 
 	# 5. Floor 1: Donut follows and the room's walls keep Carl inside.
 	await _hold_direction(Vector2.LEFT, 1.5)
