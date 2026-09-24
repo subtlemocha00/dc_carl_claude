@@ -4,8 +4,9 @@ extends SceneTree
 ## Run from the project folder:
 ##     godot --headless --path . -s res://tests/test_carl_movement.gd
 ##
-## Carl is placed alone in an empty scene (no walls). Keyboard events go through Godot's
-## normal input pipeline, so the InputMap key bindings are exercised as well.
+## Carl is placed alone in an empty scene (no walls), with the action slots of a new game
+## (Fists in D). Keyboard events go through Godot's normal input pipeline, so the InputMap
+## key bindings are exercised as well.
 ## Exits with code 0 when every check passes and 1 otherwise.
 
 const CARL_SCENE: PackedScene = preload("res://scenes/actors/carl.tscn")
@@ -19,6 +20,10 @@ var _failures := PackedStringArray()
 func _initialize() -> void:
 	_carl = CARL_SCENE.instantiate()
 	root.add_child(_carl)
+	# Test scripts compile before autoloads exist, so GameState is looked up at runtime.
+	var game_state := root.get_node("GameState")
+	game_state.start_new_run()
+	_carl.action_slots = game_state.action_slots
 	_run_checks.call_deferred()
 
 
@@ -38,7 +43,8 @@ func _run_checks() -> void:
 	await _check_move([KEY_UP, KEY_RIGHT], 60, up_right * speed, "Up+Right diagonal")
 	_check_facing(up_right, "facing after moving diagonally")
 
-	# W/A/S/D are action slots: they must neither move Carl nor change his facing.
+	# W/A/S/D are action slots: they must neither move Carl nor change his facing, whether
+	# their slot is empty (W, A, S) or holds an action (D holds Fists).
 	# Each key is held on its own, because opposite keys held together would cancel out.
 	for key: Key in [KEY_W, KEY_A, KEY_S, KEY_D]:
 		await _check_move([key], 30, Vector2.ZERO, "%s held" % OS.get_keycode_string(key))

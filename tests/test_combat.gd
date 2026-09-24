@@ -1,7 +1,8 @@
 extends "res://tests/support/game_test.gd"
-## Phase 2 combat checks in an empty arena (no level): Health, Carl's Fists, the
-## Gelatinous Blob's pursuit, contact damage and death, Carl's death, the HUD, and Donut
-## staying out of combat.
+## Combat checks in an empty arena (no level): Health, Carl's Fists, the Gelatinous Blob's
+## pursuit, contact damage and death, Carl's death, the HUD, and Donut staying out of combat.
+## Carl uses the run's action slots as a new game sets them up: Fists in D, W/A/S empty
+## (Phase 3). Reassigning slots is covered by test_action_slots.gd.
 ##
 ## Run from the project folder:
 ##     godot --headless --path . -s res://tests/test_combat.gd
@@ -12,6 +13,7 @@ const CARL_SCENE: PackedScene = preload("res://scenes/actors/carl.tscn")
 const DONUT_SCENE: PackedScene = preload("res://scenes/actors/donut.tscn")
 const BLOB_SCENE: PackedScene = preload("res://scenes/enemies/gelatinous_blob.tscn")
 const HUD_SCENE: PackedScene = preload("res://scenes/ui/hud.tscn")
+const FISTS: ActionDefinition = preload("res://resources/actions/fists.tres")
 
 var _arena: Node2D
 
@@ -48,34 +50,34 @@ func _check_health() -> void:
 
 
 func _check_fists() -> void:
-	print("-- Carl's Fists (action slot W)")
+	print("-- Carl's Fists (action slot D in a new game)")
 	_new_arena()
 	var carl := _spawn_carl(Vector2.ZERO)
 	var blob := _spawn_blob(Vector2(48, 0), carl, false)
 	var blob_health: Health = blob.health
 	var attacks := []
-	carl.fists.performed.connect(func(direction: Vector2, hits: int) -> void: attacks.append([direction, hits]))
+	_fists(carl).performed.connect(func(direction: Vector2, hits: int) -> void: attacks.append([direction, hits]))
 	await wait_physics_frames(2)
 
-	await tap_key(KEY_W)
-	check(attacks.size() == 1 and attacks[0][0] == Vector2.DOWN, "W attacks in the default facing (down)")
+	await tap_key(KEY_D)
+	check(attacks.size() == 1 and attacks[0][0] == Vector2.DOWN, "D attacks in the default facing (down)")
 	check(blob_health.current_health == 30, "a blob to the right is not hit while Carl faces down")
 
 	await wait_seconds(0.5)
 	await tap_key(KEY_LEFT)
-	await tap_key(KEY_W)
+	await tap_key(KEY_D)
 	check(blob_health.current_health == 30, "a blob to the right is not hit while Carl faces left")
 
 	await wait_seconds(0.5)
 	await tap_key(KEY_RIGHT)
-	await tap_key(KEY_W)
-	check(blob_health.current_health == 20, "facing right, W hits the blob for 10", "blob HP %d" % blob_health.current_health)
+	await tap_key(KEY_D)
+	check(blob_health.current_health == 20, "facing right, D hits the blob for 10", "blob HP %d" % blob_health.current_health)
 	check(carl.health.current_health == 100, "Carl does not hit himself")
 
 	# Donut standing between Carl and the blob neither blocks the punch nor gets hurt.
 	var donut := _spawn_donut(Vector2(22, 0), carl)
 	await wait_seconds(0.5)
-	await tap_key(KEY_W)
+	await tap_key(KEY_D)
 	check(blob_health.current_health == 10, "Donut in the way does not block the punch", "blob HP %d" % blob_health.current_health)
 	check(is_instance_valid(donut) and donut.get_node_or_null("Health") == null, "Donut has no Health, so she cannot be damaged")
 
@@ -84,15 +86,15 @@ func _check_fists() -> void:
 	blob.reset_physics_interpolation()
 	await wait_seconds(0.5)
 	await hold_keys([KEY_UP, KEY_RIGHT], 1)
-	await tap_key(KEY_W)
-	check(blob_health.current_health == 0, "facing up-right, W hits a blob up-right", "blob HP %d" % blob_health.current_health)
+	await tap_key(KEY_D)
+	check(blob_health.current_health == 0, "facing up-right, D hits a blob up-right", "blob HP %d" % blob_health.current_health)
 
-	# A, S and D are empty action slots.
+	# W, A and S are empty action slots in a new game.
 	var count_before := attacks.size()
 	await wait_seconds(0.5)
-	for key: Key in [KEY_A, KEY_S, KEY_D]:
-		await tap_key(key)
-	check(attacks.size() == count_before, "A, S and D do not attack")
+	for key: Key in [KEY_W, KEY_A, KEY_S]:
+		await hold_keys([key], 30)
+	check(attacks.size() == count_before, "W, A and S (empty slots) do not attack")
 
 
 func _check_fists_cooldown() -> void:
@@ -101,17 +103,17 @@ func _check_fists_cooldown() -> void:
 	var carl := _spawn_carl(Vector2.ZERO)
 	var blob := _spawn_blob(Vector2(45, 0), carl, false, 1000)
 	var attack_ticks := []
-	carl.fists.performed.connect(func(_direction: Vector2, _hits: int) -> void: attack_ticks.append(Engine.get_physics_frames()))
+	_fists(carl).performed.connect(func(_direction: Vector2, _hits: int) -> void: attack_ticks.append(Engine.get_physics_frames()))
 	await tap_key(KEY_RIGHT)
 	await wait_seconds(0.5)
 	attack_ticks.clear()
 
-	await hold_keys([KEY_W], 90)  # 1.5 seconds
-	var cooldown_ticks := roundi(carl.fists.cooldown * Engine.physics_ticks_per_second)
+	await hold_keys([KEY_D], 90)  # 1.5 seconds
+	var cooldown_ticks := roundi(_fists(carl).cooldown * Engine.physics_ticks_per_second)
 	var gaps := []
 	for i in range(1, attack_ticks.size()):
 		gaps.append(attack_ticks[i] - attack_ticks[i - 1])
-	check(attack_ticks.size() == 4, "holding W for 1.5 s punches 4 times (cooldown 0.4 s)", "%d punches" % attack_ticks.size())
+	check(attack_ticks.size() == 4, "holding D for 1.5 s punches 4 times (cooldown 0.4 s)", "%d punches" % attack_ticks.size())
 	check(gaps.all(func(gap: int) -> bool: return gap == cooldown_ticks), "punches are exactly one cooldown apart", "gaps %s ticks" % [gaps])
 	check(blob.health.current_health == 1000 - 10 * attack_ticks.size(), "each punch dealt its damage once", "blob HP %d" % blob.health.current_health)
 
@@ -215,7 +217,7 @@ func _check_blob_death() -> void:
 	var died_count := [0]
 	blob.health.died.connect(func() -> void: died_count[0] += 1)
 	await tap_key(KEY_RIGHT)
-	await hold_keys([KEY_W], 60)  # 3 punches: 30 HP gone
+	await hold_keys([KEY_D], 60)  # 3 punches: 30 HP gone
 	await wait_physics_frames(2)
 	check(blob.health.is_dead() and died_count[0] == 1, "3 punches kill the blob (30 HP), died emitted once")
 	# Godot never lets a scale be exactly 0 (it keeps 0.00001), so compare against a tiny width.
@@ -229,7 +231,7 @@ func _check_blob_death() -> void:
 	await wait_seconds(0.3)
 	check(blob.global_position == dead_position and carl.health.current_health == 100, "a dead blob does not move or hurt Carl")
 	await wait_seconds(0.5)  # let the Fists cool down
-	await hold_keys([KEY_W], 2)
+	await hold_keys([KEY_D], 2)
 	check(died_count[0] == 1 and blob.health.current_health == 0, "punching a dead blob does nothing")
 	await wait_seconds(1.5)
 	check(not is_instance_valid(blob), "the dead blob fades out and is removed")
@@ -252,10 +254,10 @@ func _check_carl_death() -> void:
 	check(hud.get_node("%GameOverMessage").visible, "HUD shows the game-over message")
 
 	var attacks := [0]
-	carl.fists.performed.connect(func(_direction: Vector2, _hits: int) -> void: attacks[0] += 1)
+	_fists(carl).performed.connect(func(_direction: Vector2, _hits: int) -> void: attacks[0] += 1)
 	var position_when_down := carl.global_position
 	await hold_keys([KEY_LEFT], 30)
-	await hold_keys([KEY_W], 30)
+	await hold_keys([KEY_D], 30)
 	check(carl.global_position == position_when_down and attacks[0] == 0, "a downed Carl cannot move or attack")
 	await wait_seconds(1.0)
 	check(died_count[0] == 1 and carl.health.current_health == 0, "the blob stops hurting a downed Carl")
@@ -267,12 +269,14 @@ func _new_arena() -> void:
 		_arena.free()
 	_arena = Node2D.new()
 	root.add_child(_arena)
+	game_state().start_new_run()
 
 
 func _spawn_carl(at: Vector2) -> CharacterBody2D:
 	var carl: CharacterBody2D = CARL_SCENE.instantiate()
 	carl.position = at
 	_arena.add_child(carl)
+	carl.action_slots = game_state().action_slots
 	return carl
 
 
@@ -295,3 +299,8 @@ func _spawn_blob(at: Vector2, carl: Node2D, chases: bool, max_health: int = 30) 
 	blob.position = at
 	_arena.add_child(blob)
 	return blob
+
+
+## Carl's Fists performer, which the action slots created when Fists went into slot D.
+func _fists(carl: Node2D) -> MeleeAttack:
+	return carl.get_action_performer(FISTS)

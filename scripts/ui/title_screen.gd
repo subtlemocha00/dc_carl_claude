@@ -1,5 +1,5 @@
 extends Control
-## Placeholder title screen. Pressing Enter (the ui_confirm_game action) starts the game.
+## Placeholder title screen. Pressing Enter (the ui_confirm_game action) starts a new game.
 
 ## First level scene loaded when the game starts.
 @export_file("*.tscn") var start_scene_path: String = "res://scenes/levels/surface.tscn"
@@ -18,4 +18,5 @@ func _ready() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed(&"ui_confirm_game"):
 		get_viewport().set_input_as_handled()
+		GameState.start_new_run()
 		get_tree().change_scene_to_file(start_scene_path)

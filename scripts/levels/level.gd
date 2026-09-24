@@ -1,48 +1,42 @@
 class_name Level
 extends Node2D
-## Root script of every level scene. It:
-## - places Carl and Donut at the spawn point they arrived through (chosen by the Stairs
-##   that loaded this level);
-## - connects the HUD to Carl's health;
-## - handles the temporary Phase 2 game over: when Carl dies, the level restarts after a
-##   short delay with everything, including Carl's health, reset. A later save/checkpoint
-##   phase only needs to replace _on_carl_died().
+## Root script of every level scene. When the level starts it:
+## - gives Carl the run's state from GameState (his HP and the W/A/S/D action slots), and
+##   keeps GameState's copy of his HP up to date from then on;
+## - records the floor-entry state in GameState: what Carl had on entering this level;
+## - connects the HUD and the action menu.
+##
+## GAME OVER: when Carl dies, the game freezes (the scene tree is paused) and stays that way.
+## Pressing Enter on the GAME OVER screen retries: GameState goes back to the floor-entry
+## state and the level is loaded again, which also puts its enemies back as they started.
 
 @export var carl: Node2D
-@export var donut: Node2D
 @export var hud: CanvasLayer
-## Seconds between Carl dying and the level restarting.
-@export var restart_delay: float = 2.0
-## Where Donut appears relative to Carl's spawn point.
-@export var donut_spawn_offset: Vector2 = Vector2(-48, 16)
-
-## Name of the Marker2D under SpawnPoints where Carl arrives. The Stairs that load a
-## level set this before the level enters the scene tree. Empty means Carl and Donut keep
-## their positions from the level scene, which is also where Carl restarts after dying.
-var arrival_spawn_point: StringName = &""
+@export var action_menu: CanvasLayer
 
 
 func _ready() -> void:
-	if arrival_spawn_point != &"":
-		_place_actors_at_spawn(arrival_spawn_point)
-	hud.show_health(carl.health)
+	carl.health.set_health(GameState.carl_health, GameState.carl_max_health)
+	carl.health.health_changed.connect(GameState.store_carl_health)
 	carl.health.died.connect(_on_carl_died)
+	carl.action_slots = GameState.action_slots
+	# A retry records this again, which is harmless: GameState was just set back to the
+	# values recorded the first time.
+	GameState.record_floor_entry(scene_file_path)
 
-
-func _place_actors_at_spawn(spawn_name: StringName) -> void:
-	var spawn := get_node_or_null(NodePath("SpawnPoints/" + spawn_name)) as Marker2D
-	if spawn == null:
-		push_error("Level '%s' has no spawn point named '%s'." % [name, spawn_name])
-		return
-	carl.teleport_to(spawn.global_position)
-	donut.global_position = spawn.global_position + donut_spawn_offset
-	donut.reset_physics_interpolation()
+	hud.show_health(carl.health)
+	hud.show_action_slots(GameState.action_slots)
+	hud.retry_requested.connect(_on_retry_requested)
+	action_menu.setup(GameState.available_actions, GameState.action_slots)
 
 
 func _on_carl_died() -> void:
-	# If the level is freed before the timer ends, the connection is removed automatically.
-	get_tree().create_timer(restart_delay).timeout.connect(_restart)
+	# Freeze gameplay: Carl, Donut and the enemies stop. The HUD keeps running while the game
+	# is paused, so its GAME OVER screen can still react to Enter.
+	get_tree().paused = true
 
 
-func _restart() -> void:
-	get_tree().reload_current_scene()
+func _on_retry_requested() -> void:
+	GameState.restore_floor_entry()
+	get_tree().paused = false
+	get_tree().change_scene_to_file(GameState.floor_entry.scene_path)

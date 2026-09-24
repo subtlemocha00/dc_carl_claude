@@ -1,5 +1,6 @@
 extends "res://tests/support/game_test.gd"
-## Checks the HUD and camera on Floor 1 at the supported window sizes, in a real window.
+## Checks the HUD, the action menu and the camera on Floor 1 at the supported window sizes, in
+## a real window.
 ##
 ## Run from the project folder (NOT headless; a game window opens briefly):
 ##     godot --path . -s res://tests/test_windowed_resolutions.gd
@@ -27,6 +28,9 @@ func _run_checks() -> void:
 	await wait_physics_frames(10)
 	var hud := current_scene.get_node("HUD")
 	var health_label: Control = hud.get_node("%HealthLabel")
+	var action_slots_label: Control = hud.get_node("%ActionSlotsLabel")
+	var action_menu: CanvasLayer = current_scene.get_node("ActionMenu")
+	var menu_panel: Control = action_menu.get_node("%Panel")
 	var game_over_message: Control = hud.get_node("%GameOverMessage")
 	var carl: CharacterBody2D = current_scene.get_node("Actors/Carl")
 
@@ -41,12 +45,21 @@ func _run_checks() -> void:
 		var expected_size := Vector2(window_size) / scale
 		check(visible_rect.size.distance_to(expected_size) < 1.0, label + ": visible area", "%s (expected %s)" % [visible_rect.size, expected_size])
 		check(visible_rect.encloses(health_label.get_global_rect()), label + ": HP label is fully on screen")
+		check(visible_rect.encloses(action_slots_label.get_global_rect()), label + ": action slot bar is fully on screen")
+		check(not action_slots_label.get_global_rect().intersects(health_label.get_global_rect()), label + ": slot bar and HP label do not overlap")
 		game_over_message.visible = true
 		await process_frame
 		var message_rect := game_over_message.get_global_rect()
 		check(visible_rect.encloses(message_rect) and message_rect.get_center().distance_to(visible_rect.get_center()) < 2.0,
 				label + ": game-over message is on screen and centred")
+		check(not message_rect.intersects(action_slots_label.get_global_rect()), label + ": game-over message and slot bar do not overlap")
 		game_over_message.visible = false
+		action_menu.open()
+		await process_frame
+		var panel_rect := menu_panel.get_global_rect()
+		check(visible_rect.encloses(panel_rect) and panel_rect.get_center().distance_to(visible_rect.get_center()) < 2.0,
+				label + ": action menu is on screen and centred", str(panel_rect))
+		action_menu.close()
 		var carl_on_screen := carl.get_global_transform_with_canvas().origin
 		check(carl_on_screen.distance_to(visible_rect.get_center()) < 1.5, label + ": camera is centred on Carl",
 				"Carl drawn at %s, screen centre %s" % [carl_on_screen, visible_rect.get_center()])

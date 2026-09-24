@@ -24,6 +24,15 @@ func is_dead() -> bool:
 	return current_health <= 0
 
 
+## Sets the hit points directly, for example when a level gives Carl the HP he carried over
+## from the previous level. This is not damage: only health_changed is emitted.
+## `current` is kept between 1 and `maximum`, so the actor is alive afterwards.
+func set_health(current: int, maximum: int) -> void:
+	max_health = maxi(1, maximum)
+	current_health = clampi(current, 1, max_health)
+	health_changed.emit(current_health, max_health)
+
+
 ## Removes up to `amount` health and returns how much was actually removed.
 ## Does nothing once the actor is dead, so a dead actor cannot "die" twice.
 func take_damage(amount: int) -> int:

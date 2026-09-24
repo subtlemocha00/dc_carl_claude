@@ -44,11 +44,15 @@ Gameplay:
 - D: action slot 4.
 - Space: open/close inventory.
 - Escape: pause/back/cancel as appropriate.
-- Enter: confirm menu/inventory selection.
+- Enter: confirm menu/inventory selection; on the GAME OVER screen, retry the current floor.
 
 Carl's facing direction is determined by his most recent non-zero movement direction.
 
-W/A/S/D are never movement controls in this game.
+W/A/S/D are never movement controls in this game. Movement is the arrow keys only.
+
+The W/A/S/D keys themselves are fixed. What each of the four slots holds is the player's
+choice, changed through the in-game inventory/action menu (section 7). Rebinding the
+physical keys is a separate, future settings concern.
 
 ## 5. Carl
 
@@ -58,9 +62,13 @@ Initial target attributes, subject to later tuning:
 - Max HP: 100
 - Move speed: approximately 180 px/s
 - Four action slots mapped to W/A/S/D.
-- Starts with Fists in W and the other three slots empty.
+- Starts a new game with Fists in D and slots W, A and S empty.
 
-Carl reaching 0 HP causes the game-over state.
+Carl reaching 0 HP causes the game-over state:
+- gameplay freezes: Carl cannot move or act, and Donut and the enemies stop;
+- the GAME OVER screen stays up. It never restarts or disappears on a timer;
+- pressing Enter retries the current floor from the state captured when Carl entered it
+  (section 15).
 
 ## 6. Donut
 
@@ -92,6 +100,8 @@ Exact combat values may be tuned later.
 W/A/S/D are four hot-action slots.
 
 The player can assign usable inventory items/actions to these slots through the inventory UI.
+An action sits in one slot at a time: assigning it to another slot empties its old slot.
+An empty slot does nothing when its key is pressed.
 
 Examples:
 - W = Steel Pipe
@@ -135,6 +145,8 @@ Keyboard-only navigation is required:
 - Space: close inventory.
 
 From an inventory item, the player must eventually be able to choose Equip and assign the item to W, A, S, or D.
+The first version of this menu assigns directly: select an action with Up/Down, then press
+W, A, S or D to put it in that slot. Escape also closes the menu.
 
 HUD must eventually show all four action slots and their assigned items.
 
@@ -160,6 +172,11 @@ All three prototype dungeon floors should be manually authored scenes/layouts.
 
 General progression:
 Surface -> Floor 1 -> Floor 2 -> Floor 3 -> Prototype Complete screen.
+
+Progression is downward only. Once Carl descends, he can never return to the Surface or to a
+shallower floor. Levels have no stairs, exits or triggers that lead back up. This is a design
+rule, not a missing feature. Tests and development tools may still load any level scene
+directly.
 
 Level/floor metadata should nevertheless be data-driven enough that Floors 4–20 can later be added without rewriting the core game loop.
 
@@ -253,6 +270,13 @@ Initial save design:
 - Save/checkpoint at floor transitions.
 - Do not save after every pickup.
 - Restart Floor reloads the state captured on entering that floor.
+  Retrying after GAME OVER does this. Carl's HP returns to what he had on entering the
+  floor, and the floor's enemies start over. The action-slot layout stays as the player
+  last set it.
+
+Current-run state (what survives level changes during one playthrough, held in memory) is
+separate from disk save data. A later SaveManager writes the needed parts of the run state
+to disk; it does not replace it.
 
 Persisted state should eventually include at least:
 - current floor/checkpoint

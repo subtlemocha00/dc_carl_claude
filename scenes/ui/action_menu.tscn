@@ -1,0 +1,114 @@
+[gd_scene format=3 uid="uid://ct41gcr0xgp3i"]
+
+[ext_resource type="Script" uid="uid://b1tiymcn62ddv" path="res://scripts/ui/action_menu.gd" id="1_menu"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_panel"]
+content_margin_left = 28.0
+content_margin_top = 20.0
+content_margin_right = 28.0
+content_margin_bottom = 20.0
+bg_color = Color(0.1, 0.11, 0.15, 0.97)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.45, 0.5, 0.62, 1)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+
+[node name="ActionMenu" type="CanvasLayer"]
+process_mode = 3
+layer = 10
+visible = false
+script = ExtResource("1_menu")
+
+[node name="Dim" type="ColorRect" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0, 0, 0, 0.5)
+
+[node name="Panel" type="PanelContainer" parent="."]
+unique_name_in_owner = true
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -320.0
+offset_top = -170.0
+offset_right = 320.0
+offset_bottom = 170.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_panel")
+
+[node name="Layout" type="VBoxContainer" parent="Panel"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 14
+
+[node name="Title" type="Label" parent="Panel/Layout"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.96, 0.93, 0.85, 1)
+theme_override_font_sizes/font_size = 28
+text = "Action Slots"
+horizontal_alignment = 1
+
+[node name="Columns" type="HBoxContainer" parent="Panel/Layout"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 48
+
+[node name="SlotColumn" type="VBoxContainer" parent="Panel/Layout/Columns"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+
+[node name="SlotHeader" type="Label" parent="Panel/Layout/Columns/SlotColumn"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.62, 0.65, 0.72, 1)
+theme_override_font_sizes/font_size = 15
+text = "KEY   ACTION"
+
+[node name="SlotList" type="VBoxContainer" parent="Panel/Layout/Columns/SlotColumn"]
+unique_name_in_owner = true
+layout_mode = 2
+mouse_filter = 2
+
+[node name="ActionColumn" type="VBoxContainer" parent="Panel/Layout/Columns"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+
+[node name="ActionHeader" type="Label" parent="Panel/Layout/Columns/ActionColumn"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.62, 0.65, 0.72, 1)
+theme_override_font_sizes/font_size = 15
+text = "CARL'S ACTIONS"
+
+[node name="ActionList" type="VBoxContainer" parent="Panel/Layout/Columns/ActionColumn"]
+unique_name_in_owner = true
+layout_mode = 2
+mouse_filter = 2
+
+[node name="DetailsLabel" type="Label" parent="Panel/Layout"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.85, 0.87, 0.9, 1)
+theme_override_font_sizes/font_size = 16
+autowrap_mode = 3
+
+[node name="HelpLabel" type="Label" parent="Panel/Layout"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.62, 0.65, 0.72, 1)
+theme_override_font_sizes/font_size = 14
+text = "Up/Down: choose an action     W/A/S/D: put it on that key     Space/Esc: close"
+horizontal_alignment = 1

@@ -42,8 +42,14 @@ func _initialize() -> void:
 
 func _run_checks() -> void:
 	# 1. The main scene is the title screen, and Enter starts the game on the Surface.
-	change_scene_to_file(ProjectSettings.get_setting("application/run/main_scene"))
-	await _wait_physics_frames(5)
+	# Wait until the title screen really is the current scene: on a busy machine, several
+	# physics ticks can pass before a scene change completes, and an early Enter would be lost.
+	var title_path: String = ProjectSettings.get_setting("application/run/main_scene")
+	change_scene_to_file(title_path)
+	if not await _wait_for_scene(title_path):
+		_finish()
+		return
+	await _wait_physics_frames(2)
 	_send_key(KEY_ENTER, true)
 	_send_key(KEY_ENTER, false)
 	if not await _wait_for_scene(SURFACE_PATH):

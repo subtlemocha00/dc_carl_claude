@@ -1,17 +1,17 @@
 extends Area2D
-## Stairs that load another level scene when Carl walks onto them.
+## Stairs down: they load the next level scene when Carl walks onto them.
+## Dungeon progression only goes down (GAME_SPEC.md section 10), so no level has stairs that
+## lead back to the Surface or to a shallower floor. Carl arrives wherever the next level
+## scene places him.
 ## The collision mask only detects the "player" physics layer, so Donut and enemies cannot trigger them.
 
 ## Level scene to load when Carl steps onto the stairs.
 @export_file("*.tscn") var destination_scene_path: String
-## Spawn point (a Marker2D under the destination level's SpawnPoints node) where Carl arrives.
-## Leave empty to keep Carl's position from the destination level scene.
-@export var destination_spawn_point: StringName = &""
 
 var _is_transitioning := false
 # Physics frames to wait before reacting. Bodies already standing on the stairs when the
 # level starts are reported during the first physics frame. Ignoring them means Carl has to
-# step off and back on, so arriving on top of stairs can never bounce him straight back.
+# step off and back on, so a level whose spawn point is on its stairs never skips itself.
 var _frames_until_armed := 2
 
 
@@ -37,7 +37,4 @@ func _on_body_entered(_body: Node2D) -> void:
 
 
 func _change_level() -> void:
-	var level := (load(destination_scene_path) as PackedScene).instantiate()
-	if level is Level:
-		level.arrival_spawn_point = destination_spawn_point
-	get_tree().change_scene_to_node(level)
+	get_tree().change_scene_to_file(destination_scene_path)

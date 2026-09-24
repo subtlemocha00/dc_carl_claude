@@ -1,9 +1,12 @@
 class_name MeleeAttack
-extends Node2D
+extends ActionPerformer
 ## A short-range attack. Each use damages every Hurtbox inside a circle placed `reach`
 ## pixels from this node in the attack direction, then waits `cooldown` seconds.
 ## Carl's Fists and the Gelatinous Blob's touch both use this node with different numbers.
-## Later, weapons or items can supply these values instead of the scene.
+## - The Blob calls attack() itself.
+## - Fists (scenes/actions/fists.tscn) is a MeleeAttack used as an ActionPerformer: Carl
+##   calls perform() when he uses a slot holding Fists. A future melee weapon is another
+##   such scene with its own numbers.
 
 ## Emitted every time the attack is used, with how many Hurtboxes it damaged.
 signal performed(direction: Vector2, hit_count: int)
@@ -57,6 +60,11 @@ func attack(direction: Vector2) -> int:
 		queue_redraw()
 	performed.emit(direction, targets.size())
 	return targets.size()
+
+
+## ActionPerformer: attacks toward `direction`. Returns false while cooling down.
+func perform(direction: Vector2) -> bool:
+	return attack(direction) >= 0
 
 
 ## Returns the hittable Hurtboxes currently inside the hit circle, without attacking.

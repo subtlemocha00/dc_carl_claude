@@ -24,6 +24,12 @@ func _init() -> void:
 	OS.add_logger(_error_recorder)
 
 
+## The GameState autoload. Test scripts are compiled before autoloads exist, so they cannot
+## use the name GameState directly.
+func game_state() -> Node:
+	return root.get_node("GameState")
+
+
 func check(condition: bool, label: String, detail: String = "") -> void:
 	var text := label if detail.is_empty() else "%s: %s" % [label, detail]
 	if condition:

@@ -1,0 +1,7 @@
+[gd_scene format=3 uid="uid://dwvf01usa72c"]
+
+[ext_resource type="Script" uid="uid://xv8lt2bxk28b" path="res://scripts/combat/melee_attack.gd" id="1_melee"]
+
+[node name="Fists" type="Node2D"]
+script = ExtResource("1_melee")
+target_layers = 32
