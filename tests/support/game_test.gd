@@ -2,6 +2,11 @@ extends SceneTree
 ## Shared helpers for test scripts. A test extends this file, runs its checks from
 ## _initialize(), and ends with finish().
 ## Any engine error or warning logged while the test runs also counts as a failure.
+## Every test saves into its own file under TEST_SAVE_FOLDER, which is deleted when the test
+## starts and finishes, so tests never read or write a player's save.
+
+## Where tests keep their save files (never SaveManager.DEFAULT_SAVE_PATH).
+const TEST_SAVE_FOLDER := "user://test_saves/"
 
 
 ## Records engine errors and warnings (push_error, failed checks inside Godot, and so on).
@@ -22,6 +27,22 @@ var _error_recorder := ErrorRecorder.new()
 
 func _init() -> void:
 	OS.add_logger(_error_recorder)
+	# Autoloads only exist once the test runs. This deferred call is queued before anything a
+	# test's _initialize() defers, so it happens before any level can save.
+	_use_test_save_file.call_deferred()
+
+
+## The SaveManager autoload.
+func save_manager() -> Node:
+	return root.get_node("SaveManager")
+
+
+## Points SaveManager at this test's own save file and deletes it, so the test starts with no
+## save and never touches the player's.
+func _use_test_save_file() -> void:
+	var test_name := (get_script() as Script).resource_path.get_file().get_basename()
+	save_manager().save_path = TEST_SAVE_FOLDER + test_name + ".json"
+	save_manager().delete_save()
 
 
 ## The GameState autoload. Test scripts are compiled before autoloads exist, so they cannot
@@ -101,8 +122,49 @@ func wait_for_scene(scene_path: String, max_frames: int = 120) -> bool:
 	return false
 
 
+## A navigation route in the current level. A level's navigation map is only ready after its
+## first physics frames, so this waits for a route. Empty if there is none.
+func navigation_route(from: Vector2, to: Vector2) -> PackedVector2Array:
+	for i in 60:
+		var route := NavigationServer2D.map_get_path(root.world_2d.navigation_map, from, to, true)
+		if not route.is_empty():
+			return route
+		await physics_frame
+	return PackedVector2Array()
+
+
+## Steers Carl ("Actors/Carl") along the navigation route to `target`, like a player holding
+## the arrow keys. Stops early if the level changes (for example on stairs). Returns false
+## (and records a failure) if there is no route or Carl gets stuck.
+func walk_to(target: Vector2) -> bool:
+	var level := current_scene
+	var route := await navigation_route(level.get_node("Actors/Carl").global_position, target)
+	if route.is_empty():
+		_failures.append("No navigation route to %s." % target)
+		return false
+	for point in route:
+		var elapsed := 0.0
+		while true:
+			if current_scene != level:
+				steer(Vector2.ZERO)
+				return true
+			var carl: Node2D = level.get_node("Actors/Carl")
+			if carl.global_position.distance_to(point) <= 3.0:
+				break
+			if elapsed > 10.0:
+				_failures.append("Carl got stuck at %s on the way to %s." % [carl.global_position, point])
+				steer(Vector2.ZERO)
+				return false
+			steer(carl.global_position.direction_to(point))
+			await physics_frame
+			elapsed += 1.0 / Engine.physics_ticks_per_second
+	steer(Vector2.ZERO)
+	return true
+
+
 func finish() -> void:
 	steer(Vector2.ZERO)
+	save_manager().delete_save()
 	for message in _error_recorder.messages:
 		_failures.append("Engine error/warning: " + message)
 	if _failures.is_empty():

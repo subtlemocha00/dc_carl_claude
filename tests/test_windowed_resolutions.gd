@@ -1,7 +1,8 @@
 extends "res://tests/support/game_test.gd"
 ## Checks the HUD, the action menu and the camera on Floor 1 at the supported window sizes, in
 ## a real window. Carl carries potions assigned to a slot, so the HUD and the menu show their
-## longest texts (with quantities).
+## longest texts (with quantities). Then the title screen at each size: Continue and New Game
+## with a save, the "could not be loaded" message, and the New Game confirmation.
 ##
 ## Run from the project folder (NOT headless; a game window opens briefly):
 ##     godot --path . -s res://tests/test_windowed_resolutions.gd
@@ -84,4 +85,42 @@ func _run_checks() -> void:
 	var final_offset := camera.get_screen_center_position().distance_to(carl.global_position)
 	check(largest_lag > 1.0 and largest_lag < 60.0, "the camera follows a walking Carl with a small lag", "%.1f px" % largest_lag)
 	check(final_offset < 0.5, "the camera re-centres on Carl after he stops", "%.2f px off" % final_offset)
+	await _check_title_screen()
 	finish()
+
+
+## The title menu fits at every size. Floor 1 above already saved a checkpoint, so Continue is
+## available; a broken save file then shows the error message.
+func _check_title_screen() -> void:
+	var title_path: String = ProjectSettings.get_setting("application/run/main_scene")
+	for broken_save in [false, true]:
+		if broken_save:
+			var file := FileAccess.open(save_manager().save_path, FileAccess.WRITE)
+			file.store_string("{broken")
+			file.close()
+		change_scene_to_file(title_path)
+		await wait_for_scene(title_path)
+		var title := current_scene
+		check(title.is_continue_available() != broken_save, "title: Continue is %s" % ("unavailable with a broken save" if broken_save else "available"))
+		for window_size in WINDOW_SIZES:
+			DisplayServer.window_set_size(window_size)
+			await wait_physics_frames(10)
+			var label := "title %dx%d%s" % [window_size.x, window_size.y, " (broken save)" if broken_save else ""]
+			var visible_rect := root.get_visible_rect()
+			for row_name: String in ["%ContinueRow", "%NewGameRow", "%SaveInfoLabel", "%VersionLabel"]:
+				check(visible_rect.encloses(title.get_node(row_name).get_global_rect()), "%s: %s is on screen" % [label, row_name.trim_prefix("%")])
+		# The confirmation panel (New Game with a save file present), then back out with Escape.
+		if not broken_save:
+			await tap_key(KEY_DOWN)
+		await tap_key(KEY_ENTER)
+		var panel: Control = title.get_node("%ConfirmPanel")
+		for window_size in WINDOW_SIZES:
+			DisplayServer.window_set_size(window_size)
+			await wait_physics_frames(10)
+			var visible_rect := root.get_visible_rect()
+			var panel_rect := panel.get_global_rect()
+			check(panel.visible and visible_rect.encloses(panel_rect) and panel_rect.get_center().distance_to(visible_rect.get_center()) < 2.0,
+					"title %dx%d: the New Game confirmation is on screen and centred" % [window_size.x, window_size.y], str(panel_rect))
+		await tap_key(KEY_ESCAPE)
+		check(not panel.visible, "Escape closes the confirmation")
+	DisplayServer.window_set_size(WINDOW_SIZES[0])

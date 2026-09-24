@@ -7,13 +7,14 @@ Godot 4.7.2 stable (Standard build, not .NET)
 GDScript
 
 ## Current phase
-Phase 4 — Inventory, World Loot, Consumable Action and Floor 2: **complete, awaiting human review**.
+Phase 5 — Persistent Save/Load and Continue: **complete, awaiting human review**.
+- Phase 4 — Inventory, World Loot, Consumable Action and Floor 2: complete (commit `4ea1123`).
 - Phase 3 — Action Slots, Action Menu and Run State: complete (commit `a7ef551`).
 - Phase 2 — First Combat Loop: complete (commit `074114d`).
 - Phase 1 — First Traversal Slice: complete (commit `3cb8854`).
 - Phase 0 — Project Foundation: complete (commit `37b2c87`).
 
-There are no `PHASE_02_*.md` to `PHASE_04_*.md` files. Phases 2–4 came from the owner's
+There are no `PHASE_02_*.md` to `PHASE_05_*.md` files. Phases 2–5 came from the owner's
 prompts. Their acceptance criteria are recorded in `ACCEPTANCE_TESTS.md`.
 
 ## Canonical design decisions (do not reintroduce the old behaviour)
@@ -26,8 +27,8 @@ Phase 3 decisions, still in force:
 - **Dungeon progression is downward only.** No level has stairs or triggers back up.
 - **GAME OVER freezes the game and waits for Enter.** It never restarts on a timer. Enter
   retries the current floor from its floor-entry state.
-- **Current-run state is separate from disk saves.** `GameState` holds the run in memory.
-  There is still **no disk saving**; that is a future `SaveManager`'s job.
+- **Current-run state is separate from disk saves.** `GameState` holds the run in memory;
+  `SaveManager` (Phase 5) is the only code that reads or writes the save file.
 
 Phase 4 decisions (also written into `GAME_SPEC.md` §7, §8, §9 and §15):
 - **One real inventory for the run.** Fists are innate: always there, no quantity, never
@@ -43,9 +44,28 @@ Phase 4 decisions (also written into `GAME_SPEC.md` §7, §8, §9 and §15):
   takes back items picked up since entry (their pickups return) and returns items used
   since entry. Retries never duplicate items.
 
+Phase 5 decisions (also written into `GAME_SPEC.md` §4 and §15):
+- **One persistent save slot**, holding one **floor-entry checkpoint**, the same one a
+  GAME OVER retry uses. It is saved when a new game starts (Surface) and on entering each
+  floor, and nowhere else: not damage, pickups, potions, slot changes or death.
+- **Continue resumes at the start of the saved floor** with the checkpoint HP, inventory
+  and slots. Nothing mid-floor is saved.
+- **New Game asks first** (No selected) whenever a save file exists.
+- **Invalid saves are never loaded:** Continue becomes unavailable with a message, and New
+  Game still works. Invalid slot assignments in an otherwise valid save are emptied.
+- **Retry gives back emptied checkpoint slots:** if the last potion ran out mid-floor, a
+  retry returns the potion *and* its checkpoint slot. This fixes the Phase 4 known issue.
+- No mid-floor saving, multiple save slots or cloud saves.
+
 ## Implemented
-- **Title screen** (main scene). Enter starts a **new game** (`GameState.start_new_run()`:
-  100 HP, no items, Fists on D), then the Surface.
+- **Title screen** (main scene, Phase 5 menu):
+  - **Continue** (available only when the save loads) resumes the saved floor checkpoint;
+    a line shows where, for example "Saved at the start of Floor 2 - HP 90 / 100".
+  - **New Game** starts a clean run on the Surface (100 HP, no items, Fists on D). If a
+    save file exists, it first asks "Start a new game? Existing progress will be
+    replaced." with No selected.
+  - An unloadable save shows "Save data could not be loaded." and leaves Continue
+    unavailable.
 - **Carl** (`scenes/actors/carl.tscn`):
   - Arrow-key movement at 180 px/s, wall collision, facing arrow, smoothed camera.
   - **Action slots:** holding W/A/S/D uses the slot's action toward his facing direction.
@@ -89,9 +109,12 @@ Phase 4 decisions (also written into `GAME_SPEC.md` §7, §8, §9 and §15):
   with quantities (for example "Small Health Potion x2   (on A)"), with a description or
   confirmation line and a help line.
 - **GameState autoload:** HP, inventory, slots and the floor-entry state (see Architecture).
+- **SaveManager autoload (Phase 5):** the persistent checkpoint in `user://savegame.json`
+  (see Architecture).
 
-Not implemented (later phases): disk saving, Floor 3, other items, other enemy types,
-Donut combat/damage/stun, shops/economy, equipment stats, pause menu.
+Not implemented (later phases): multiple save slots, mid-floor or cloud saving, Floor 3,
+other items, other enemy types, Donut combat/damage/stun, shops/economy, equipment stats,
+pause menu.
 
 ## Controls
 | Action             | Key         | Effect                                                              |
@@ -105,8 +128,11 @@ Donut combat/damage/stun, shops/economy, equipment stats, pause menu.
 | `action_s`         | S           | Uses slot S (empty in a new game). In the menu: put the selection on S |
 | `action_d`         | D           | Uses slot D (**Fists** in a new game). In the menu: put the selection on D |
 | `inventory_toggle` | Space       | Opens / closes the action menu (not over GAME OVER)                 |
-| `ui_confirm_game`  | Enter       | Title: start a new game. GAME OVER: retry the floor                 |
-| `pause_back`       | Escape      | Closes the action menu. No other effect yet                         |
+| `ui_confirm_game`  | Enter       | Title: confirm Continue / New Game / Yes / No. GAME OVER: retry the floor |
+| `pause_back`       | Escape      | Closes the action menu; on the title confirmation, means No. No other effect yet |
+
+Title screen: **Up/Down** choose Continue or New Game, **Enter** confirms. In the New Game
+confirmation, Up/Down (or Left/Right) choose No or Yes, Enter confirms, and **Escape** means No.
 
 Holding a slot key repeats its action as fast as the action's cooldown allows (Fists every
 0.4 s, a potion every 1 s while it can heal). Pickups need no key. No input actions were
@@ -114,14 +140,14 @@ added in Phases 3–4.
 
 ## Scene structure
 ```
-project.godot                                   Settings, InputMap, physics layer names, GameState autoload
+project.godot                                   Settings, InputMap, physics layer names, GameState + SaveManager autoloads
 assets/tiles/placeholder_world_tiles.png        Original 4-tile placeholder atlas
 resources/tile_sets/placeholder_world_tiles.tres  Shared TileSet (wall tiles collide)
 resources/actions/fists.tres                    ActionDefinition: Fists (innate)
 resources/actions/small_health_potion.tres      ActionDefinition: Small Health Potion (consumable)
 scenes/actions/fists.tscn                       Fists' performer: a MeleeAttack
 scenes/actions/small_health_potion.tscn         The potion's performer: a HealAction (30 HP)
-scenes/ui/title_screen.tscn                     Main scene; Enter -> new game -> Surface
+scenes/ui/title_screen.tscn                     Main scene: Continue / New Game menu, overwrite confirmation
 scenes/ui/hud.tscn                              HP, slot bar, menu hint, GAME OVER panel (CanvasLayer)
 scenes/ui/action_menu.tscn                      The action/inventory menu (CanvasLayer 10)
 scenes/actors/carl.tscn                         Carl: Health, Hurtbox, Camera2D (performers added at run time)
@@ -131,6 +157,10 @@ scenes/props/stairs.tscn                        Reusable stairs down
 scenes/props/item_pickup.tscn                   Reusable world pickup (item + quantity)
 scenes/levels/surface.tscn, floor_01.tscn, floor_02.tscn   The three levels
 scripts/autoload/game_state.gd                  GameState: the current run's state
+scripts/autoload/save_manager.gd                SaveManager: the one save file (encode, validate, safe write, load, delete)
+scripts/state/floor_entry.gd                    class FloorEntry: a floor checkpoint (HP, inventory snapshot, slot layout)
+scripts/actions/action_registry.gd              class ActionRegistry: action id -> ActionDefinition (for loading saves)
+scripts/levels/floor_registry.gd                class FloorRegistry: floor id -> scene and name (the only floors a save can open)
 scripts/actions/action_definition.gd            class ActionDefinition (Resource): one slot-able action or item
 scripts/actions/action_performer.gd             class ActionPerformer (Node2D): base for what carries an action out
 scripts/actions/action_slots.gd                 class ActionSlots: which action each W/A/S/D slot holds
@@ -243,9 +273,13 @@ Carl's script does not change.
 
 ### Run state (`GameState` autoload)
 - It holds only what must survive level changes: `carl_health`, `carl_max_health`,
-  `inventory`, `action_slots`, `floor_entry`. It has no gameplay rules and does no disk I/O.
+  `inventory`, `action_slots`, `floor_entry` (a `FloorEntry`). It has no gameplay rules and
+  does **no disk I/O**.
+- `INNATE_ACTIONS` (`[Fists]`) is the one list of innate actions.
 - `start_new_run()` resets everything in place, so references stay valid: 100/100 HP,
   inventory = Fists only, Fists on D, no floor entry.
+- `continue_from(checkpoint)` (Continue) starts a run with exactly the checkpoint's HP,
+  inventory and slot layout.
 - **Levels connect GameState to the game** (`Level._ready()`):
   - Carl gets the HP, `inventory` and `action_slots`, and HP changes are written back;
   - the HUD gets the slots and the inventory;
@@ -253,30 +287,102 @@ Carl's script does not change.
 
   Carl, the HUD, the menu and pickups never name `GameState` themselves. Test scripts
   compile before autoloads exist, so anything a test preloads must not name it.
-- Tests reach it with `root.get_node("GameState")` (helper `game_state()`). It is the only
-  autoload; ARCHITECTURE_RULES allows it.
+- Tests reach it with `root.get_node("GameState")` (helper `game_state()`).
+- ARCHITECTURE_RULES allows exactly two autoloads, `GameState` and `SaveManager`, and those
+  are the only two.
 
 ### Floor-entry state and retry
-- Every level calls `GameState.record_floor_entry(scene_file_path)` when it starts. The
-  snapshot (`GameState.FloorEntry`) holds the scene path, HP, max HP and
-  `inventory.get_snapshot()`.
-- **GAME OVER** (`Level._on_carl_died()`) pauses the scene tree.
+- Every level calls `GameState.record_floor_entry(scene_file_path)` when it starts, then
+  `SaveManager.save_checkpoint(GameState.floor_entry)`. This single place in `Level._ready()`
+  is where every checkpoint is written, for all current and future floors.
+- The checkpoint (`FloorEntry`, `scripts/state/floor_entry.gd`) holds the scene path, HP,
+  max HP, `inventory.get_snapshot()` and `action_slots.get_layout()`.
+- **GAME OVER** (`Level._on_carl_died()`) pauses the scene tree. **Death never writes the
+  save.**
 - Enter on the GAME OVER panel makes the level:
-  1. call `GameState.restore_floor_entry()`, which restores HP and replaces the carried
-     items with the entry snapshot (ActionSlots then empties any slot holding something
-     Carl no longer has);
+  1. call `GameState.restore_floor_entry()`:
+     - HP goes back;
+     - the carried items are replaced by the entry snapshot, and ActionSlots empties any
+       slot holding something Carl no longer has;
+     - then `ActionSlots.fill_empty_slots(entry layout)` puts each checkpoint assignment
+       back where its slot is empty and the action is in no other slot;
   2. unpause;
   3. reload the recorded scene, which brings back its enemies and pickups.
-- The reloaded level records the same entry again, so any number of retries returns to
-  the same state and never duplicates items.
-- Slot preferences otherwise stay as the player last set them. A potion slot emptied
-  because the last potion was used stays empty after a retry that returns the potion; the
-  player assigns it again (the menu lists it).
+- The reloaded level records and saves the same entry again, so any number of retries
+  returns to the same state, never duplicates items, and never changes the save's content.
+- Slot rule on retry:
+  - the player's latest layout is kept (Phase 3 rule);
+  - an empty slot whose checkpoint action is back gets that action again. So "A = potion
+    x1 at entry → drink it (A empties during play) → die → retry" gives back the potion
+    **and** A = potion. This fixes the Phase 4 known issue.
+
+### Persistent save (`SaveManager` autoload, `scripts/autoload/save_manager.gd`)
+- **Location:** `user://savegame.json` (`DEFAULT_SAVE_PATH`), in Godot's per-user app data,
+  never in the project folder. On Windows that is
+  `%APPDATA%\Godot\app_userdata\Carl & Donut Dungeon Prototype\savegame.json`.
+  `save_path` can be changed; tests always change it.
+- **Format:** JSON, `save_version: 1` (`SAVE_VERSION`), stable ids only:
+  ```
+  {"save_version": 1, "floor_id": "floor_02", "carl": {"health": 90, "max_health": 100},
+   "inventory": {"small_health_potion": 1},
+   "action_slots": {"action_w": null, "action_a": "small_health_potion", "action_s": null, "action_d": "fists"}}
+  ```
+- **Persisted:** floor id, Carl's HP and max HP, carried item quantities, and the four slot
+  assignments, all at floor entry.
+- **Not persisted (on purpose):**
+  - Carl's and Donut's positions;
+  - enemies and their HP;
+  - collected pickups;
+  - cooldowns, animation and navigation;
+  - the live menu state;
+  - anything after floor entry.
+- **API:**
+  - `save_checkpoint(entry) -> bool`;
+  - `load_checkpoint() -> FloorEntry` (null, with the reason in `last_error`);
+  - `has_save_file()`;
+  - `delete_save()`, safe when there is no file;
+  - `encode(entry)` / `decode(data)`.
+- **Safe writes:**
+  1. The text is written to `savegame.json.tmp`, read back and compared.
+  2. It is renamed over `savegame.json`. (Checked on this machine: renaming replaces an
+     existing file.)
+  3. A failure logs an error and leaves the old save as it was.
+
+  If the game stopped between the write and the rename, the finished `.tmp` is loaded (and
+  validated) instead.
+- **Validation (untrusted input).** `decode()` rejects the whole save, without logging an
+  engine error, if:
+  - the file is not valid JSON, or its root is not a JSON object;
+  - `save_version` is not 1 (`decode()` is where a later version would migrate old files);
+  - `floor_id` is not in `FloorRegistry`. No path is ever read from the file;
+  - HP is not a whole number with 1 ≤ health ≤ max_health ≤ 1000;
+  - `inventory` is not an object, an id is not in `ActionRegistry` or is innate (Fists),
+    or a quantity is not a whole number from 0 to 999;
+  - `action_slots` is not exactly the four slot names, each with an id or null.
+
+  It **sanitizes** slots instead of rejecting the save: an unknown action id, an action
+  Carl would not have (for example a potion with quantity 0), or an action named twice
+  leaves that slot empty. The game's own `ActionSlots.fill_empty_slots()` rules decide this.
+- **Registries:** `FloorRegistry` (surface, floor_01, floor_02) and `ActionRegistry` (fists,
+  small_health_potion) are the whitelists that turn saved ids back into scenes and
+  resources. A new floor or item needs one line in each list.
+- **Title flow:**
+  - Continue calls `load_checkpoint()` again, then `GameState.continue_from()`, then loads
+    the saved floor. That floor's `_ready()` records and saves the identical checkpoint.
+  - New Game calls `GameState.start_new_run()` and loads the Surface. The Surface's
+    checkpoint then replaces the old save through the safe write. The old save is not
+    deleted first.
+- **Test isolation:**
+  - `tests/support/game_test.gd` points `save_path` at `user://test_saves/<test>.json`
+    before anything runs, and deletes that file at the start and the end.
+  - `test_surface_traversal.gd` does the same.
+  - Tests never touch `savegame.json`. After the full suite, the real user folder still
+    has no save file.
 
 ### Earlier decisions still in force
 - Compatibility renderer; 1280×720 base with `canvas_items` stretch and `expand` aspect;
   physical-keycode bindings; Godot's `ui_*` actions untouched.
-- Version in Project Settings, now `0.4.0`.
+- Version in Project Settings, now `0.5.0`.
 - `.godot/` ignored, `.uid` files committed, LF line endings.
 - Carl is a floating-mode `CharacterBody2D`; Camera2D inside Carl (zoom 1.5, smoothing);
   physics interpolation on.
@@ -309,19 +415,18 @@ Consequences:
 - Carl's Fists target layer 6 only; the Blob's touch targets layer 5 only.
 - Navigation baking reads only layer 1.
 
-## Earlier behaviour changed in Phase 4
-1. **`GameState.available_actions` (Phase 3) was replaced by `GameState.inventory`.**
-   `ActionSlots.new()` now takes the inventory, and the HUD's and menu's setup calls take it
-   too. `test_action_slots.gd` was updated only where it used the old API. It now adds its
-   test-only actions to an inventory first, because Phase 4 requires slots to hold only
-   owned actions, and its display-name check expects " x1" after a carried item.
-2. **Slots refuse actions Carl does not have**, and empty themselves when an action leaves
-   the inventory (new Phase 4 rule).
-3. **Floor 1 gained stairs down** (to Floor 2) and a pickup. Neither is on a path the
-   earlier tests walk, and `test_floor_loop.gd`'s "nothing leads back up" check now also
-   sees the new, allowed destination (`floor_02.tscn`).
-4. **The menu panel is wider** (760 px) and its right column is headed "CARL'S INVENTORY",
-   to fit "Small Health Potion x2   (on A)".
+## Earlier behaviour changed in Phase 5
+1. **Title screen.** Phase 4's title started a new game on any Enter. It is now a
+   Continue / New Game menu. With no save file, New Game is selected and needs no
+   confirmation, so a single Enter still starts a new game exactly as before. The older
+   end-to-end tests therefore needed no changes.
+2. **Retry restores emptied checkpoint slots** (the Phase 4 known issue). `test_inventory_run.gd`
+   asserted the old behaviour (the restored potion showed "(no slot)"). That one
+   expectation now says "(on A)", with a HUD check added.
+3. **`GameState.FloorEntry` moved to its own class** (`FloorEntry`, `scripts/state/floor_entry.gd`)
+   so SaveManager can use it. Its fields are unchanged, plus the new `action_slots`.
+4. **Every level save writes a checkpoint.** Tests are therefore isolated to their own save
+   files (`game_test.gd`, `test_surface_traversal.gd`).
 
 ## Tests
 Run the whole suite from the project folder:
@@ -330,7 +435,7 @@ godot --headless --path . -s res://tests/run_all.gd
 ```
 It runs every `tests/test_*.gd` in its own Godot process. A test fails on a non-zero exit
 code or on any engine ERROR/WARNING in its output. Tests with "windowed" in their name get a
-real window, which opens briefly. The full run takes about 3 minutes. Each test file can
+real window, which opens briefly. The full run takes about 3.5 minutes. Each test file can
 also be run on its own; the first lines of each file give the command.
 
 | Test file                               | Covers |
@@ -343,109 +448,147 @@ also be run on its own; the first lines of each file give the command.
 | `test_action_menu.gd` (Phase 3)         | Space opens/pauses, Space/Escape close; nothing focused; Carl/Donut frozen while open; reassigning through the menu; no free punch/step across close; blob frozen while open; no menu over GAME OVER |
 | `test_floor_loop.gd` (Phase 2, 3)       | Title → new game; reassignment; HP and slots carried to Floor 1; floor-entry recorded; no transition loop; nothing on Floor 1 leads up; real fight and defeat; GAME OVER waits; retry with entry HP; stairs ignore an arrival on top of them |
 | `test_inventory.gd` (Phase 4)           | New run (0 potions, Fists innate on D); Inventory rules (quantities, labels, failing removes, snapshots replace rather than add); slots refuse unowned items, one slot per item, last potion empties its slot, snapshot restore sanitizes slots; potion through a slot: no use at full HP, 60→90 (−1), 90→100 capped (−1), HUD x2→x1→empty, empty slot safe, D still punches; one potion per short press, one per second when held; menu lists Fists only, then x2, x1, then removes the potion; pickup: exactly +2, disappears, no second collection, Donut and an enemy cannot take it, two collectors at once get 2 in total |
-| `test_inventory_run.gd` (Phase 4)       | From the title: a new game clears a previous run's potions; Floor 1 entry records 0 potions; walking over the real pickup gives 2 and removes it; the menu shows x2, and Down + A assigns it; die → GAME OVER waits → retry: 0 potions, slot A emptied, pickup back; a second retry changes nothing; collect again (2, not 4); D punches, full HP uses none, 60→90 uses one; stairs → Floor 2: spawn, Donut, camera, HP 90 and potion x1 on A kept, entry records 1 potion, no exits at all on Floor 2, no loop; use the last potion (slot empties), die, retry: 90 HP and 1 potion; retry again: still 1 |
-| `test_windowed_resolutions.gd` (Phase 2–4) | At 1280×720, 640×360, 1024×768, with a potion on A: visible area, HP label, slot bar (with "Potion x2"), GAME OVER panel, action menu centred and on screen, camera centred; camera follow. Prints SKIP and passes when run headless |
+| `test_inventory_run.gd` (Phase 4, 5)    | From the title: a new game clears a previous run's potions; Floor 1 entry records 0 potions; walking over the real pickup gives 2 and removes it; the menu shows x2, and Down + A assigns it; die → GAME OVER waits → retry: 0 potions, slot A emptied, pickup back; a second retry changes nothing; collect again (2, not 4); D punches, full HP uses none, 60→90 uses one; stairs → Floor 2: spawn, Donut, camera, HP 90 and potion x1 on A kept, entry records 1 potion, no exits at all on Floor 2, no loop; use the last potion (slot empties), die, retry: 90 HP, 1 potion and **A = potion again** (Phase 5); retry again: still 1 |
+| `test_save_manager.gd` (Phase 5)        | Registries map ids both ways; a Floor 2 checkpoint is written as JSON (save_version 1, floor id, HP, `{"small_health_potion": 1}`, four slots, no paths or objects), with no `.tmp` left, and loads back identical; a new save replaces the old one; 29 kinds of bad data rejected with a reason and the file left untouched (malformed/empty JSON, wrong root, versions 2/0/"1"/missing, missing fields, unknown floor or a scene path, HP string/0/over max/fractional, max 0, inventory not an object, negative/fractional/string quantity, unknown or innate item, slots missing/extra/list/number); slots sanitized (unknown action, potion with 0 left, one action in two slots); 90.0 accepted; delete with and without a file; an interrupted save's finished `.tmp` loads, a broken `.tmp` beside a good save is ignored |
+| `test_save_game.gd` (Phase 5)           | Real title + levels: no save → Continue unavailable, New Game without confirmation, clean run, Surface checkpoint; damage doesn't save; Floor 1 checkpoint carries 80 HP; pickups, menu changes, damage and potions don't change it; title → Continue → Floor 1 entry values (80 HP, 0 potions, pickup and blobs back, Donut); Floor 2 checkpoint 60 HP + potion on A; last potion empties A; 3 deaths: GAME OVER waits, save unchanged, each retry gives 60 HP, 1 potion and A = potion; title → Continue straight to Floor 2 with the same state, blob and Donut; quit at GAME OVER then Continue restores the valid checkpoint; New Game over a save asks (No selected), No and Escape keep the save, Yes writes a clean Surface checkpoint; corrupt and version-99 saves: Continue unavailable, message, New Game asks and replaces them |
+| `test_windowed_resolutions.gd` (Phase 2–5) | At 1280×720, 640×360, 1024×768, with a potion on A: visible area, HP label, slot bar (with "Potion x2"), GAME OVER panel, action menu centred and on screen, camera centred; camera follow. **Title screen:** menu rows, save line and version on screen with a save and with a broken save; the New Game confirmation centred and on screen; Escape closes it. Prints SKIP and passes when run headless |
 
-## Validation performed (Phase 4)
+Every test uses its own save file under `user://test_saves/` (see Persistent save).
+
+## Validation performed (Phase 5)
 All runs used Godot 4.7.2.stable.official on this machine (Intel UHD Graphics, 60 Hz):
-- **Baseline before changes:** the Phase 3 suite (HEAD `a7ef551`) passed 8 of 8.
+- **Baseline before changes:** the Phase 4 suite (HEAD `4ea1123`) passed 10 of 10.
 - **Clean import:** a copy without `.godot/` was imported and opened in the headless editor
-  with no errors or warnings. All 47 scripts/scenes/resources load, and all 13 scenes
+  with no errors or warnings. All 53 scripts/scenes/resources load, and all 13 scenes
   instantiate.
 - **Parse checks:** all scripts are clean with the 37 default-enabled GDScript warnings
   upgraded to errors (scratch copy), both with `--check-only` and when loaded at runtime.
-  The two autoload-naming scripts were loaded at runtime (see Known issues).
-- **Test suite:** `run_all.gd` passed 10 of 10 on all 3 full runs. The last two ran on the final
-  code with no other process running. `test_inventory_run.gd` also passed 3 of 3 separate
-  runs after its navigation-route fix.
-- **Mutation checks:** 16 bugs were injected into throwaway copies. Every one made a
+  This pass found two mixed `String`/`null` ternaries, which were fixed.
+- **Test suite:** `run_all.gd` passed 12 of 12 on all 3 full runs. The last two ran on the final
+  code with no other process running.
+- **The player's save was never touched:** after full test runs, the real user folder had
+  no `savegame.json`, and `test_saves/` was empty.
+- **Mutation checks:** 12 bugs were injected into throwaway copies. Every one made a
   relevant test fail for the intended reason:
-  - a pickup collected twice; a potion used at full HP; a potion lost on the stairs;
-  - a retry adding to the inventory instead of restoring it; a retry keeping new items;
-  - up-stairs on Floor 2 (to Floor 1) and on Floor 1 (to the Surface);
-  - the last potion keeping its slot; a HUD whose quantity never updates;
-  - healing above the maximum; two potions spent per use; no potion cooldown;
-  - a 0-quantity item still listed; a new run keeping items; a pickup giving double;
-  - a slot accepting an item Carl does not own.
+  - saving HP after damage;
+  - Continue adding to the inventory (duplicates);
+  - an unknown floor accepted;
+  - a negative quantity accepted;
+  - any save version accepted;
+  - death overwriting the save;
+  - retry not restoring the checkpoint slot;
+  - New Game without confirmation;
+  - Continue offered for a corrupt save;
+  - a write without the final rename;
+  - Continue always opening the Surface;
+  - loaded slots not sanitized.
 
-  Three were first run against an early version of `test_inventory_run.gd`. It asked
-  for a navigation route 3 frames after the Surface loaded, before the navigation map was
-  ready on a slow first run, so they failed for an unrelated reason. The test now waits
-  for a route. On rerun, all three were caught for the right reason.
-- **Rendered playthrough** (real title screen, scripted key events through Godot's input
-  pipeline, **real enemies** for damage and death, screenshots inspected):
-  1. New game: 0 potions, `D: Fists`, and D punches. Surface → Floor 1: entry 0 potions.
-  2. Walked over the pickup: potions 2, and the pickup was gone.
-  3. The menu showed "Small Health Potion x2"; Down + A put it on A (`A: Potion x2`).
-  4. D still punched, and A at full HP used nothing.
-  5. The top blob hurt Carl to 70; D beat it (HP 60); A healed him to 90 with a green ring,
-     and the HUD showed `Potion x1`.
-  6. Stairs → Floor 2: HP 90, `A: Potion x1`, entry 1 potion, Donut 49 px from Carl, 0 stairs.
-  7. The east-room blob attacked. Carl drank the last potion (60 → 90) and slot A emptied;
-     then the blob killed him.
-  8. GAME OVER was still up 3 s later. Enter restored 90 HP and 1 potion; dying and
-     retrying again still gave 1 potion.
-  9. The menu and HUD were also checked at 640×360 and 1024×768.
-- **Normal entry point:** `godot --path .` ran the main scene with no errors or warnings.
+  Two test weaknesses found this way were fixed:
+  - a Surface check read the save *after* the damage it was meant to watch;
+  - two checks called into the title screen after it had been freed.
+- **Real process restart** (a scratch copy with its own user-data folder, so no real save
+  was involved; a logging-only observer autoload added):
+  1. *Process 1* (`godot --path … -s` driver, windowed): title (no save: Continue
+     unavailable) → New Game (Surface checkpoint written) → Floor 1 (checkpoint 100 HP) →
+     2 potions → a real Gelatinous Blob hurt Carl to 60, and D beat it → Space, Down, A,
+     Space → A healed to 90 (x1) → Floor 2. The checkpoint on disk was `floor_02`, 90/100,
+     `small_health_potion: 1`, `action_a: small_health_potion`, `action_d: fists`. The
+     process then quit normally (exit code 0).
+  2. *Process 2* (a fresh `godot --path …`, the normal entry point, no script; real Windows
+     key events via `keybd_event`):
+     - the title showed Continue selected and "Saved at the start of Floor 2 - HP 90 / 100";
+     - Enter loaded **Floor 2 directly**: HP 90/100, potion x1, HUD `A: Potion x1 … D: Fists`,
+       Carl at the spawn point, Donut 49 px away, the blob present;
+     - holding Right moved Carl (160 → 343), and D punched;
+     - no errors.
+- **Corrupt save, by hand** (same isolated copy): the save was replaced with truncated
+  JSON, then the game was launched normally.
+  - The title appeared with Continue unavailable and "Save data could not be loaded.".
+  - Real keys Enter → Down → Enter answered the confirmation with Yes.
+  - The game started on the Surface, and the save was then a valid Surface checkpoint.
+    No crash, no errors.
+- **Visual check** (screenshots inspected) of the title at 1280×720, 640×360 and 1024×768:
+  no save, a valid save, a corrupt save, and the New Game confirmation in both wordings.
+  The first confirmation let the menu show through. It now has an opaque panel over a
+  dimmed screen.
 
 ## Known issues / limitations
+- **Save system scope (by design):**
+  - one slot only;
+  - saves happen only on entering a floor or starting a new game, so quitting mid-floor
+    loses that floor's progress;
+  - no cloud saves;
+  - no save-management UI beyond New Game's confirmation.
+- **Save format:**
+  - version 1 only;
+  - no migration code yet (`decode()` is where it would go);
+  - adding an item or floor also needs a line in `ActionRegistry` / `FloorRegistry`.
+- **Save write:** on Windows, Godot's rename replaces the old file; the old save is kept
+  until the new file is complete. A crash in the instant between the rename's removal
+  and its move leaves the finished `.tmp`, which is loaded.
+- **Retry slot rule:** a slot the player changed mid-floor keeps the player's latest choice;
+  only *empty* slots get their checkpoint action back. Continue restores the checkpoint
+  layout exactly.
 - **Placeholders:**
   - the potion pickup is a pink diamond with a text label, and potion use shows a green
     ring;
+  - the title menu is plain text;
   - there are no icons (`ActionDefinition.icon` is unused);
   - Floor 2 is a small two-room placeholder with one reused Gelatinous Blob and no exit.
-- **Slot behaviour:**
-  - a retry that returns a potion does not re-assign it if its slot was emptied when it
-    ran out; the player assigns it again;
-  - moving an action onto an occupied slot unassigns the action that was there (no swap).
+- **Slot behaviour:** moving an action onto an occupied slot unassigns the action that was
+  there (no swap).
 - **Potion holding:** a held potion key drinks one potion per second while Carl is hurt.
   Each use still heals.
-- **No disk saving yet.** Quitting the application ends the run.
 - The action menu uses Up/Down + W/A/S/D. GAME_SPEC §8's "Equip" submenu with
   Enter/Left/Right is for a later inventory phase.
-- Defeated enemies come back when a floor is retried. This is intended: the floor starts over.
+- Defeated enemies come back when a floor is retried or continued. This is intended: the
+  floor starts over.
 - **Carried over from earlier phases:**
   - the Blob chases in a straight line and can stall behind walls (for example Floor 2's
     dividing wall);
   - there is no knockback and no invulnerability after a hit;
   - Donut ignores enemies;
-  - Escape does nothing outside the menu;
-  - there is no way back to the title screen;
+  - Escape does nothing outside the menus;
+  - there is no way back to the title screen during play (close the window, then Continue);
   - camera limits are not set;
   - hand-written scenes gain `unique_id` fields the first time the editor saves them.
-- Godot's `--check-only -s <script>` reports "Identifier not found: GameState" for
-  `level.gd` and `title_screen.gd`, because it compiles the script before autoloads are
-  registered. They compile fine in the game and the tests. By design, this is not worked
-  around.
+- Godot's `--check-only -s <script>` reports "Identifier not found" for the scripts that
+  name an autoload (`level.gd`, `title_screen.gd`, `save_manager.gd`), because it compiles
+  the script before autoloads are registered. They compile fine in the game, the tests and
+  the runtime load check. By design, this is not worked around.
 
 ## Manual verification required
+Your own save is `%APPDATA%\Godot\app_userdata\Carl & Donut Dungeon Prototype\savegame.json`.
+It does not exist until you play.
 1. Open the project in Godot 4.7.2. The Output panel should show no errors.
-2. Press **F5**, then **Enter**. The Surface HUD shows "HP: 100 / 100" and
-   `W: —   A: —   S: —   D: Fists`. D punches; W/A/S do nothing and never move Carl.
-3. Take the stairs (bottom-right) to Floor 1. A pink diamond labelled "Potion x2" sits on
-   the left; the stairs "Down to Floor 2" are top-left. There are no stairs back up.
-4. Open the menu (**Space**): only Fists is listed. Close it, walk over the diamond: it
-   disappears. Open the menu: "Small Health Potion x2". Press **Down**, then **A**, then
-   **Space**. The HUD shows `A: Potion x2 ... D: Fists`.
-5. Press **A** at full HP: nothing is used. Let a blob hurt Carl, then press **A**: +30 HP
-   (or up to 100) and `Potion x1`.
-6. Take the stairs down. Floor 2 ("Floor 2 - Utility Level"): Donut arrives with Carl, and
-   the HUD still shows `A: Potion x1`. There are no stairs on Floor 2.
-7. Walk through the doorway to the east room and let the blob win. GAME OVER stays until
-   **Enter**. After Enter, HP and potions are what Carl had on arriving at Floor 2.
-8. Retry a few times. The potion count never grows.
-9. On Floor 1, pick up the potions and then die. After the retry you have 0 potions again,
-   and the pickup is back.
-10. Resize the window: the HUD, the menu and GAME OVER stay readable.
+2. Press **F5**. With no save, the title shows "Continue" greyed out, "> New Game" and
+   "No saved game yet.". Press **Enter**: the Surface starts, and the save file now exists.
+3. Play to Floor 1 as before:
+   - pick up the potions ("Potion x2");
+   - put them on A (Space, Down, A, Space);
+   - let a blob hurt Carl, then drink one;
+   - take the stairs to Floor 2.
+4. Close the game window. Press **F5** again. The title shows "> Continue" and
+   "Saved at the start of Floor 2 - HP … / 100". Press **Enter**: Floor 2, with the same
+   HP, potion count, `A: Potion` and `D: Fists`, and Donut next to Carl.
+5. On Floor 2, drink the last potion (A empties), then let the blob win. GAME OVER waits.
+   Press **Enter**: the potion is back, **and on A**.
+6. Close the window at GAME OVER. **F5** → Continue gives the Floor 2 checkpoint again, not 0 HP.
+7. On the title, go **Down** to New Game and press **Enter**. "Start a new game? Existing
+   progress will be replaced." appears with **No** selected; Enter or Escape keeps your save.
+   Down + Enter (Yes) starts over on the Surface.
+8. Optional: back up and then edit `savegame.json` into invalid JSON. The title then says
+   "Save data could not be loaded.", Continue is unavailable, and New Game still works.
+9. Resize the window on the title screen. The menu and the confirmation stay readable.
 
 ## Next phase
-Phase 5 is **not specified** here. Provide its prompt, with acceptance criteria, after
-Phase 4 is reviewed.
+Phase 6 is **not specified** here. Provide its prompt, with acceptance criteria, after
+Phase 5 is reviewed.
 
 Groundwork for later phases:
-- **More items:** a `.tres` plus a performer scene each (see "To add an item"). Consider
-  moving the cooldown counter into `ActionPerformer` once a third performer type appears.
-- **Saving:** a `SaveManager` autoload can serialize `GameState` at floor transitions:
-  HP, the floor path, the inventory as `{id: quantity}` (definitions looked up by id) and
-  the slot ids. That needs an id → ActionDefinition lookup, which does not exist yet.
-- **Floor 3 / an exit from Floor 2:** add stairs down to Floor 2, pointing at the new scene.
+- **More items or floors:** add them to `ActionRegistry` / `FloorRegistry` so saves can name
+  them. A new floor gets its checkpoint automatically from `Level._ready()`.
+- **Save format changes:** bump `SaveManager.SAVE_VERSION`, and migrate older data in
+  `decode()` before `_decode_current_version()` reads it.
+- **Floor 3 / an exit from Floor 2:** add stairs down to Floor 2, pointing at the new scene,
+  and register the floor.

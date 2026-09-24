@@ -46,6 +46,8 @@ Gameplay:
 - Escape: pause/back/cancel as appropriate.
 - Enter: confirm menu/inventory selection; on the GAME OVER screen, retry the current floor.
 
+Title screen: Up/Down choose between Continue and New Game, Enter confirms.
+
 Carl's facing direction is determined by his most recent non-zero movement direction.
 
 W/A/S/D are never movement controls in this game. Movement is the arrow keys only.
@@ -291,8 +293,26 @@ Initial save design:
   Carl's inventory also returns to what he had on entering the floor:
   - items picked up since are taken back, and their pickups are back in the level;
   - items used since are returned;
-  - a slot holding an item Carl no longer has becomes empty.
+  - a slot holding an item Carl no longer has becomes empty;
+  - a slot that is empty at the retry gets back what it held on entering the floor, if Carl
+    has that item again (for example a potion slot that emptied when the last potion was drunk).
   Retrying never creates extra items.
+
+Persistent save (canonical since Phase 5):
+- There is one save slot, holding one floor-entry checkpoint: the floor Carl last entered,
+  and his HP, inventory and slot assignments at that moment.
+- It is written when a new game starts on the Surface and each time Carl enters a floor.
+  Nothing during play writes it: not damage, pickups, potions or death. Death never saves
+  progress.
+- Continue on the title screen resumes at the start of the saved floor with exactly that
+  state (Floor 2 saves continue on Floor 2). The floor's enemies and pickups are as authored.
+  Nothing mid-floor is saved: not positions, enemies, collected pickups or cooldowns.
+- New Game asks for confirmation when a save file exists, because its first checkpoint
+  replaces the save.
+- A save that is corrupt, from an unsupported version, or otherwise invalid is never loaded:
+  Continue is unavailable, and New Game still works. Invalid slot assignments inside an
+  otherwise valid save are emptied.
+- No mid-floor saving, multiple save slots or cloud saves in the prototype.
 
 Current-run state (what survives level changes during one playthrough, held in memory) is
 separate from disk save data. A later SaveManager writes the needed parts of the run state

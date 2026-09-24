@@ -8,7 +8,8 @@ extends "res://tests/support/game_test.gd"
 ## - he picks them up again, uses one (60 -> 90 HP), and takes the stairs down to Floor 2;
 ## - Floor 2: Carl and Donut arrive, the potion (x1) and slot A are still there, the entry
 ##   state records 1 potion, and nothing leads back up;
-## - on Floor 2 he uses his last potion and dies: the retry gives the potion back, once.
+## - on Floor 2 he uses his last potion and dies: the retry gives the potion back, once, and
+##   (since Phase 5) puts it back on A, as it was when he entered Floor 2.
 ## Damage is applied directly where it only stands in for a fight; test_floor_loop.gd covers
 ## real fights and deaths.
 ##
@@ -188,8 +189,11 @@ func _retry_restores_floor_2_potion() -> void:
 			"the retry restores Floor 2's entry state: 90 HP and 1 potion",
 			"HP %d, potions %d" % [_carl().health.current_health, state.inventory.get_quantity(POTION)])
 	var rows := await _open_menu_and_read_rows()
-	check(rows == ["> Fists   (on D)", "Small Health Potion x1   (no slot)"],
-			"the menu lists the restored potion (its slot was emptied when it ran out)", str(rows))
+	# Phase 4 left slot A empty here (a documented known issue). Phase 5 restores the slot the
+	# potion had on entering the floor.
+	check(rows == ["> Fists   (on D)", "Small Health Potion x1   (on A)"],
+			"the retry puts the restored potion back on A, as at floor entry", str(rows))
+	_check_hud("after the retry", "W: —   A: Potion x1   S: —   D: Fists")
 	if not await _die_and_retry(FLOOR_2_PATH):
 		return
 	check(state.inventory.get_quantity(POTION) == 1 and _carl().health.current_health == 90,

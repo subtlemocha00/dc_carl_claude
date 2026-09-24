@@ -3,7 +3,10 @@ extends Node2D
 ## Root script of every level scene. When the level starts it:
 ## - gives Carl the run's state from GameState (his HP, inventory and W/A/S/D action slots),
 ##   and keeps GameState's copy of his HP up to date from then on;
-## - records the floor-entry state in GameState: Carl's HP and inventory on entering this level;
+## - records the floor-entry state in GameState (Carl's HP, inventory and slot layout on
+##   entering this level) and saves it as the persistent checkpoint. This is the one place
+##   checkpoints are written, so every floor, including future ones, gets one on entry, and
+##   nothing during play (damage, pickups, potions, death) ever writes the save;
 ## - connects the HUD and the action menu.
 ##
 ## GAME OVER: when Carl dies, the game freezes (the scene tree is paused) and stays that way.
@@ -22,9 +25,10 @@ func _ready() -> void:
 	carl.health.died.connect(_on_carl_died)
 	carl.inventory = GameState.inventory
 	carl.action_slots = GameState.action_slots
-	# A retry records this again, which is harmless: GameState was just set back to the
-	# values recorded the first time.
+	# A retry or Continue records and saves this again, which is harmless: GameState was just
+	# set back to exactly these values.
 	GameState.record_floor_entry(scene_file_path)
+	SaveManager.save_checkpoint(GameState.floor_entry)
 
 	hud.show_health(carl.health)
 	hud.show_action_slots(GameState.action_slots, GameState.inventory)

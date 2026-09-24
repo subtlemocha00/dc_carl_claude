@@ -37,6 +37,10 @@ var _error_recorder := ErrorRecorder.new()
 
 func _initialize() -> void:
 	OS.add_logger(_error_recorder)
+	# Levels save a checkpoint when they start. Use this test's own save file, never the player's.
+	var save_manager := root.get_node("SaveManager")
+	save_manager.save_path = "user://test_saves/test_surface_traversal.json"
+	save_manager.delete_save()
 	_run_checks.call_deferred()
 
 
@@ -253,6 +257,7 @@ func _send_key(key: Key, pressed: bool) -> void:
 
 func _finish() -> void:
 	_steer(Vector2.ZERO)
+	root.get_node("SaveManager").delete_save()
 	for message in _error_recorder.messages:
 		_failures.append("Engine error/warning: " + message)
 	if _failures.is_empty():

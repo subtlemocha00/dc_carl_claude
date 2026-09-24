@@ -84,6 +84,24 @@ func clear_all() -> void:
 	changed.emit()
 
 
+## The action in each slot (slot name -> action). Empty slots are left out. A floor checkpoint
+## keeps a copy.
+func get_layout() -> Dictionary[StringName, ActionDefinition]:
+	return _actions.duplicate()
+
+
+## Puts each action of `layout` back in its slot, but only where the slot is empty now and the
+## action is in no other slot, so choices made since the layout was taken are kept. As always,
+## only actions Carl has are accepted. A retry uses this to give a slot back its item after
+## the item ran out and returned, and Continue uses it on emptied slots to restore a whole
+## saved layout.
+func fill_empty_slots(layout: Dictionary[StringName, ActionDefinition]) -> void:
+	for slot in SLOTS:
+		var action: ActionDefinition = layout.get(slot)
+		if action != null and get_action(slot) == null and find_slot(action) == &"":
+			assign(action, slot)
+
+
 func _empty_slots_of_missing_actions() -> void:
 	var emptied := false
 	for slot in SLOTS:

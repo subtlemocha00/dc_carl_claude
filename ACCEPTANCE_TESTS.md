@@ -114,3 +114,37 @@ Required:
 - [ ] GAME OVER still freezes the game, blocks the menu, and waits for Enter.
 - [ ] The HUD and the menu with a potion fit at 1280×720, 640×360 and 1024×768.
 - [ ] No disk saving, Floor 3, new enemy species or Donut combat were added.
+
+# Phase 5 — Persistent Save/Load and Continue
+
+The Phase 3–4 rules still apply. The save uses the same floor-entry checkpoint as GAME OVER retry.
+
+Required:
+- [ ] One save file in `user://` (not in the repository) holds the checkpoint of the floor
+      Carl last entered: floor id, HP, item quantities and W/A/S/D assignments, with a
+      save-format version. It stores stable ids only.
+- [ ] `SaveManager` does all file I/O. `GameState` stays in-memory run state.
+- [ ] Writes go to a temporary file that is checked and then renamed over the old save; an
+      old save is never deleted before the new one is complete.
+- [ ] The checkpoint is written when a new game starts (Surface) and on entering each floor.
+      Nothing else writes it: not damage, pickups, potion use, slot changes or death.
+- [ ] Title screen: Up/Down + Enter. Continue is available only when the save loads.
+      Otherwise it is shown unavailable, and a message appears if a save file exists but
+      cannot be loaded.
+- [ ] Continue restores the saved floor directly (Floor 2 saves continue on Floor 2), with
+      the checkpoint HP, inventory and valid slots. Donut, enemies and pickups are as authored.
+- [ ] New Game starts a clean run: 100 HP, no items, D = Fists, the Surface. It asks for
+      confirmation (No selected) when a save file exists; No and Escape keep the old save.
+- [ ] Malformed JSON, unsupported versions, missing fields, unknown floors, bad HP, negative
+      or non-integer quantities, unknown or innate items and wrong slot structures are
+      rejected without a crash. Unknown or unavailable slot actions are emptied.
+- [ ] Deleting the save is safe when there is none.
+- [ ] Death never writes the save. GAME OVER still waits for Enter. The retry restores the
+      in-memory checkpoint, and a later Continue restores the same one.
+- [ ] Fixed Phase 4 issue: entering a floor with A = potion x1, drinking it (A empties during
+      play), then dying and retrying gives back the potion and A = potion.
+- [ ] Traversal stays downward-only (Surface → Floor 1 → Floor 2). Floor 2 is still the
+      deepest floor.
+- [ ] Tests use their own save files, never the player's save.
+- [ ] A real process restart continues correctly, a corrupt save leaves the title usable,
+      and the title screen fits at 1280×720, 640×360 and 1024×768.
