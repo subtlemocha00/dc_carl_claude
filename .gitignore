@@ -1,0 +1,8 @@
+# Godot generated/import cache
+.godot/
+
+# Common OS/editor noise
+.DS_Store
+Thumbs.db
+
+# VS Code local settings may be committed later if intentionally shared.
