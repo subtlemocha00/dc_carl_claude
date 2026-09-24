@@ -1,0 +1,37 @@
+[gd_scene format=3 uid="uid://dl1ec4ua7notf"]
+
+[ext_resource type="Script" uid="uid://ccxa7v1iqgnia" path="res://scripts/actors/donut.gd" id="1_donut"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_donut"]
+radius = 10.0
+
+[node name="Donut" type="CharacterBody2D"]
+collision_layer = 4
+motion_mode = 1
+script = ExtResource("1_donut")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("CircleShape2D_donut")
+
+[node name="LeftEar" type="Polygon2D" parent="."]
+color = Color(0.8, 0.4, 0.1, 1)
+polygon = PackedVector2Array(-9.5, -3, -8, -15.5, -1.5, -8.5)
+
+[node name="RightEar" type="Polygon2D" parent="."]
+color = Color(0.8, 0.4, 0.1, 1)
+polygon = PackedVector2Array(9.5, -3, 8, -15.5, 1.5, -8.5)
+
+[node name="Body" type="Polygon2D" parent="."]
+color = Color(0.98, 0.6, 0.2, 1)
+polygon = PackedVector2Array(10, 0, 9.24, 3.83, 7.07, 7.07, 3.83, 9.24, 0, 10, -3.83, 9.24, -7.07, 7.07, -9.24, 3.83, -10, 0, -9.24, -3.83, -7.07, -7.07, -3.83, -9.24, 0, -10, 3.83, -9.24, 7.07, -7.07, 9.24, -3.83)
+
+[node name="LeftEye" type="Polygon2D" parent="."]
+color = Color(0.16, 0.1, 0.05, 1)
+polygon = PackedVector2Array(-5.5, -3.5, -2.5, -3.5, -2.5, 0, -5.5, 0)
+
+[node name="RightEye" type="Polygon2D" parent="."]
+color = Color(0.16, 0.1, 0.05, 1)
+polygon = PackedVector2Array(2.5, -3.5, 5.5, -3.5, 5.5, 0, 2.5, 0)
+
+[node name="NavigationAgent2D" type="NavigationAgent2D" parent="."]
+path_desired_distance = 8.0
