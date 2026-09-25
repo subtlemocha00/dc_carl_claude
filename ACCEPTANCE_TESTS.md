@@ -403,3 +403,45 @@ Required:
 - [ ] Shutdown stress: repeated real-process title/gameplay/pause-quit/return cycles, with exit
       codes and crash causes recorded in `PROJECT_STATE.md`.
 - [ ] Version in Project Settings: `0.10.0`.
+
+# Phase 11 — Project Data Isolation, Windows ANGLE Stability and Title-Screen Quit
+
+The Phase 3–10 rules still apply. No new floor, weapon, enemy, item, objective, timer, stair lock,
+graphics-options UI or renderer choice for the player.
+
+Required:
+- [ ] The project has its own user-data folder: `application/config/use_custom_user_dir = true`
+      and `application/config/custom_user_dir_name = "DC CARL"`. In a real process
+      `OS.get_user_data_dir()` is the app-data folder + `DC CARL` (on Windows
+      `%APPDATA%\DC CARL`), not `Godot/app_userdata/Carl & Donut Dungeon Prototype`, which the
+      sibling project also uses.
+- [ ] The old shared folder is never touched: nothing deletes, moves, copies, imports or
+      migrates anything from it, and nothing searches other folders for saves. A first launch
+      with no save in the new folder offers New Game and Quit Game, with no error.
+- [ ] SaveManager still uses `user://savegame.json`; no game script names an absolute or
+      per-user path.
+- [ ] Tests still use only `user://test_saves/` (now inside the new folder), and the guard still
+      refuses the player's save in a test run. Automated tests leave the new folder's
+      `savegame.json` as it was (absent stays absent) and the old shared folder byte for byte
+      unchanged.
+- [ ] Still the Compatibility renderer. On Windows it runs through ANGLE
+      (`rendering/gl_compatibility/driver.windows = "opengl3_angle"`), and a real launch reports
+      `RenderingServer.get_current_rendering_driver_name() == "opengl3_angle"`. Other platforms'
+      drivers and the fallbacks stay at Godot's defaults.
+- [ ] Rendering under ANGLE at 1280×720, 640×360 and 1024×768: title (with and without a save,
+      Quit Game selected), gameplay with projectiles, inventory, pause menu, its question and
+      GAME OVER look as in Phase 10.
+- [ ] ANGLE shutdown stress with the project's default renderer (no command-line override):
+      title exits, pause > Quit Game, mid-play window closes and Return to Title / Continue
+      cycles, with exit codes, renderer and Windows crash-log entries recorded in
+      `PROJECT_STATE.md`.
+- [ ] The title screen offers Quit Game: New Game and Quit Game with no save; Continue, New Game
+      and Quit Game with a valid save. Continue (or New Game with no valid save) is selected
+      first, never Quit Game. Up/Down go round the options on offer; Enter confirms.
+- [ ] Quit Game on the title closes the game at once, with no question, exit code 0 and no engine
+      error. It writes no save (none is created, an existing one is neither changed nor
+      rewritten) and does not touch GameState. It works after Gameplay > Return to Title.
+- [ ] New Game (and its question), Continue, the unloadable-save message, Return to Title and
+      the Phase 10 pause menu, inventory pause and GAME OVER work as before.
+- [ ] The save stays `save_version: 3`; version 1 and 2 saves still migrate.
+- [ ] Version in Project Settings: `0.11.0`.

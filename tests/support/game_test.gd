@@ -1,6 +1,7 @@
 extends SceneTree
 ## Shared helpers for test scripts. A test extends this file, runs its checks from
-## _initialize(), and ends with finish().
+## _initialize(), and ends with finish(). A run that ends any other way (the game quit the
+## process, Phase 11) fails with exit code 1 (_finalize()).
 ## Any engine error or warning logged while the test runs also counts as a failure.
 ## Every test saves into its own file under TEST_SAVE_FOLDER, which is deleted when the test
 ## starts and finishes, so tests never read or write a player's save. SaveManager enforces
@@ -44,6 +45,7 @@ class ErrorRecorder extends Logger:
 
 var _failures := PackedStringArray()
 var _error_recorder := ErrorRecorder.new()
+var _finished := false
 
 
 func _init() -> void:
@@ -271,6 +273,7 @@ func walk_to(target: Vector2) -> bool:
 
 
 func finish() -> void:
+	_finished = true
 	steer(Vector2.ZERO)
 	save_manager().delete_save()
 	for message in _error_recorder.messages:
@@ -282,3 +285,15 @@ func finish() -> void:
 		for failure in _failures:
 			printerr("FAIL: " + failure)
 		quit(1)
+
+
+## Runs when the process ends. A test that ends without reaching finish() did not complete: the
+## game quit the process (for example Enter on a Quit Game the test did not mean to select,
+## Phase 11), which would otherwise exit with code 0 and hide every failed check.
+func _finalize() -> void:
+	if _finished:
+		return
+	for failure in _failures:
+		printerr("FAIL: " + failure)
+	printerr("FAIL: the test ended before finish(): something quit the game while it ran")
+	quit(1)

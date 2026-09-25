@@ -3,6 +3,10 @@ extends Node
 ## of the floor Carl last entered. GameState keeps the run in memory; this is the only script
 ## that touches the save file.
 ##
+## The save is user://savegame.json. Godot decides where user:// is: since Phase 11 the project
+## has its own user-data folder, "DC CARL" (Project Settings > Application > Config > Custom User
+## Dir Name), which no other project with the same name shares. No path here is absolute.
+##
 ## The file is JSON with stable ids only, never scene paths or resources (version 3):
 ##     {"save_version": 3, "floor_id": "floor_05",
 ##      "carl": {"health": 80, "max_health": 100},

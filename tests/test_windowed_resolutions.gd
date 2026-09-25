@@ -17,8 +17,11 @@ extends "res://tests/support/game_test.gd"
 ## HUD hint "Space: action menu     Esc: pause" on screen and fitting; the pause menu and its two
 ## questions (Return to Title, Quit Game) on screen, centred and fitting, above the HUD; and the
 ## title screen reached through Return to Title, on screen with the Floor 6 checkpoint.
-## Then the title screen at each size, with a Floor 6 save: Continue and New Game, the "could not
-## be loaded" message, and the New Game confirmation.
+## Phase 11 adds: the renderer this window really uses (the Compatibility renderer, through ANGLE
+## on Windows: "opengl3_angle"), and the title's Quit Game row, on screen at each size and when
+## selected.
+## Then the title screen at each size, with a Floor 6 save: Continue, New Game and Quit Game, the
+## "could not be loaded" message, and the New Game confirmation.
 ##
 ## Run from the project folder (NOT headless; a game window opens briefly):
 ##     godot --path . -s res://tests/test_windowed_resolutions.gd
@@ -47,8 +50,15 @@ func _initialize() -> void:
 func _run_checks() -> void:
 	if DisplayServer.get_name() == "headless":
 		print("SKIP: this test needs a real window (run it without --headless).")
+		_finished = true
 		quit(0)
 		return
+	var driver := RenderingServer.get_current_rendering_driver_name()
+	print("Renderer: %s, driver %s, %s (%s)" % [RenderingServer.get_current_rendering_method(), driver,
+			RenderingServer.get_video_adapter_name(), RenderingServer.get_video_adapter_api_version()])
+	check(RenderingServer.get_current_rendering_method() == "gl_compatibility", "the window uses the Compatibility renderer")
+	if OS.get_name() == "Windows":
+		check(driver == "opengl3_angle", "on Windows it runs through ANGLE (opengl3_angle)", driver)
 
 	change_scene_to_file(FLOOR_1_PATH)
 	await wait_physics_frames(10)
@@ -393,7 +403,7 @@ func _check_pause_menu() -> void:
 		var visible_rect := root.get_visible_rect()
 		var info: Label = current_scene.get_node("%SaveInfoLabel")
 		check(visible_rect.encloses(info.get_global_rect()) and visible_rect.encloses(current_scene.get_node("%ContinueRow").get_global_rect())
-				and info.text.begins_with("Saved at the start of Floor 6"),
+				and visible_rect.encloses(current_scene.get_node("%QuitRow").get_global_rect()) and info.text.begins_with("Saved at the start of Floor 6"),
 				"%dx%d: after Return to Title, the title is on screen and describes the Floor 6 checkpoint" % [window_size.x, window_size.y], info.text)
 	DisplayServer.window_set_size(WINDOW_SIZES[0])
 
@@ -424,8 +434,20 @@ func _check_title_screen() -> void:
 			await wait_physics_frames(10)
 			var label := "title %dx%d%s" % [window_size.x, window_size.y, " (broken save)" if broken_save else ""]
 			var visible_rect := root.get_visible_rect()
-			for row_name: String in ["%ContinueRow", "%NewGameRow", "%SaveInfoLabel", "%VersionLabel"]:
+			for row_name: String in ["%ContinueRow", "%NewGameRow", "%QuitRow", "%SaveInfoLabel", "%VersionLabel"]:
 				check(visible_rect.encloses(title.get_node(row_name).get_global_rect()), "%s: %s is on screen" % [label, row_name.trim_prefix("%")])
+			var rows: Array = ["%ContinueRow", "%NewGameRow", "%QuitRow"].map(func(row_name: String) -> Rect2: return title.get_node(row_name).get_global_rect())
+			check(rows[0].end.y <= rows[1].position.y and rows[1].end.y <= rows[2].position.y and rows[2].end.y <= title.get_node("%SaveInfoLabel").get_global_rect().position.y,
+					"%s: the three rows are stacked in order above the save line" % label, str(rows))
+		# Quit Game selected (Up goes round to it from the first option), then back.
+		await tap_key(KEY_UP)
+		var quit_row: Label = title.get_node("%QuitRow")
+		for window_size in WINDOW_SIZES:
+			DisplayServer.window_set_size(window_size)
+			await wait_physics_frames(10)
+			check(quit_row.text == "> Quit Game" and root.get_visible_rect().encloses(quit_row.get_global_rect()),
+					"title %dx%d%s: Quit Game selected, on screen" % [window_size.x, window_size.y, " (broken save)" if broken_save else ""], quit_row.text)
+		await tap_key(KEY_DOWN)
 		# The confirmation panel (New Game with a save file present), then back out with Escape.
 		if not broken_save:
 			await tap_key(KEY_DOWN)

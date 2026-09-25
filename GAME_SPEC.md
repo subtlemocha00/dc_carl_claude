@@ -46,7 +46,9 @@ Gameplay:
 - Escape: pause/back/cancel as appropriate.
 - Enter: confirm menu/inventory selection; on the GAME OVER screen, retry the current floor.
 
-Title screen: Up/Down choose between Continue and New Game, Enter confirms.
+Title screen: Up/Down choose between Continue, New Game and Quit Game (going round the options
+on offer; Continue only when a save loads), Enter confirms. Continue is selected first when a
+save loads, New Game otherwise, never Quit Game (section 15b).
 
 Escape and Space by situation (canonical since Phase 10, section 15a):
 - during play: Escape opens the pause menu; Space opens the action/inventory menu;
@@ -473,6 +475,8 @@ Persistent save (canonical since Phase 5):
 - Phase 10 keeps **version 3**: pausing adds nothing to the save. Whether the pause menu is
   open, what it has selected and its questions are never saved, and neither is anything else
   mid-floor.
+- Phase 11 keeps **version 3**: the game's own user-data folder, the Windows renderer and the
+  title's Quit Game add nothing to the save.
 - No mid-floor saving, multiple save slots or cloud saves in the prototype.
 
 Current-run state (what survives level changes during one playthrough, held in memory) is
@@ -506,6 +510,27 @@ Persisted state should eventually include at least:
   from a fresh start, any number of times.
 - Quit Game closes the game. Closing the window (or Alt+F4) does the same, without asking:
   nothing is saved, and the checkpoint is kept.
+
+## 15b. The game's own data folder, the Windows renderer and the title's Quit Game (canonical since Phase 11)
+
+- The game keeps its save (and Godot's logs) in **its own user-data folder, "DC CARL"**, for
+  example `%APPDATA%\DC CARL` on Windows. Until Phase 11 it used Godot's default folder for its
+  name, `Godot/app_userdata/Carl & Donut Dungeon Prototype`, which another project with the same
+  name also used, so each could overwrite the other's save.
+- The old folder is left exactly as it is. Nothing is moved, copied or imported from it (its
+  save may be another project's, in another format), and the game never looks for saves outside
+  its own folder. So the first launch after Phase 11 has no save: Continue is unavailable and
+  New Game starts the game as usual.
+- The save is still `user://savegame.json`; Godot decides where `user://` is.
+- On Windows the Compatibility renderer runs through **ANGLE** (Direct3D 11) instead of the
+  graphics driver's own OpenGL, because the native OpenGL driver on the development machine
+  sometimes crashed as the game closed (Phase 10). Other platforms are unchanged. There is no
+  graphics option for the player.
+- The title screen has **Quit Game**: with a save that loads it offers Continue, New Game and
+  Quit Game; otherwise New Game and Quit Game (Continue is shown unavailable). Quit Game closes
+  the game at once, without asking, because nothing on the title screen can be lost: it saves
+  nothing and changes nothing. It is never the first selection, so an Enter pressed as the title
+  opens cannot close the game.
 
 ## 16. HUD
 

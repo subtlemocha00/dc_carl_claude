@@ -67,7 +67,7 @@ horizontal_alignment = 1
 
 [node name="Menu" type="VBoxContainer" parent="CenterContainer/TextColumn"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 90)
+custom_minimum_size = Vector2(0, 120)
 layout_mode = 2
 mouse_filter = 2
 theme_override_constants/separation = 6
@@ -85,6 +85,13 @@ unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 26
 text = "New Game"
+horizontal_alignment = 1
+
+[node name="QuitRow" type="Label" parent="CenterContainer/TextColumn/Menu"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 26
+text = "Quit Game"
 horizontal_alignment = 1
 
 [node name="SaveInfoLabel" type="Label" parent="CenterContainer/TextColumn"]

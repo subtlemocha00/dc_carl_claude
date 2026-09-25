@@ -7,8 +7,10 @@ Godot 4.7.2 stable (Standard build, not .NET)
 GDScript
 
 ## Current phase
-Phase 10 — Pause Menu, Return to Title, Clean Quit and Runtime Stability: **complete, awaiting
-human review**.
+Phase 11 — Project Data Isolation, Windows ANGLE Stability and Title-Screen Quit: **complete,
+awaiting human review**.
+- Phase 10 — Pause Menu, Return to Title, Clean Quit and Runtime Stability: complete (commit
+  `8dff143`).
 - Phase 9 — Second Reusable Weapon (Baseball Bat), Knockback, Combat Reactions and Floor 6:
   complete (commit `042d76b`).
 - Phase 8 — Donut Health, Companion Combat, Enemy Targeting, Save v3 and Floor 5: complete
@@ -23,7 +25,7 @@ human review**.
 - Phase 1 — First Traversal Slice: complete (commit `3cb8854`).
 - Phase 0 — Project Foundation: complete (commit `37b2c87`).
 
-There are no `PHASE_02_*.md` to `PHASE_10_*.md` files. Phases 2–10 came from the owner's
+There are no `PHASE_02_*.md` to `PHASE_11_*.md` files. Phases 2–11 came from the owner's
 prompts. Their acceptance criteria are recorded in `ACCEPTANCE_TESTS.md`.
 
 ## Canonical design decisions (do not reintroduce the old behaviour)
@@ -209,6 +211,35 @@ Phase 10 decisions (also written into `GAME_SPEC.md` §4, §15 and §15a):
   - the HUD hint now reads "Space: action menu     Esc: pause";
   - closing the window never asks (Godot's default), as the prompt preferred.
 
+Phase 11 decisions (also written into `GAME_SPEC.md` §4, §15 and §15b):
+- **The project has its own user-data folder, "DC CARL"** (`application/config/use_custom_user_dir
+  = true`, `application/config/custom_user_dir_name = "DC CARL"`). Until now it used Godot's
+  default folder for its name, `%APPDATA%\Godot\app_userdata\Carl & Donut Dungeon Prototype`,
+  which the sibling project `../codex` (same `config/name`) also uses, so each could overwrite the
+  other's save (it happened during Phase 10). `config/name` is unchanged; only the folder moved.
+- **The old shared folder is not this project's any more.** Nothing reads, moves, copies, imports
+  or cleans it, and nothing searches other folders for saves: its save may be the other project's,
+  in another format. So the first launch after Phase 11 has no save ("No saved game yet.";
+  Continue unavailable), which is expected. (The save *format* migrations, versions 1 and 2 to 3,
+  are unchanged; they apply to files in the new folder.)
+- **SaveManager is unchanged**: still `user://savegame.json`; Godot decides where `user://` is.
+- **Windows renders through ANGLE:** `rendering/gl_compatibility/driver.windows =
+  "opengl3_angle"`. The project is still a Compatibility-renderer project; every other platform's
+  driver and the two fallbacks (`fallback_to_angle`, `fallback_to_native`) stay at Godot's
+  defaults. Reason: the intermittent crash on exit found in Phase 10 is in Intel's OpenGL driver
+  and never happened through ANGLE. Native OpenGL is still available for diagnosis with
+  `--rendering-driver opengl3`. No graphics option for the player.
+- **The title screen has Quit Game.** It quits at once with no question (nothing on the title can
+  be lost), through `get_tree().quit()`, like the pause menu's Quit Game. Continue (or New Game
+  when no save loads) is still the first selection, never Quit Game.
+- **Phase 11 choices the prompt left open** (the narrowest fit with the existing code):
+  - Up/Down go round the title's options (Up on the first selects Quit Game), as in the pause menu;
+    an unavailable Continue is skipped, as before;
+  - with no save that loads, the Continue row is still shown, greyed, as in Phases 5–10, above
+    New Game and Quit Game;
+  - the folder name is exactly `DC CARL` (with the space), which Godot 4.7.2 accepts as is:
+    `OS.get_user_data_dir()` is `C:/Users/Owner/AppData/Roaming/DC CARL` on this machine.
+
 ## Implemented
 - **Title screen** (main scene):
   - **Continue** (available only when the save loads) resumes the saved floor checkpoint;
@@ -218,6 +249,8 @@ Phase 10 decisions (also written into `GAME_SPEC.md` §4, §15 and §15a):
     replaced." with No selected.
   - An unloadable save shows "Save data could not be loaded." and leaves Continue
     unavailable.
+  - **Quit Game (Phase 11)** closes the game at once, without a question, saving nothing.
+    Continue (or New Game when no save loads) is selected first, never Quit Game.
   - **Phase 10:** it is also where Return to Title lands, in the same process. On opening it
     drops the run from memory (`GameState.end_run()`) and reads the save again, so its line
     describes the saved checkpoint, never the floor just left.
@@ -383,7 +416,8 @@ Pause menu (Phase 10): **Up/Down** choose Resume, Return to Title or Quit Game (
 **Enter** confirms, **Escape** resumes. In its questions, Up/Down (or Left/Right) choose No or Yes,
 Enter confirms, Escape means No. Space and W/A/S/D do nothing there.
 
-Title screen: **Up/Down** choose Continue or New Game, **Enter** confirms. In the New Game
+Title screen: **Up/Down** choose Continue, New Game or Quit Game (going round; Continue only when a
+save loads), **Enter** confirms. Quit Game closes the game at once (Phase 11). In the New Game
 confirmation, Up/Down (or Left/Right) choose No or Yes, Enter confirms, and **Escape** means No.
 
 Whatever slot holds the Slingshot fires it; whatever slot holds the Baseball Bat swings it.
@@ -393,7 +427,7 @@ has no keys (her Scratch is automatic), and W/A/S/D never move or command her.
 
 ## Scene structure
 ```
-project.godot                                   Settings, InputMap, physics layer names, GameState + SaveManager autoloads
+project.godot                                   Settings, InputMap, physics layer names, GameState + SaveManager autoloads; own user-data folder "DC CARL" and ANGLE on Windows (Phase 11)
 assets/tiles/placeholder_world_tiles.png        Original 4-tile placeholder atlas
 assets/items/slingshot.png                      Original 32×32 placeholder Slingshot icon (Phase 6)
 assets/items/baseball_bat.png                   Original 32×32 placeholder Baseball Bat icon (Phase 9)
@@ -408,7 +442,7 @@ scenes/actions/slingshot.tscn                   The Slingshot's performer: a Pro
 scenes/actions/baseball_bat.tscn                The Bat's performer: a MeleeAttack with walls blocking and knockback (Phase 9)
 scenes/projectiles/slingshot_stone.tscn         The Slingshot's Projectile (Phase 6)
 scenes/projectiles/spit_glob.tscn               The Spitting Blob's Projectile (Phase 7)
-scenes/ui/title_screen.tscn                     Main scene: Continue / New Game menu, overwrite confirmation
+scenes/ui/title_screen.tscn                     Main scene: Continue / New Game / Quit Game menu (Quit Game: Phase 11), overwrite confirmation
 scenes/ui/hud.tscn                              Carl's and Donut's HP, slot bar, menu hint, GAME OVER panel (CanvasLayer)
 scenes/ui/action_menu.tscn                      The action/inventory menu (CanvasLayer 10)
 scenes/ui/pause_menu.tscn                       The pause menu and its two questions (CanvasLayer 11; Phase 10)
@@ -837,9 +871,12 @@ Composition first, with one thin shared base:
     Slingshot is kept (or refilled if W was emptied).
 
 ### Persistent save (`SaveManager` autoload, `scripts/autoload/save_manager.gd`)
-- **Location:** `user://savegame.json` (`DEFAULT_SAVE_PATH`), in Godot's per-user app data,
-  never in the project folder. On Windows that is
-  `%APPDATA%\Godot\app_userdata\Carl & Donut Dungeon Prototype\savegame.json`.
+- **Location:** `user://savegame.json` (`DEFAULT_SAVE_PATH`), in the project's own user-data
+  folder (Phase 11), never in the project folder. On Windows that is
+  `%APPDATA%\DC CARL\savegame.json` (`C:/Users/Owner/AppData/Roaming/DC CARL/savegame.json` on this
+  machine). Before Phase 11 it was `%APPDATA%\Godot\app_userdata\Carl & Donut Dungeon
+  Prototype\savegame.json`, a folder shared with `../codex`; see Architecture > User-data folder
+  and renderer.
   `save_path` can be changed; tests always change it (see Test save isolation below).
 - **Format version 3** (`SAVE_VERSION`, Phase 8; unchanged in Phase 9), stable ids only:
   ```
@@ -989,10 +1026,37 @@ Composition first, with one thin shared base:
   and killing Carl in one tick. `Stairs._change_level()` now returns when the tree is paused; the
   retry reloads the floor, stairs included. `test_pause_menu.gd` checks it.
 
+### User-data folder and renderer (Phase 11)
+- **User data:** `project.godot` sets `application/config/use_custom_user_dir=true` and
+  `application/config/custom_user_dir_name="DC CARL"`. Godot then puts `user://` in the operating
+  system's app-data folder + `DC CARL` (`OS.get_data_dir()` + `/DC CARL`): on Windows
+  `%APPDATA%\DC CARL`, observed as `C:/Users/Owner/AppData/Roaming/DC CARL`. Everything the game
+  writes goes there: `savegame.json` (and its `.tmp` while saving), Godot's `logs/`, and the
+  tests' `test_saves/`. No script names an absolute path (`test_project_setup.gd` checks every
+  game script).
+- **No path migration:** the old folder `%APPDATA%\Godot\app_userdata\Carl & Donut Dungeon
+  Prototype` is simply no longer used. A save in it is not imported (it may be the other project's
+  format); the player can copy their own old `savegame.json` into the new folder by hand if they
+  want it back (SaveManager checks it like any other file). The save *format* migrations (v1/v2
+  to v3) are unchanged.
+- **Test isolation is unchanged:** tests still use only `user://test_saves/` (now
+  `%APPDATA%\DC CARL\test_saves`), and the Phase 8 guard still refuses `user://savegame.json` in
+  any `-s` run. Having its own folder does not make the player's save available to tests.
+- **Renderer:** `rendering/gl_compatibility/driver.windows="opengl3_angle"` is the only renderer
+  line added. `rendering/renderer/rendering_method` stays `gl_compatibility`; `driver`,
+  `driver.linuxbsd`, `driver.macos`, `driver.web`, `driver.android`, `driver.ios`,
+  `fallback_to_angle` and `fallback_to_native` stay at Godot's defaults (`test_project_setup.gd`
+  checks each). With `fallback_to_native` on (the default), a Windows machine without Direct3D 11
+  support would still start, on native OpenGL. A real launch here reports
+  `RenderingServer.get_current_rendering_driver_name()` = **`opengl3_angle`** ("ANGLE (Intel, Intel(R) UHD Graphics (0x000046A3) Direct3D11 …,
+  D3D11-31.0.101.4032)", OpenGL ES 3.0 through ANGLE 2.1.1).
+  For a diagnostic comparison, native OpenGL can still be forced for one run:
+  `godot --path . --rendering-driver opengl3`.
+
 ### Earlier decisions still in force
 - Compatibility renderer; 1280×720 base with `canvas_items` stretch and `expand` aspect;
   physical-keycode bindings; Godot's `ui_*` actions untouched.
-- Version in Project Settings, now `0.10.0` (the game's version; the save format is still 3).
+- Version in Project Settings, now `0.11.0` (the game's version; the save format is still 3).
 - `.godot/` ignored, `.uid` files committed, LF line endings.
 - Carl is a floating-mode `CharacterBody2D`; Camera2D inside Carl (zoom 1.5, smoothing);
   physics interpolation on.
@@ -1034,6 +1098,24 @@ Consequences:
 - Stones and globs are stopped by layer 1 only: they fly over bodies, pickups and stairs.
   Enemies see through everything but walls, exactly where their globs can fly.
 - Navigation baking reads only layer 1.
+
+## Earlier behaviour changed in Phase 11
+1. **Where the save lives:** `%APPDATA%\DC CARL\savegame.json` instead of the shared
+   `%APPDATA%\Godot\app_userdata\Carl & Donut Dungeon Prototype\savegame.json`. A save made
+   before Phase 11 is not seen (not migrated, by design). Tests' `test_saves/` and Godot's logs
+   moved with it.
+2. **Windows renders through ANGLE** (Direct3D 11) instead of native OpenGL. Nothing in the game
+   changed for it; the tests and the visual check were repeated on it.
+3. **The title screen has a third row, Quit Game**, and Up/Down go round the rows (with two rows
+   they used to toggle). `test_save_game.gd`'s "Up/Down cannot select the unavailable Continue"
+   still passes unchanged (Up then Down: New Game > Quit Game > New Game);
+   `test_windowed_resolutions.gd` now checks the Quit Game row.
+4. **Tests fail if the game quits them early.** `game_test.gd` (and `test_surface_traversal.gd`)
+   now fail with exit code 1 in `_finalize()` when a run ends before `finish()`. Before, a test
+   that accidentally pressed Enter on a Quit Game ended its own process with exit code 0 and
+   hid its failed checks (found by a Phase 11 mutation check). `quit_game_child.gd` opts out,
+   because the game is meant to end it. The windowed test's headless SKIP counts as finished.
+5. Version in Project Settings: `0.11.0`.
 
 ## Earlier behaviour changed in Phase 10
 1. **Escape does something during play** (it opens the pause menu); before, it only closed the
@@ -1105,8 +1187,9 @@ godot --headless --path . -s res://tests/run_all.gd
 It runs every `tests/test_*.gd` in its own Godot process. A test fails on a non-zero exit
 code or on any engine ERROR/WARNING in its output, except an error the test provoked on purpose
 and checked (it prints `EXPECTED ERROR: <text>`, which excuses exactly one `ERROR: <text>` line;
-only `test_save_isolation.gd` does this). Tests with "windowed" in their name get a real window,
-which opens briefly. The full run takes about 12 minutes (27 test files). Each test file can
+only `test_save_isolation.gd` does this). A test that ends before reaching `finish()` (for
+example because the game quit its process) fails with exit code 1 (Phase 11). Tests with "windowed" in their name get a real window,
+which opens briefly. The full run takes about 12 minutes (29 test files). Each test file can
 also be run on its own; the first lines of each file give the command.
 
 | Test file                               | Covers |
@@ -1125,7 +1208,7 @@ also be run on its own; the first lines of each file give the command.
 | `test_save_migration.gd` (Phase 6–9)    | The two real Phase 5 fixtures (version 1), the two real Phase 6 fixtures and **the real Phase 7 Floor 4 fixture** (version 2) load with their floor, HP, items and slots and **Donut at 60 / 60**, the files untouched, and are written back with the same values as version 3 plus Donut; a v1 Slingshot slot is emptied, a v1 `owned_items` ignored, a v1 Slingshot quantity rejected; 13 kinds of malformed v1 data rejected; v2 loads (a `donut` in a v2 file is ignored), v2 without owned_items rejected; **v3 loads with its own Donut HP, v3 without `donut` rejected**; versions 0/4/999/-1 rejected; title → Continue on the v1 Floor 2 save and **on the Phase 7 Floor 4 save** open those floors with their state and Donut at 60 / 60, and the files become version 3; the migrated game plays on; **Phase 9: the real Phase 8 Floor 5 save (version 3, no Bat) loads unchanged and is written back identically; no migrated v1/v2 fixture owns the Bat; a v1 file naming the Bat in owned_items and on W owns no Bat and W is emptied** |
 | `test_slingshot.gd` (Phase 6, 8)        | Ownership model (innate/reusable/consumable, owned once, never removed, snapshots, new run clears it); slots; pickup; firing in four directions; exactly 10 damage, 3 hits kill a blob; one target only; flies through a dying blob; hits a blob that steps onto it; stops at a wall face; 320 px / 40 ticks; never hurts Carl, **nor Donut, whose real Hurtbox is in the line of fire (60 / 60, Phase 8)**; no pickup, no stairs; point blank; cooldown; menu; HUD and menu labels |
 | `test_slingshot_run.gd` (Phase 6–8)     | Real run: New Game clears a previous Slingshot; Surface → Floor 1 → Floor 2 → Floor 3, nothing leads up (Floor 3's only exit leads down to Floor 4); Floor 2 entry has no Slingshot (run, entry state, disk: version 3, Donut 60 / 60); collect + W doesn't save; two Floor 2 deaths take it back; quit before Floor 3 → Continue without it; three stones kill the Floor 2 blob; Floor 3 arrival, the Floor 3 checkpoint owns it with W = Slingshot; a stone stops at Floor 3's wall tiles; two Floor 3 deaths keep it; Continue opens Floor 3 and it fires; New Game clears it |
-| `test_windowed_resolutions.gd` (Phase 2–10) | At 1280×720, 640×360, 1024×768: HUD with `W: Slingshot   A: Potion x2` **and "Donut HP: 0 / 60 - DOWNED" fully on screen, its text fitting, clear of Carl's HP and the slot bar**, GAME OVER panel, action menu, camera; Floor 2's Slingshot pickup; Floor 3's signs clear of the HUD; a flying stone; Floor 4's three signs clear of the HUD; the two blobs, a glob and a stone on screen together; **Floor 5's three signs clear of the HUD; a downed Donut's DOWNED label drawn on screen, clear of the HUD; Donut's colour unlike both blobs'**; **Phase 9: the slot bar `W: Slingshot   A: Potion x2   S: Baseball Bat   D: Fists` on screen with its text fitting; "Baseball Bat   (on S)" in the menu; Floor 5's Hint and its Bat pickup (icon and label) on screen and clear of the HUD; Floor 6's three signs clear of the HUD; a blob drawn on screen while the Bat knocks it back**; **Phase 10: the HUD hint "Space: action menu     Esc: pause" on screen and fitting; the pause menu above the HUD and action menu, on screen and centred with its rows fitting; both questions on screen and centred with the warning, No and Yes fitting; the title after Return to Title on screen with the Floor 6 checkpoint**; the title screen (with a Floor 6 save) and its confirmation. Prints SKIP and passes when run headless |
+| `test_windowed_resolutions.gd` (Phase 2–11) | At 1280×720, 640×360, 1024×768: HUD with `W: Slingshot   A: Potion x2` **and "Donut HP: 0 / 60 - DOWNED" fully on screen, its text fitting, clear of Carl's HP and the slot bar**, GAME OVER panel, action menu, camera; Floor 2's Slingshot pickup; Floor 3's signs clear of the HUD; a flying stone; Floor 4's three signs clear of the HUD; the two blobs, a glob and a stone on screen together; **Floor 5's three signs clear of the HUD; a downed Donut's DOWNED label drawn on screen, clear of the HUD; Donut's colour unlike both blobs'**; **Phase 9: the slot bar `W: Slingshot   A: Potion x2   S: Baseball Bat   D: Fists` on screen with its text fitting; "Baseball Bat   (on S)" in the menu; Floor 5's Hint and its Bat pickup (icon and label) on screen and clear of the HUD; Floor 6's three signs clear of the HUD; a blob drawn on screen while the Bat knocks it back**; **Phase 10: the HUD hint "Space: action menu     Esc: pause" on screen and fitting; the pause menu above the HUD and action menu, on screen and centred with its rows fitting; both questions on screen and centred with the warning, No and Yes fitting; the title after Return to Title on screen with the Floor 6 checkpoint**; **Phase 11: the renderer the window really uses (Compatibility; on Windows `opengl3_angle`, printed with the adapter); the title's Quit Game row on screen at each size, the three rows stacked above the save line, and Quit Game selected on screen**; the title screen (with a Floor 6 save, and broken) and its confirmation. Prints SKIP and passes when run headless |
 | `test_enemy_navigation.gd` (Phase 7, 8) | Arenas with a real baked navigation mesh, each waiting until the map holds exactly its mesh: the Blob waits beyond 220 px, notices Carl behind a wall, gives up beyond 320 px; it follows a route around a wall to Carl (its own path bends round the wall's end), never overlaps the wall, never stalls, reaches him and hurts him every 0.8 s; with no way around it stops beside the wall without jittering; the Spitting Blob with Carl hidden walks around the wall and spits only once it sees him; **Phase 8: with Carl far away, a blob picks Donut behind the wall, walks around it without overlapping it, reaches her and hurts her 10 every 0.8 s (60 → 30)** |
 | `test_spitting_blob.gd` (Phase 7, 8)    | Arenas (Carl the only party member): its numbers; waits beyond 360 px, closes in and spits at 320 px, holds at 280 px, backs off to 180 px, gives up beyond 480 px; touching it never hurts; a wall stops it spitting, stepping into sight or removing the wall makes it spit at once; a glob takes exactly 10 HP once; walls stop globs; a glob flies past stairs, a pickup, another Spitting Blob and a Gelatinous Blob and hits Carl, hurting none of them nor its own blob, even when made to target enemies; 384 px / 96 ticks; 5 globs exactly 90 ticks apart, no burst; three stones kill it; Fists by facing; the menu freezes everything, no free glob, stone or burst |
 | `test_donut.gd` (Phase 8)               | Arenas: a new run (also after one where she was downed) gives Donut 60 / 60; Health 60, Hurtbox on `player_hurtbox`, the `party` group, Scratch's numbers; an enemy's touch takes 10 every 0.8 s; HP never below 0; Carl's point-blank punch and a stone through her never hurt her; Scratch never hurts Carl or Donut and never fires with no enemy near; exactly 10 per scratch, exactly 60 ticks apart, three kill a blob, none on a dead one; an enemy 38 px away is scratched, 46 px is not; the nearest of two only; she stays by Carl and follows him, never toward an enemy; downed at 0: HUD "0 / 60 - DOWNED" in another colour, grey, on her side, DOWNED label, cannot be hit; no following, no scratching, a touch finds nothing, nothing paused; she gets up on her 360th downed tick (not at 359) with exactly 30 / 60, looks normal, catches up with Carl, scratches again; 5 s of menu do not count toward the 6 s; GAME OVER (the tree pause) and a downed Carl hold her countdown |
@@ -1137,158 +1220,181 @@ also be run on its own; the first lines of each file give the command.
 | `test_pause_menu.gd` (Phase 10)         | Real levels, keys through the input pipeline: every level (Surface, Floors 1–6) has exactly one pause menu, Escape opens it (Resume selected, rows, no focus), gameplay ticks stop, Escape and Enter on Resume resume, the save untouched; Up/Down wrap, Resume selected on reopening; paused Carl cannot move, turn, punch, fire, swing, drink or reassign; a key held while resuming gives no free action, then D/W/S/A work; Donut stops mid-stride; a blob touching Carl while Donut scratches it: nothing happens for 180 paused ticks, then the next scratch is exactly 60 and the next touch exactly 48 ticks of play after the last; the Spitting Blob's glob freezes in flight, nothing is spat for 180 ticks, globs exactly 90 ticks of play apart; a stone freezes then flies on, no extra stone; a Bat push freezes unfinished, then completes exactly 80 px; Donut gets up after exactly 360 ticks of play with or without a 180-tick pause (her countdown holds); Space/Escape between the two menus (echo included, same-frame key pairs): never both open, paused exactly when one is open; GAME OVER: Escape/Space open nothing, everything frozen, Enter retries, the pause menu works after; stairs and a pickup do nothing while paused and work after; **the lifecycle fix: stairs + death in one tick keep GAME OVER on the floor with a loadable checkpoint, then retry and stairs work** |
 | `test_return_to_title.gd` (Phase 10)    | Real title and Floor 6 from a seeded checkpoint (Carl 80, Donut 40, potion on A, Slingshot W, Bat S): the question's text, No selected, Escape and No go back to the paused menu, Down/Up toggle Yes/No, the live floor untouched (Carl 60, Donut 10, no potion, stone flying on); Yes: the title in the same process, unpaused, the level freed, no Carl/Donut/enemy/projectile left, the save byte-identical and not rewritten, the title says HP 80 (not 60), GameState holds no run; Continue restores everything (HP, items, slots, the killed blob back, 30 HP each, no projectiles); **Continue reads the disk: a different checkpoint written while the title is up and a stale run planted in GameState → Continue opens the disk's Carl 55 / Donut 25**; 5 Continue → play → Return cycles with identical node and connection counts (one Carl, Donut, HUD, action menu, pause menu, 3 enemies); New Game after returning asks (No keeps the save), Yes gives the canonical Surface run and checkpoint; the save is version 3 with its seven fields; a Phase 5 v1 and a Phase 6 v2 save load after returning, Continue twice each, the file becomes version 3 |
 | `test_quit_game.gd` (Phase 10)          | Real process exits: a seeded Floor 6 checkpoint, then `tests/support/quit_game_child.gd` in its own Godot process: Continue, live changes (Carl 60, Donut 10, no potion, a kill, a stone), pause > Quit Game (the warning, No selected, Escape and No cancel, Yes quits): exit code 0, no engine error or crash marker, the save byte-identical and last written on floor entry; the same with the window's close request; after each, this process's title and Continue restore the checkpoint; the helper refuses (exit 2, nothing run) the player's save path, a `test_saves/../` path and no path, and the player's save keeps its modification time |
+| `test_project_setup.gd` (Phase 11)      | Project settings in a real process: Use Custom User Dir on, Custom User Dir Name `DC CARL`; `OS.get_user_data_dir()` = app-data folder + `DC CARL` (printed), not `Godot/app_userdata/...`; `user://savegame.json` resolves inside it; no game script names an absolute or per-user path; the test guard refuses the player's save (also through `test_saves/../`), this test's own file is in `test_saves/` inside the new folder; the Compatibility renderer, `driver.windows` = `opengl3_angle`, the other platforms' drivers and both fallbacks at Godot's defaults, `project.godot`'s only driver line; version 0.11.0; save format 3 |
+| `test_title_quit.gd` (Phase 11)         | Real title screen, keys through the input pipeline: no save → Continue greyed, New Game selected, Quit Game offered, Up/Down go round New Game and Quit Game only; a Floor 6 save → Continue selected, Up/Down round all three; New Game's question (No selected, its Up/Down leave the menu alone, Escape back, save untouched); an unloadable save → New Game selected, Quit Game offered, New Game still asks; Floor 6 > Return to Title → Quit Game selectable, then Continue restores the checkpoint. Real process exits (`quit_game_child.gd`): Quit Game on the title with no save (exit 0, no file created), with the save (exit 0, byte-identical, not rewritten), and after Return to Title (exit 0, the checkpoint, last written on floor entry); each pressed with Quit Game selected and GameState the title's cleared run |
 | `test_floor_04_run.gd` (Phase 7–9)      | Real run from a real Phase 6 Floor 3 save: title → Continue → Floor 3 (the same checkpoint saved again as version 3 with Donut 60 / 60); every level's exits lead one floor down, **Floor 4's only exit to Floor 5**, Floor 5's to Floor 6 (Phase 9), Floor 6 none; Floor 3 → Floor 4 arrival and checkpoint (version 3); the Blob walks around wall A and three punches kill it; the Spitting Blob walks around wall B, spits only in sight, the menu freezes it and its glob; globs take Carl to 0 HP, GAME OVER waits; retry restores everything; GAME OVER with a glob in flight freezes it; three stones kill the Spitting Blob; quit and Continue on Floor 4; New Game starts clean (Donut 60 / 60). Donut is present and fights along throughout |
 
 Every test uses its own save file under `user://test_saves/`, and SaveManager refuses anything
-else in a test run (see Persistent save > Test save isolation). `test_quit_game.gd`'s child process
-(`tests/support/quit_game_child.gd`, not a test itself: it only runs when the quit test starts it)
+else in a test run (see Persistent save > Test save isolation). The child process of
+`test_quit_game.gd` and `test_title_quit.gd` (`tests/support/quit_game_child.gd`, not a test itself:
+it only runs when one of them starts it; Phase 11 added its `title_quit` and `return_title_quit` modes)
 takes its save file on the command line and refuses, before doing anything, a path outside that
 folder or no path; being a `-s` run, SaveManager would refuse the player's save too.
 
-## Validation performed (Phase 10)
+## Validation performed (Phase 11)
 All runs used Godot 4.7.2.stable.official on this machine (Intel UHD Graphics, driver
-31.0.101.4032, OpenGL 3.3, Compatibility renderer, 60 Hz). Everything that could write a save ran
-either as a test (the Phase 8 guard, its own file in `user://test_saves/`) or in a scratch copy of
-the project with its own user-data folder (`config/custom_user_dir_name`: `dc_carl_p10_baseline`,
-`dc_carl_p10_probe`, `dc_carl_p10_stress`, `dc_carl_p10_mutation`, `dc_carl_p10_empty_probe`). No
-game-mode (non-`-s`) run used this project's own user-data folder. (Phase 9's validation record is
-in `PROJECT_STATE.md` at commit `042d76b`.)
-- **Baseline before changes:** HEAD `042d76b` = `origin/main`, clean tree. The Phase 9 suite, in a
-  scratch export of HEAD, passed **24 of 24** (656 s). The normal entry point (title screen, real
-  window, no script) ran 240 frames there: exit 0, no engine errors.
-- **Test suite:** `run_all.gd` passed **27 of 27** on the final code (728 s). New: `test_pause_menu.gd`
-  (145 checks), `test_return_to_title.gd` (127), `test_quit_game.gd` (32, with real child
-  processes). Changed: `test_windowed_resolutions.gd` (169 checks, real window). An earlier full run
-  on the code before the stairs fix also passed 27 of 27 (727 s).
-- **Mutation checks:** regressions injected one at a time into a scratch copy with its own
-  user-data folder (the chosen tests all passed there first), each restored afterwards. **Every one
-  was caught** (failing tests in brackets):
-  - Escape both closes the action menu and opens the pause menu (`test_pause_menu`);
-  - Carl processing while paused, so D/W/S punch, fire and swing (`test_pause_menu`);
-  - projectiles flying while paused (the glob in flight, Carl hurt, the stone) (`test_pause_menu`);
-  - Donut's recovery counted in real time, so a pause counts toward it (`test_pause_menu`);
-  - Return to Title saving the live floor as the checkpoint (`test_return_to_title`);
-  - the title screen keeping the stale run in GameState (`test_return_to_title`);
-  - Continue using GameState's memory instead of the save file (`test_return_to_title`);
-  - the pause menu attached to the root instead of the level (`test_return_to_title`);
-  - an extra pause menu left on the root by every level (`test_return_to_title`: two pause menus
-    take the same Escape);
-  - a copy of the HUD left on the root by every level (`test_return_to_title`: the node counts
-    grow from one Continue to the next);
-  - Quit Game saving the live floor (`test_quit_game`);
-  - pause state written into the save (`test_return_to_title`, `test_save_manager`);
-  - an unnecessary save version 4 (`test_return_to_title`, `test_save_manager`);
-  - the quit test's helper accepting a save file outside `user://test_saves/` (`test_quit_game`:
-    given the player's save path, a `test_saves/../` path or none, the helper played on, was refused
-    by SaveManager and stopped at its 60 s watchdog, exit 4, instead of refusing at once, exit 2);
-  - the stairs' deferred level change running in a frozen game (the Phase 9 behaviour)
-    (`test_pause_menu`);
-  - Escape opening the pause menu over GAME OVER (`test_pause_menu`);
-  - the pause menu opening without pausing the game (`test_pause_menu`).
-- **Real playthrough** (the scratch copy `dc_carl_p10_stress`, the **normal entry point**: the title
-  screen as main scene in a real 1280×720 window, no `-s`; a scratch-only driver autoload pressed
-  keys through Godot's input pipeline, logged, and took screenshots; its save held a Floor 6
-  checkpoint: Carl 80, Donut 40, a potion on A, the Slingshot on W, the Bat on S):
-  1. the title said "Saved at the start of Floor 6 - HP 80 / 100"; **Enter opened Floor 6** with
-     exactly that and the three enemies as authored;
-  2. Carl walked and fired; **Escape: "Paused", Resume selected**; for 2 s every actor and the stone
-     in flight stayed exactly where they were; **Escape: play resumed** and everything moved again;
-  3. **Space opened the action menu; Escape closed it and nothing else** (no pause menu, not
-     paused); Escape again opened the pause menu; **Enter on Resume** closed it;
-  4. **the live floor changed:** Carl hurt and the potion drunk (A emptied), Donut 10, the
-     open-area blob killed;
-  5. **Return to Title: "Return to title? | Progress since entering this floor will be lost.", No
-     selected; Enter (No), Escape: back in the same live floor** (Carl 30, Donut 10, no potion, the
-     blob still dead);
-  6. **Return to Title > Yes: the title in the same process**, "HP 80 / 100" (not 30), the level
-     freed, the save file unchanged, GameState with no floor entry and 100 HP;
-  7. **Continue ×4**, each followed by play and Return to Title: every Continue gave Carl 80, Donut
-     40, the potion on A and the three enemies at full HP where authored, with exactly 2 party
-     members, 3 enemies, 1 HUD, 1 pause menu and no projectiles;
-  8. **GAME OVER: Escape and Space opened nothing**; Enter retried with the Floor 6 checkpoint;
-  9. **Quit Game: the question with No selected; Escape cancelled; then Yes: the game closed
-     (exit 0).**
-- **Real save / restart** (the same copy, separate processes, real windows): Continue on Floor 6,
-  then Carl 60, Donut 10, the potion drunk and the open-area blob killed; pause > Quit Game,
-  cancelled once with Escape, then Yes: **exit 0, the save's SHA-256 unchanged** (its time changes
-  only because Continue rewrites the same checkpoint on entering the floor). **A fresh process**:
-  the title said "HP 80 / 100", and **Continue gave Carl 80, Donut 40, the potion on A and all
-  three enemies**. The same with the window closed by the operating system (`WM_CLOSE`) after the
-  same changes: exit 0, save unchanged, the next launch's Continue restored the same checkpoint.
-- **Visual check** (screenshots inspected) at 1280×720, 640×360 and 1024×768: the pause menu over
-  the dimmed floor, both questions, the action menu, the HUD with the new hint, GAME OVER and the
-  title after Return to Title (with "Version 0.10.0"). All readable and on screen; at 640×360 the
-  HUD text is small but legible, as before. (While paused, a resized window shows the level
-  off-centre because the paused camera does not move; the menus stay centred.)
-  `test_windowed_resolutions.gd` checks the same things by geometry.
-- **Shutdown investigation.**
-  1. *Code review* of everything that runs at teardown: no script has `_exit_tree()`, a
-     close-request handler, threads, timers or file access at shutdown; deferred calls
-     (`Stairs._change_level`, pickups' and enemies' `set_deferred`) and bound tweens (hit flashes,
-     the death fade, the pickup bob) die with their nodes; navigation meshes bake on the main
-     thread; GameState's persistent Inventory/ActionSlots signals are disconnected automatically
-     when level nodes are freed (the Return to Title test counts them: the same every cycle).
-     `change_scene_to_file()` takes the old level out of the tree at once (checked: no physics tick
-     of it runs after Enter on GAME OVER or Return to Title).
-  2. *One real lifecycle defect found and fixed:* stairs + death in one physics tick (see
-     Architecture > Pause menu and the game session). Reproduced on the Phase 9 code: Floor 2
-     opened still paused with no GAME OVER screen, and the save was rewritten with Carl at 0 HP and
-     rejected on loading ("carl.health 0.0 is not a whole number from 1 to max_health"). Fixed in
-     `stairs.gd`, with a regression check in `test_pause_menu.gd`. It is not a crash and does not
-     explain the Phase 9 segfault.
-  3. *Stress runs* (real processes, real windows, the stress copy; "OS close" = a real `WM_CLOSE`
-     sent with `CloseMainWindow()` to that process only; exit code, engine errors, crash markers
-     and the save hash recorded for every run):
+31.0.101.4032, 60 Hz). (Phase 10's full validation record is in `PROJECT_STATE.md` at commit
+`8dff143`; its shutdown findings are summarised below.) Anything that could write a real save ran
+either as a guarded test (`-s`, its own file in `user://test_saves/`) or in a scratch copy of the
+project whose only differences were its own `custom_user_dir_name` (and, where keys were driven, a
+scratch-only driver autoload): `dc_carl_p11_baseline`, `dc_carl_p11_nosave`, `dc_carl_p11_stress`,
+`dc_carl_p11_mutation`. The scratch copies kept the project's renderer settings untouched.
+- **Baseline before changes:** HEAD `8dff143` = `origin/main`, clean tree. The Phase 10 suite, in a
+  scratch export of HEAD with its own user-data folder (so the baseline wrote nothing into the old
+  shared folder), passed **27 of 27** (725 s). The normal entry point (title screen, real window, no
+  script) ran 240 frames there: exit 0, no engine errors, "OpenGL API 3.3.0 - Build 31.0.101.4032"
+  (native OpenGL, as Phase 10 was).
+- **Save locations, before and after** (read-only snapshots: every file's size, time and SHA-256,
+  every folder's time):
+  - *old shared folder* `%APPDATA%\Godot\app_userdata\Carl & Donut Dungeon Prototype\`: 46 entries,
+    including `savegame.json` (281 bytes, 13:38:00, SHA-256 `597663e4d90c…`, the codex project's
+    format) and logs from the Phase 10 runs. **At the end of Phase 11 all 46 entries were
+    identical**: nothing in Phase 11 read, wrote, moved or deleted anything there;
+  - *new production folder* `%APPDATA%\DC CARL\`: did not exist at the start. The Phase 11 tests
+    and one normal title launch created it with `logs/`, `shader_cache/` and an empty
+    `test_saves/`. **`savegame.json` does not exist there** (no automated test and no game run
+    created it);
+  - *scratch folders*: only the `dc_carl_p11_*` folders above held saves.
+- **User-data folder at run time:** `OS.get_user_data_dir()` = `C:/Users/Owner/AppData/Roaming/DC
+  CARL` (`test_project_setup.gd`, printed). A normal launch of the real project (title screen, no
+  script) wrote its `logs/godot.log` into `%APPDATA%\DC CARL\logs\`, and nothing into the old
+  folder.
+- **Renderer at run time:** a normal launch of the real project prints
+  "OpenGL API OpenGL ES 3.0 (ANGLE 2.1.1 git hash: aaebda1c5a40) - Compatibility - Using Device:
+  Google Inc. (Intel) - ANGLE (Intel, Intel(R) UHD Graphics (0x000046A3) Direct3D11 vs_5_0 ps_5_0,
+  D3D11-31.0.101.4032)", and `RenderingServer.get_current_rendering_driver_name()` is
+  **`opengl3_angle`** (method `gl_compatibility`) in every windowed run: the resolution test and
+  all 234 stress processes and the 8 other validation runs below. No `--rendering-driver` argument was
+  used for any of them.
+- **Test suite:** `run_all.gd` passed **29 of 29** (729 s) on the final code. New: `test_project_setup.gd`
+  (55 checks), `test_title_quit.gd` (56 checks, three real child processes).
+  Changed: `test_windowed_resolutions.gd` (189 checks, real window, now under ANGLE),
+  `quit_game_child.gd` (two title modes), `game_test.gd` and `test_surface_traversal.gd` (a run that
+  ends before `finish()` fails; see Mutation checks). An earlier full run, before that harness change,
+  also passed 29 of 29 (736 s).
+- **Mutation checks** (a scratch copy with its own `config/name` and user-data folder, so no
+  mutation could reach `DC CARL` or the old folder; each mutation applied, its tests run, the file
+  restored; "caught" = FAIL lines or an exit code the unmutated copy does not have):
+  - custom user dir disabled (`test_project_setup`: "Use Custom User Dir is on", the folder is
+    `Godot/app_userdata/...`);
+  - custom dir name back to the shared name "Carl & Donut Dungeon Prototype" (`test_project_setup`);
+  - Windows driver back to native `opengl3` (`test_project_setup`, and `test_windowed_resolutions`
+    in a real window: "on Windows it runs through ANGLE (opengl3_angle): opengl3");
+  - save format bumped to 4 (`test_project_setup`, `test_save_manager`);
+  - title Quit rewriting the loaded save (`test_title_quit`: the file was rewritten after the floor
+    entry);
+  - title Quit saving a new run when there is no save (`test_title_quit`: a file was created);
+  - Quit Game as the first title selection (`test_title_quit`, `test_save_game`,
+    `test_surface_traversal`). **This one exposed a gap in the test harness:** a test that pressed
+    Enter on the title quit its own process through the game's `get_tree().quit()`, with exit code
+    0, before `finish()` could report its failed checks, so `test_save_game.gd` "passed". Fixed:
+    `game_test.gd` (and `test_surface_traversal.gd`, which has its own harness) now fail with exit
+    code 1 in `_finalize()` when the run ends before `finish()`. The quit child, which the game is
+    meant to end, opts out. After the fix all three tests catch it;
+  - tests allowed to use the production `savegame.json` (the guard always allowing)
+    (`test_save_isolation`, `test_project_setup`);
+  - Return to Title keeping the stale in-memory run (`test_return_to_title`, `test_title_quit`: the
+    child's GameState still held the floor entry when it quit).
+  **All 9 caught.**
+- **ANGLE shutdown stress** (real processes and windows, the project's default renderer with no
+  override, the scratch copies `p11_stress` (a Floor 6 save) and `p11_nosave`; "OS close" = a real
+  `WM_CLOSE` sent with `CloseMainWindow()` to that process only; for every run: exit code, the
+  driver the game reported, engine errors, crash markers, the save hash, and Windows Error
+  Reporting events 1000/1001 for Godot since the batch started):
 
-     | Run | Renderer | Runs | Exit 0 | Crashed (0xC0000005) |
-     |-----|----------|------|--------|----------------------|
-     | Title screen, OS close | OpenGL (Intel driver) | 60 | 58 | 2 |
-     | Continue, play (walk, punch, fire, swing), OS close mid-play | OpenGL | 20 | 20 | 0 |
-     | Continue, play, pause menu > Quit Game > Yes | OpenGL | 60 | 56 | 4 |
-     | 10 × (Continue, play, Return to Title), then Quit Game | OpenGL | 3 processes (30 cycles) | 3 | 0 |
-     | Phase 9 code (`042d76b`), title screen, OS close | OpenGL | 60 | 59 | 1 |
-     | Empty Godot project (one Label), OS close | OpenGL | 40 | 40 | 0 |
-     | Title screen, OS close | ANGLE (Direct3D 11) | 40 | 40 | 0 |
-     | Continue, play, pause menu > Quit Game > Yes | ANGLE | 60 | 60 | 0 |
-     | Continue, play, OS close mid-play | ANGLE | 20 | 20 | 0 |
+  | Run | Renderer reported | Processes | Exit 0 | Crashed | WER entries |
+  |-----|-------------------|-----------|--------|---------|-------------|
+  | Title screen, OS close | `opengl3_angle` | 60 | 60 | 0 | 0 |
+  | Title screen > Quit Game, with a save | `opengl3_angle` | 40 (+10, see below) | 50 | 0 | 0 |
+  | Title screen > Quit Game, no save | `opengl3_angle` | 20 (+1 smoke run) | 21 | 0 | 0 |
+  | Continue, play (walk, punch, fire, swing), pause > Quit Game > Yes | `opengl3_angle` | 60 | 59 | 0 | 0 |
+  | the same, supplementary batch | `opengl3_angle` | 20 | 20 | 0 | 0 |
+  | Continue, play, OS close mid-play | `opengl3_angle` | 20 | 20 | 0 | 0 |
+  | 10 × (Continue, play, Return to Title > Yes), then title > Quit Game | `opengl3_angle` | 3 (30 cycles) | 3 | 0 | 0 |
 
-     No run printed an engine error, warning or script error; every run left the save file with
-     the same hash (no corruption, no mid-floor write); every Return to Title cycle came back with
-     the same node counts.
-  4. *Where the crashes are:* Windows Error Reporting (Application log, events 1000/1001) recorded
-     **every one of them as an `APPCRASH` in `igxelpicd64.dll`**, Intel's OpenGL driver (version
-     31.0.101.4032, built in 2022), **at the same offset `0x1ba457`**, exception `0xc0000005`.
-     Godot's own crash handler printed nothing, because the fault comes after the engine has shut
-     down, while the driver is torn down at process exit. It happens with no level loaded (the
-     title screen), with the Phase 9 code, and after an ordinary OS close, so it is not caused by
-     Phase 10's pause or quit code, by gameplay nodes, or by anything this project runs at
-     shutdown. With the same game on the same GPU driven through ANGLE (Direct3D 11) instead of
-     OpenGL, it never happened.
-  5. *Conclusion:* **the intermittent crash on exit reproduces (about 4 % of real exits with the
-     OpenGL driver), and where it happens is identified: inside the Intel OpenGL driver, at process
-     exit.** Phase 10 does not fix it: nothing in the project's code causes it, so no code change
-     here can. It never damaged the save (saves are written only on floor entry, through a
-     temporary file and a rename; nothing writes at exit). Phase 9's single crash (exit 139, no
-     backtrace) looks the same, but Windows has no record of it, so that is **consistent with, not
-     proven**. Options for the owner are in Known issues ("Crash on closing"); none was applied,
-     because changing the renderer's driver is a project-wide choice this phase did not ask for.
-- **The player's save.** `%APPDATA%\Godot\app_userdata\Carl & Donut Dungeon Prototype\savegame.json`
-  was 389 bytes, modified 12:48:09, SHA-256 `ebb26958…6746a` at the start. At 13:38:00 it was
-  replaced by a 281-byte file in **another project's format** (`"hp"`, `"max_hp"`,
-  `"owned_reusables"`, `"slots"`, `save_version` 2), which this project's `SaveManager` cannot
-  write. It came from the sibling project `../codex`: its `project.godot` has the same
-  `config/name`, so it shares this user-data folder (its folder was modified at 13:37, and its
-  `save_manager.gd` uses `owned_reusables`). No Phase 10 run wrote it: game-mode runs all used their
-  own folders, and every run in this project was a guarded test (`-s`) or an import.
-  From 13:38:00 to the end of the phase it stayed as it was (281 bytes, SHA-256 `597663e4…`).
-  No test file is left in `test_saves/`, and no save file is tracked by Git.
+  **No ANGLE run crashed** and Windows logged no crash for any Godot process. One pause-Quit run
+  (#12 of 60) did not exit on its own and is **not** counted as clean: its game was still running,
+  responsive and unpaused 90 s later. Its HUD showed the slots reassigned (`W: Fists  A: —  S: —
+  D: Potion x1`), which only the action menu can do, and only Space opens that. The scenario never
+  sends Space, so keyboard input from outside the driver reached the window (each stress window
+  takes focus when it opens), and the scripted Escape/Down/Enter never reached Yes. It was not a
+  shutdown fault: closed with `WM_CLOSE`, it exited at once, with no crash record. (Its exit code
+  could not be read: the shell that closed it had not started it.) The supplementary 20 runs were
+  all clean. The "+10" title-Quit runs were meant as a native-OpenGL diagnostic, but the wrapper
+  dropped the `--rendering-driver` argument, so they ran ANGLE (they report `opengl3_angle`); they
+  are counted here as ANGLE runs. Every run left the save file with the same hash, and every
+  Return to Title cycle came back with the same node counts (2 party members, 3 enemies, 1 HUD,
+  1 pause menu; 0 or 1 stone in flight).
+- **Native OpenGL diagnostic sample (not a stress test):** 10 title > Quit Game runs with
+  `--rendering-driver opengl3` (reported `opengl3`, "OpenGL API 3.3.0 - Build 31.0.101.4032"):
+  10 exited with 0. Too few runs to say anything about a fault seen in about 1 exit in 25; it only
+  shows that the diagnostic override still works.
+- **Phase 10's native OpenGL findings (history, unchanged):**
+
+  | Run (Phase 10) | Renderer | Runs | Crashed (0xC0000005) |
+  |----------------|----------|------|----------------------|
+  | Title screen, OS close | OpenGL (Intel driver) | 60 | 2 |
+  | Continue, play, OS close mid-play | OpenGL | 20 | 0 |
+  | Continue, play, pause > Quit Game > Yes | OpenGL | 60 | 4 |
+  | 10 × Return to Title cycles, then Quit Game | OpenGL | 3 processes | 0 |
+  | Phase 9 code, title screen, OS close | OpenGL | 60 | 1 |
+  | Empty Godot project, OS close | OpenGL | 40 | 0 |
+  | Title / pause Quit / mid-play close | ANGLE (command-line override) | 120 | 0 |
+
+  Every crash was an `APPCRASH` in `igxelpicd64.dll` (Intel's OpenGL driver 31.0.101.4032) at offset
+  `0x1ba457`, after the engine had shut down. Phase 11's change is the mitigation (Windows now
+  defaults to ANGLE), not a fix: the Intel driver was not updated and Godot was not changed.
+- **New-folder persistence** (scratch copy `p11_nosave`: the same settings, only the folder named
+  `dc_carl_p11_nosave`, so the check could not create your real save): the title said "No saved game
+  yet."; **New Game wrote `savegame.json` into that folder** (reported path
+  `C:/Users/Owner/AppData/Roaming/dc_carl_p11_nosave/savegame.json`, version 3, Surface, Carl 100,
+  Donut 60, Fists on D); Carl was hurt to 70; pause > Quit Game > Yes: exit 0, save unchanged. **A
+  new process:** "Saved at the start of The Surface - HP 100 / 100"; Continue gave Carl 100, Donut
+  60 (the checkpoint, not 70); Quit: exit 0. The old shared save kept its hash and time throughout.
+  The real `DC CARL` folder was checked separately (above): it is the folder the real project uses,
+  and it still has no save.
+- **Title Quit, real processes:** no save (`test_title_quit` child, and the 21 runs above): exit 0,
+  no file created. With a save (child, and the 50 runs): exit 0, file byte-identical and not
+  rewritten. After Gameplay > Return to Title (child, and the 3 cycle processes): exit 0, the save
+  still the floor-entry checkpoint. Every run started with Continue (with a save) or New Game (no
+  save) selected, never Quit Game.
+- **Playthrough under ANGLE** (the Phase 10 scripted playthrough, `p11_stress`, real window): the
+  title with the Floor 6 save; Continue; Escape froze everything for 2 s (actors, state unchanged);
+  Escape resumed; Space opened the action menu, Escape closed only it; Escape again opened the pause
+  menu; Enter on Resume; live changes (Carl 20, Donut 10, potion drunk, a blob killed); Return to
+  Title > No kept them; > Yes: the title said HP 80, the level was freed, the save unchanged,
+  GameState cleared; Continue ×4, each with 2 party members, 3 enemies, 1 HUD, 1 pause menu; GAME
+  OVER: Escape and Space opened nothing, Enter retried; Quit Game question (No selected), Escape
+  cancelled, Yes quit: exit 0. Then a combat run: a stone and a Spitting Blob glob in flight at each
+  size, and the Bat hitting a Gelatinous Blob for 20 and pushing it 80 px.
+- **Visual check under ANGLE** (screenshots inspected) at 1280×720, 640×360 and 1024×768: the title
+  with no save (Continue greyed, New Game selected, Quit Game) and with Quit Game selected; the title
+  with the Floor 6 save (Continue selected) and with Quit Game selected; ordinary gameplay with the
+  HUD; a stone and a glob in flight next to Carl and the Spitting Blob; the Bat's swing with the
+  blob pushed; the action menu; the pause menu; the Return to Title and Quit questions; GAME OVER;
+  the title after Return to Title. Everything is drawn as in Phase 10 (colours, text, tiles, the
+  dim layers); nothing is missing or garbled. At 640×360 the text is small but legible, as before.
+  The grey margins are outside the level's edge, and the off-centre view at GAME OVER after a
+  resize is the known paused-camera limitation.
+- **Codex project:** nothing under `../codex` was opened for writing, run or changed; its folder
+  is outside this repository and this phase.
+- No test file is left in `test_saves/`, and no save file is tracked by Git.
 
 ## Known issues / limitations
+- **Title screen and project setup (Phase 11 placeholders and simplifications):**
+  - Quit Game on the title quits without asking, by design (nothing can be lost there);
+  - a save made before Phase 11 is not offered (see "The old shared user-data folder" below);
+  - there is no in-game graphics or renderer option, by design; Windows always asks for ANGLE, and
+    Godot's default `fallback_to_native` would start native OpenGL only if ANGLE cannot start;
+  - the stress windows take the keyboard focus as they open, so typing elsewhere during a stress
+    run can reach a game window (it happened once in Phase 11; see Validation performed);
+  - in a *broken* test run where the game quits the test process mid-test (only seen with an
+    injected regression), the headless process sometimes ends with an access violation
+    (`0xC0000005`) instead of exit code 1. Either way the run fails; normal test runs never
+    do this.
 - **Pause menu (Phase 10 placeholders and simplifications):**
   - keyboard only (no mouse), three options only: no settings, volume, key rebinding or
     save-anywhere (out of scope);
-  - the title screen has no Quit option: close the window there (nothing is lost; the game
-    saves only on entering a floor);
   - Return to Title and Quit Game drop everything since the floor was entered, by design: that
     is what the question warns about;
   - closing the window (or Alt+F4) quits at once without asking, the same as Quit Game > Yes;
@@ -1318,27 +1424,25 @@ in `PROJECT_STATE.md` at commit `042d76b`.)
     during its push restarts the push;
   - enemies still have no invulnerability after a hit: Donut can scratch a blob while it is
     being pushed.
-- **Crash on closing (Intel OpenGL driver; found in Phase 10, not fixed).** On this machine about
-  1 real exit in 25 ends in an access violation (exit code `-1073741819` / `0xC0000005`, no Godot
-  backtrace) *after* the game has shut down. Windows Error Reporting puts every one of them in
-  `igxelpicd64.dll` (Intel's OpenGL driver, version 31.0.101.4032) at the same offset. It happens on
-  the title screen, after a normal window close, and with the Phase 9 code; it never happened
-  through ANGLE (Direct3D 11). Nothing is lost when it happens: the game only saves on entering a
-  floor, never at exit. See Validation performed > Shutdown investigation. Options, not applied
-  here:
-  - update the Intel graphics driver (31.0.101.4032 dates from 2022), then re-run the stress test;
-  - or run the Compatibility renderer through ANGLE on Windows: the project setting
-    `rendering/gl_compatibility/driver.windows = "opengl3_angle"`, or `--rendering-driver
-    opengl3_angle` for one run. That changes the graphics path for everyone, so it is the owner's
-    call; the tests and the visual check would then need repeating on it.
-- **This project shares its user-data folder with `../codex`.** Both `project.godot` files say
-  `config/name="Carl & Donut Dungeon Prototype"`, so both games use
-  `%APPDATA%\Godot\app_userdata\Carl & Donut Dungeon Prototype\` and overwrite each other's
-  `savegame.json` (during Phase 10 the file here was replaced by one in the codex project's
-  format). This
-  game then shows "Save data could not be loaded." (it never loads another format), and New Game
-  replaces the file. Giving one project its own `config/custom_user_dir_name` (or another name)
-  separates them, but moves that project's save; not changed here.
+- **Crash on closing with Intel's native OpenGL driver (found in Phase 10; avoided by default
+  since Phase 11, not fixed).** With native OpenGL, about 1 real exit in 25 on this machine ended in
+  an access violation (exit code `-1073741819` / `0xC0000005`, no Godot backtrace) *after* the game
+  had shut down. Windows Error Reporting put every one in `igxelpicd64.dll` (Intel's OpenGL driver,
+  version 31.0.101.4032, from 2022) at the same offset, on the title screen too and with the Phase 9
+  code. That is still a driver/environment issue: neither the Intel driver nor Godot was changed
+  or fixed. Since Phase 11 the project runs through ANGLE (Direct3D 11) on Windows by default, so a
+  normal launch no longer uses that path; Phase 11's ANGLE stress runs gave **0 crashes in 234 real processes** (see
+  Validation performed (Phase 11)). Native OpenGL is still reachable for diagnosis
+  (`--rendering-driver opengl3`) and would still show the crash. Updating the Intel driver was
+  deliberately not done here (machine administration, outside the project). Nothing is lost if it
+  happens: the game saves only on entering a floor, never at exit.
+- **The old shared user-data folder is left as it was.** Until Phase 10 this project and `../codex`
+  (same `config/name`) both used `%APPDATA%\Godot\app_userdata\Carl & Donut Dungeon Prototype\`.
+  This project now uses `%APPDATA%\DC CARL\` and never looks at the old folder, so a save made
+  before Phase 11 is not offered (by design; its `savegame.json` currently holds the codex
+  project's format). To keep an old save of this game's own format, copy it by hand into
+  `%APPDATA%\DC CARL\` (the game checks it like any save). `../codex` still uses the old folder;
+  that is its own business (it was not changed).
 - **Donut and party targeting (Phase 8 placeholders and simplifications):**
   - the downed look is a placeholder: her shapes greyed and turned on their side, and a small
     "DOWNED" label; no animation, sound or particle. Scratch shows only a brief orange circle;
@@ -1427,31 +1531,31 @@ in `PROJECT_STATE.md` at commit `042d76b`.)
   the runtime load check. By design, this is not worked around.
 
 ## Manual verification required
-Your own save is `%APPDATA%\Godot\app_userdata\Carl & Donut Dungeon Prototype\savegame.json`.
-Phase 10 reads it exactly as Phase 9 did (still version 3). Tests never touch that file, and
-nothing in Phase 10 writes it except, as always, entering a floor or starting a new game.
-1. Open the project in Godot 4.7.2 and let it import the new files (the pause menu). The Output
-   panel should show no errors.
-2. Press **F5**, **Continue** (or New Game and go down to any floor with enemies). Note your HP.
-3. Press **Escape**: "Paused" with Resume / Return to Title / Quit Game appears and everything
-   stops: enemies, Donut, stones and globs in the air. Wait a few seconds; nothing moves.
-4. **Escape** again: play carries on exactly where it was.
-5. **Space** opens the action menu; **Escape** closes it, and only it (no pause menu). Escape
-   again opens the pause menu; **Enter** on Resume closes it.
-6. Lose some HP (or drink a potion, or kill an enemy). Escape, **Down**, **Enter** (Return to
-   Title): the question says progress since entering this floor will be lost, with **No**
-   selected. **Enter** (No): back in the pause menu. **Escape**: back in the game, nothing lost.
-7. Escape, Down, Enter, **Down** (Yes), **Enter**: the title screen, without restarting. It
-   shows the HP you had on entering the floor, not your current HP. **Enter** (Continue): the
-   floor starts over from its entry, with its enemies back. Repeat a few times.
-8. Escape, Down, Down (Quit Game), Enter: the quit question, No selected. Escape cancels. Enter,
-   Down, Enter: the game closes. **F5**, Continue: the same floor-entry checkpoint.
-9. Let Carl lose: GAME OVER. Escape and Space do nothing; Enter retries as before.
-10. If the game ever crashes while closing, see Known issues ("Crash on closing").
+From Phase 11 your save is `%APPDATA%\DC CARL\savegame.json`. At the end of Phase 11 that file
+did not exist yet: nothing in Phase 11 created it (the tests never touch it; every game-mode run
+used a scratch copy with its own folder). The old
+`%APPDATA%\Godot\app_userdata\Carl & Donut Dungeon Prototype\` folder is no longer read or written.
+1. Open the project in Godot 4.7.2 and let it import the changes. The Output panel should show no
+   errors. Its first line about the renderer should mention **ANGLE** and **Direct3D11**
+   ("OpenGL API OpenGL ES 3.0 (ANGLE …) … Direct3D11 …"), not "OpenGL API 3.3.0 - Build …".
+2. Press **F5**. The title says "No saved game yet.", Continue is greyed out, **New Game** is
+   selected and **Quit Game** is below it. (Your old save is not offered: see Known issues.)
+3. **Down**: Quit Game is selected. **Down** again: back to New Game. **Up**: Quit Game. **Enter**:
+   the game closes at once, with no question. `%APPDATA%\DC CARL\` has no `savegame.json`.
+4. **F5**, **Enter** (New Game): the Surface. `%APPDATA%\DC CARL\savegame.json` now exists (and
+   nothing changes in the old folder). Go down a floor or two, then Escape > Quit Game > Yes.
+5. **F5**: the title offers **Continue** (selected), New Game and Quit Game, and says where you
+   saved. **Enter**: the saved floor. Escape > Return to Title > Yes: the title again. **Down,
+   Down, Enter** (Quit Game): the game closes; the save file's date does not change.
+6. The Phase 10 checks still apply: Escape pauses and freezes everything, Space/Escape in the
+   action menu, the Return to Title and Quit questions (No selected), GAME OVER waits for Enter.
+7. Close and relaunch a number of times (title, mid-play window close, pause > Quit Game). No
+   exit should crash. If one does, note how you launched it (a `--rendering-driver opengl3` run is
+   expected to be able to crash; see Known issues).
 
 ## Next phase
-Phase 11 is **not specified** here. Provide its prompt, with acceptance criteria, after
-Phase 10 is reviewed. (Stairs that open only after goals or events, and countdown timers,
+Phase 12 is **not specified** here. Provide its prompt, with acceptance criteria, after
+Phase 11 is reviewed. (Stairs that open only after goals or events, and countdown timers,
 discussed as possible future designs, were deliberately not started.)
 
 Groundwork for later phases:

@@ -12,9 +12,11 @@ config_version=5
 
 config/name="Carl & Donut Dungeon Prototype"
 config/description="Original 2D top-down action dungeon crawler prototype (private learning/fan project)."
-config/version="0.10.0"
+config/version="0.11.0"
 run/main_scene="res://scenes/ui/title_screen.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
+config/use_custom_user_dir=true
+config/custom_user_dir_name="DC CARL"
 
 [autoload]
 
@@ -102,5 +104,6 @@ common/physics_interpolation=true
 
 [rendering]
 
+gl_compatibility/driver.windows="opengl3_angle"
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"

@@ -4,6 +4,11 @@ extends Control
 ##   checkpoint (GameState.continue_from()) and opens that floor.
 ## - New Game starts a new run on the Surface. The Surface's checkpoint then replaces the save,
 ##   so if a save file exists (loadable or not) the menu asks first, with No selected.
+## - Quit Game (Phase 11) closes the game at once, without asking: nothing on the title screen
+##   can be lost, because the save is only ever written on entering a floor.
+## Up/Down go round the options on offer (Continue only when it is available). The first
+## selection is Continue when it is available and New Game otherwise, never Quit Game, so an
+## Enter pressed as the title opens cannot close the game.
 ## An unloadable save never stops the game: Continue stays unavailable, a short message says
 ## so, and New Game still works.
 ## Phase 10: the pause menu's Return to Title comes back here in the same process. The title
@@ -17,7 +22,7 @@ const DISABLED_COLOR := Color(0.42, 0.44, 0.5)
 const ERROR_COLOR := Color(1.0, 0.5, 0.45)
 const INFO_COLOR := Color(0.62, 0.65, 0.72)
 
-enum Option { CONTINUE, NEW_GAME }
+enum Option { CONTINUE, NEW_GAME, QUIT }
 
 ## First level of a new game.
 @export_file("*.tscn") var start_scene_path: String = "res://scenes/levels/surface.tscn"
@@ -31,6 +36,7 @@ var _confirm_yes := false
 @onready var version_label: Label = %VersionLabel
 @onready var continue_row: Label = %ContinueRow
 @onready var new_game_row: Label = %NewGameRow
+@onready var quit_row: Label = %QuitRow
 @onready var save_info_label: Label = %SaveInfoLabel
 @onready var confirm_panel: Control = %ConfirmPanel
 @onready var confirm_dim: Control = %ConfirmDim
@@ -56,18 +62,23 @@ func _unhandled_input(event: InputEvent) -> void:
 		_handle_confirm_input(event)
 	elif event.is_action_pressed(&"move_up", true) or event.is_action_pressed(&"move_down", true):
 		get_viewport().set_input_as_handled()
-		# There are only two options, and Continue can only be chosen when it is available.
-		if is_continue_available():
-			_selected = Option.NEW_GAME if _selected == Option.CONTINUE else Option.CONTINUE
-			_refresh()
+		# Go round the options on offer; Continue can only be chosen when it is available.
+		var options := _get_available_options()
+		var step := -1 if event.is_action_pressed(&"move_up", true) else 1
+		_selected = options[wrapi(options.find(_selected) + step, 0, options.size())]
+		_refresh()
 	elif event.is_action_pressed(&"ui_confirm_game"):
 		get_viewport().set_input_as_handled()
-		if _selected == Option.CONTINUE:
-			_continue()
-		elif SaveManager.has_save_file():
-			_open_confirm()
-		else:
-			_start_new_game()
+		match _selected:
+			Option.CONTINUE:
+				_continue()
+			Option.NEW_GAME:
+				if SaveManager.has_save_file():
+					_open_confirm()
+				else:
+					_start_new_game()
+			Option.QUIT:
+				_quit()
 
 
 func is_continue_available() -> bool:
@@ -76,6 +87,17 @@ func is_continue_available() -> bool:
 
 func is_confirming() -> bool:
 	return _confirming
+
+
+func get_selected_option() -> Option:
+	return _selected
+
+
+## The options Up/Down go through, top to bottom.
+func _get_available_options() -> Array[Option]:
+	if is_continue_available():
+		return [Option.CONTINUE, Option.NEW_GAME, Option.QUIT]
+	return [Option.NEW_GAME, Option.QUIT]
 
 
 ## Loads the save to decide what the menu offers.
@@ -109,6 +131,12 @@ func _start_new_game() -> void:
 	GameState.start_new_run()
 	# The Surface saves its checkpoint when it starts, which replaces any old save.
 	get_tree().change_scene_to_file(start_scene_path)
+
+
+## Closes the game, the same way the pause menu's Quit Game does. Nothing is saved and GameState
+## is left as it is: the title screen holds no progress that is not already in the save.
+func _quit() -> void:
+	get_tree().quit()
 
 
 func _open_confirm() -> void:
@@ -154,6 +182,7 @@ func _refresh() -> void:
 		continue_row.text = "   Continue"
 		continue_row.add_theme_color_override(&"font_color", DISABLED_COLOR)
 	_style_row(new_game_row, "New Game", _selected == Option.NEW_GAME and not _confirming)
+	_style_row(quit_row, "Quit Game", _selected == Option.QUIT and not _confirming)
 	_style_row(no_row, "No", not _confirm_yes)
 	_style_row(yes_row, "Yes", _confirm_yes)
 

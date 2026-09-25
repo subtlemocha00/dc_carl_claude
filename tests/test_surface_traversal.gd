@@ -33,6 +33,7 @@ class ErrorRecorder extends Logger:
 
 var _failures := PackedStringArray()
 var _error_recorder := ErrorRecorder.new()
+var _finished := false
 
 
 func _initialize() -> void:
@@ -256,6 +257,7 @@ func _send_key(key: Key, pressed: bool) -> void:
 
 
 func _finish() -> void:
+	_finished = true
 	_steer(Vector2.ZERO)
 	root.get_node("SaveManager").delete_save()
 	for message in _error_recorder.messages:
@@ -267,3 +269,14 @@ func _finish() -> void:
 		for failure in _failures:
 			printerr("FAIL: " + failure)
 		quit(1)
+
+
+## A run that ends without reaching _finish() did not complete: the game quit the process (for
+## example Enter on a Quit Game the test did not mean to select). Fail instead of exiting with 0.
+func _finalize() -> void:
+	if _finished:
+		return
+	for failure in _failures:
+		printerr("FAIL: " + failure)
+	printerr("FAIL: the test ended before _finish(): something quit the game while it ran")
+	quit(1)
