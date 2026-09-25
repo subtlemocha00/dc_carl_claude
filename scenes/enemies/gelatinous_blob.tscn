@@ -59,6 +59,7 @@ reach = 0.0
 hit_radius = 19.0
 cooldown = 0.8
 target_layers = 16
+max_targets = 1
 show_flash = false
 
 [node name="Health" type="Node" parent="."]

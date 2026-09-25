@@ -3,22 +3,43 @@ extends SceneTree
 ## _initialize(), and ends with finish().
 ## Any engine error or warning logged while the test runs also counts as a failure.
 ## Every test saves into its own file under TEST_SAVE_FOLDER, which is deleted when the test
-## starts and finishes, so tests never read or write a player's save.
+## starts and finishes, so tests never read or write a player's save. SaveManager enforces
+## this too (Phase 8): in a test run it refuses, with an error, any file outside that folder,
+## including the player's save, so a test that never chose its own file fails instead of
+## touching it (see test_save_isolation.gd).
 
-## Where tests keep their save files (never SaveManager.DEFAULT_SAVE_PATH).
+## Where tests keep their save files (never SaveManager.DEFAULT_SAVE_PATH). The same folder as
+## SaveManager.TEST_SAVE_FOLDER.
 const TEST_SAVE_FOLDER := "user://test_saves/"
 
 
 ## Records engine errors and warnings (push_error, failed checks inside Godot, and so on).
 class ErrorRecorder extends Logger:
+	## "text (file:line)" for each error or warning.
 	var messages := PackedStringArray()
+	## The same errors' text alone, as the engine prints it after "ERROR: ".
+	var texts := PackedStringArray()
 	var _mutex := Mutex.new()
 
 	func _log_error(_function: String, file: String, line: int, code: String, rationale: String,
 			_editor_notify: bool, _error_type: int, _script_backtraces: Array[ScriptBacktrace]) -> void:
+		var text := rationale if not rationale.is_empty() else code
 		_mutex.lock()
-		messages.append("%s (%s:%d)" % [rationale if not rationale.is_empty() else code, file, line])
+		messages.append("%s (%s:%d)" % [text, file, line])
+		texts.append(text)
 		_mutex.unlock()
+
+	## Returns the messages recorded so far and forgets them. Each one's text is printed as
+	## "EXPECTED ERROR: <text>", so run_all.gd excuses the engine's "ERROR: <text>" line for it.
+	func take() -> PackedStringArray:
+		_mutex.lock()
+		var taken := messages.duplicate()
+		for text in texts:
+			print("EXPECTED ERROR: " + text)
+		messages.clear()
+		texts.clear()
+		_mutex.unlock()
+		return taken
 
 
 var _failures := PackedStringArray()
@@ -43,6 +64,13 @@ func _use_test_save_file() -> void:
 	var test_name := (get_script() as Script).resource_path.get_file().get_basename()
 	save_manager().save_path = TEST_SAVE_FOLDER + test_name + ".json"
 	save_manager().delete_save()
+
+
+## Returns the engine errors and warnings recorded so far and forgets them, so they do not fail
+## the test (nor, through the "EXPECTED ERROR" lines this prints, run_all.gd). Only for a check
+## that provokes an error on purpose and then checks it was reported.
+func take_engine_messages() -> PackedStringArray:
+	return _error_recorder.take()
 
 
 ## The GameState autoload. Test scripts are compiled before autoloads exist, so they cannot

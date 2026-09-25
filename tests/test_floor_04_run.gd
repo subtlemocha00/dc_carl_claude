@@ -2,12 +2,15 @@ extends "res://tests/support/game_test.gd"
 ## Phase 7 end-to-end run on Floor 4, through the real title screen and levels, on this test's
 ## own save file. It starts from a real Phase 6 save (tests/fixtures/phase6_save_v2_floor_03.json:
 ## Floor 3, 70/100 HP, Slingshot on W, 2 potions on S, Fists on D).
-## - Title -> Continue opens Floor 3 with that state; the save it writes on entry is the same file.
-## - Every level's exits lead one floor down, and Floor 4 has none (downward-only).
+## - Title -> Continue opens Floor 3 with that state; the save it writes on entry holds the same
+##   values, as save_version 3 with Donut at full health (Phase 8 migration).
+## - Every level's exits lead one floor down: Floor 4's only exit leads to Floor 5 (Phase 8), and
+##   Floor 5 has none (downward-only).
 ## - Floor 3 -> Floor 4: Carl, Donut and the camera arrive, with no transition loop. Floor 4 has
 ##   its sign, a Gelatinous Blob and a Spitting Blob, and walls that matter: the straight line from
 ##   the blob to Carl's side is blocked, and wall B hides the approach from the Spitting Blob.
-## - The Floor 4 checkpoint is recorded and saved (floor_04, save_version 2, Slingshot owned).
+## - The Floor 4 checkpoint is recorded and saved (floor_04, save_version 3 since Phase 8,
+##   Slingshot owned, Donut's HP).
 ## - The blob walks around wall A to Carl; Fists kill it.
 ## - The Spitting Blob, hidden behind wall B, walks around it and spits only when it can see Carl;
 ##   each glob takes 10 HP. The menu freezes it and its glob.
@@ -31,6 +34,7 @@ const FLOOR_1_PATH := "res://scenes/levels/floor_01.tscn"
 const FLOOR_2_PATH := "res://scenes/levels/floor_02.tscn"
 const FLOOR_3_PATH := "res://scenes/levels/floor_03.tscn"
 const FLOOR_4_PATH := "res://scenes/levels/floor_04.tscn"
+const FLOOR_5_PATH := "res://scenes/levels/floor_05.tscn"
 const BLOB_PATH := "res://scenes/enemies/gelatinous_blob.tscn"
 const SPITTER_PATH := "res://scenes/enemies/spitting_blob.tscn"
 const FISTS: ActionDefinition = preload("res://resources/actions/fists.tres")
@@ -93,16 +97,19 @@ func _continue_phase_6_save() -> bool:
 			and state.action_slots.get_action(W) == SLINGSHOT and state.action_slots.get_action(S) == POTION
 			and state.action_slots.get_action(D) == FISTS and state.action_slots.get_action(A) == null,
 			"Floor 3 opens with 70 HP, the Slingshot on W, 2 potions on S and Fists on D")
-	check(JSON.parse_string(_save_text()) == JSON.parse_string(fixture) and _save().get("save_version") == 2.0,
-			"entering Floor 3 saves exactly the same checkpoint, still save_version 2 (no format change)", _save_text())
+	var migrated: Dictionary = JSON.parse_string(fixture)
+	migrated["save_version"] = 3
+	migrated["donut"] = {"health": 60, "max_health": 60}
+	check(JSON.parse_string(_save_text()) == JSON.parse_string(JSON.stringify(migrated)),
+			"entering Floor 3 saves the same checkpoint as save_version 3, with Donut at 60 / 60", _save_text())
 	return true
 
 
 func _check_downward_only() -> bool:
-	print("-- Every exit leads one floor down; Floor 4 has none")
+	print("-- Every exit leads one floor down; Floor 5 has none")
 	var expected := {
 		SURFACE_PATH: [FLOOR_1_PATH], FLOOR_1_PATH: [FLOOR_2_PATH], FLOOR_2_PATH: [FLOOR_3_PATH],
-		FLOOR_3_PATH: [FLOOR_4_PATH], FLOOR_4_PATH: [],
+		FLOOR_3_PATH: [FLOOR_4_PATH], FLOOR_4_PATH: [FLOOR_5_PATH], FLOOR_5_PATH: [],
 	}
 	for level_path: String in expected:
 		var level: Node = (load(level_path) as PackedScene).instantiate()
@@ -140,7 +147,8 @@ func _check_floor_4() -> bool:
 	var spitters := _enemies(SPITTER_PATH)
 	check(blobs.size() == 1 and blobs[0].global_position == FLOOR_4_BLOB_SPAWN, "Floor 4 has a Gelatinous Blob")
 	check(spitters.size() == 1 and spitters[0].global_position == FLOOR_4_SPITTER_SPAWN, "Floor 4 has a Spitting Blob")
-	check(_destinations(level).is_empty(), "Floor 4 has no exits: nothing leads back up to Floor 3")
+	check(_destinations(level) == [FLOOR_5_PATH], "Floor 4's only exit leads down to Floor 5: nothing leads back up to Floor 3",
+			str(_destinations(level)))
 
 	var state := game_state()
 	check(carl.health.current_health == ENTRY_HP and state.inventory.has(SLINGSHOT) and state.inventory.get_quantity(POTION) == 2
@@ -149,10 +157,11 @@ func _check_floor_4() -> bool:
 	check(entry.scene_path == FLOOR_4_PATH and entry.carl_health == ENTRY_HP and entry.inventory["items"].has(SLINGSHOT.id)
 			and entry.action_slots == {W: SLINGSHOT, S: POTION, D: FISTS}, "Floor 4's entry state is recorded")
 	var save := _save()
-	check(save.get("save_version") == 2.0 and save.get("floor_id") == "floor_04" and save["carl"]["health"] == float(ENTRY_HP)
+	check(save.get("save_version") == 3.0 and save.get("floor_id") == "floor_04" and save["carl"]["health"] == float(ENTRY_HP)
+			and save.get("donut") == {"health": 60.0, "max_health": 60.0}
 			and save.get("owned_items") == ["slingshot"] and save.get("inventory") == {"small_health_potion": 2.0}
 			and save.get("action_slots") == {"action_w": "slingshot", "action_a": null, "action_s": "small_health_potion", "action_d": "fists"},
-			"the Floor 4 checkpoint is saved: floor_04, save_version 2, HP, potions, Slingshot, slots",
+			"the Floor 4 checkpoint is saved: floor_04, save_version 3, HP (Carl's and Donut's), potions, Slingshot, slots",
 			_save_text().replace("\n", " ").replace("\t", ""))
 	_floor_4_save = _save_text()
 	var loaded: FloorEntry = save_manager().load_checkpoint()
@@ -400,7 +409,8 @@ func _new_game_over_floor_4() -> bool:
 	var state := game_state()
 	check(_carl().health.current_health == 100 and state.inventory.get_actions() == [FISTS] and _hud_slots() == "W: —   A: —   S: —   D: Fists",
 			"the new game: 100 HP, no potions, no Slingshot, W/A/S empty, D = Fists", _hud_slots())
-	check(_save().get("floor_id") == "surface" and _save().get("owned_items") == [] and _save().get("save_version") == 2.0,
+	check(_save().get("floor_id") == "surface" and _save().get("owned_items") == [] and _save().get("save_version") == 3.0
+			and _save().get("donut") == {"health": 60.0, "max_health": 60.0},
 			"its Surface checkpoint replaces the Floor 4 save")
 	return true
 

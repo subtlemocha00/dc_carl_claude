@@ -1,9 +1,11 @@
 class_name MeleeAttack
 extends ActionPerformer
-## A short-range attack. Each use damages every Hurtbox inside a circle placed `reach`
-## pixels from this node in the attack direction, then waits `cooldown` seconds.
-## Carl's Fists and the Gelatinous Blob's touch both use this node with different numbers.
-## - The Blob calls attack() itself.
+## A short-range attack. Each use damages the Hurtboxes inside a circle placed `reach`
+## pixels from this node in the attack direction (all of them, or only the nearest
+## `max_targets`), then waits `cooldown` seconds.
+## Carl's Fists, the Gelatinous Blob's touch and Donut's Scratch all use this node with
+## different numbers.
+## - The Blob and Donut call attack() themselves.
 ## - Fists (scenes/actions/fists.tscn) is a MeleeAttack used as an ActionPerformer: Carl
 ##   calls perform() when he uses a slot holding Fists. A future melee weapon is another
 ##   such scene with its own numbers.
@@ -20,6 +22,9 @@ signal performed(direction: Vector2, hit_count: int)
 ## Physics layers of the Hurtboxes this attack may damage. The attacker's own Hurtbox
 ## is on a different layer, which is what stops an attacker from hitting itself.
 @export_flags_2d_physics var target_layers: int = 0
+## How many Hurtboxes one use may damage, nearest to the hit circle's centre first.
+## 0 = every Hurtbox in the circle (Fists). The Blob's touch and Donut's Scratch use 1.
+@export var max_targets: int = 0
 ## Briefly draws the hit circle when the attack is used (placeholder feedback).
 @export var show_flash: bool = true
 @export var flash_color: Color = Color(1, 1, 1, 0.45)
@@ -67,12 +72,14 @@ func perform(direction: Vector2) -> bool:
 	return attack(direction) >= 0
 
 
-## Returns the hittable Hurtboxes currently inside the hit circle, without attacking.
+## Returns the hittable Hurtboxes the attack would damage now, without attacking: those inside
+## the hit circle, limited to the nearest `max_targets` if that is set.
 func find_targets(direction: Vector2) -> Array[Hurtbox]:
+	var center := global_position + direction * reach
 	_hit_shape.radius = hit_radius
 	var query := PhysicsShapeQueryParameters2D.new()
 	query.shape = _hit_shape
-	query.transform = Transform2D(0.0, global_position + direction * reach)
+	query.transform = Transform2D(0.0, center)
 	query.collision_mask = target_layers
 	query.collide_with_areas = true
 	query.collide_with_bodies = false
@@ -82,6 +89,10 @@ func find_targets(direction: Vector2) -> Array[Hurtbox]:
 		var hurtbox := result["collider"] as Hurtbox
 		if hurtbox != null and hurtbox.can_be_hit() and hurtbox not in targets:
 			targets.append(hurtbox)
+	if max_targets > 0 and targets.size() > max_targets:
+		targets.sort_custom(func(a: Hurtbox, b: Hurtbox) -> bool:
+			return a.global_position.distance_squared_to(center) < b.global_position.distance_squared_to(center))
+		targets.resize(max_targets)
 	return targets
 
 

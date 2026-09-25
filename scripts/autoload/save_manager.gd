@@ -3,9 +3,10 @@ extends Node
 ## of the floor Carl last entered. GameState keeps the run in memory; this is the only script
 ## that touches the save file.
 ##
-## The file is JSON with stable ids only, never scene paths or resources (version 2):
-##     {"save_version": 2, "floor_id": "floor_03",
+## The file is JSON with stable ids only, never scene paths or resources (version 3):
+##     {"save_version": 3, "floor_id": "floor_05",
 ##      "carl": {"health": 80, "max_health": 100},
+##      "donut": {"health": 40, "max_health": 60},
 ##      "inventory": {"small_health_potion": 1},
 ##      "owned_items": ["slingshot"],
 ##      "action_slots": {"action_w": "slingshot", "action_a": "small_health_potion",
@@ -13,47 +14,73 @@ extends Node
 ## - "inventory" holds the quantity of each consumable Carl carries.
 ## - "owned_items" lists the reusable items Carl owns. They have no quantity.
 ## - Innate actions (Fists) are never saved in either: every run has them.
+## - "donut" holds Donut's HP on entering the floor (Phase 8). Unlike Carl's it may be 0: she
+##   entered the floor downed. Her recovery countdown is never saved.
 ##
-## Version 1 (Phase 5) had no "owned_items", because there were no reusable items yet. Loading
-## a version 1 file migrates it to version 2 in memory (see _migrate_version_1()). The file on
-## disk is not touched by loading. It becomes version 2 at the next checkpoint save, which
-## happens as soon as Continue opens the saved floor (or a new game starts).
+## Older files are migrated in memory, one version at a time, then checked as version 3:
+## - version 1 (Phase 5) had no "owned_items", because there were no reusable items yet
+##   (_migrate_version_1());
+## - versions 1 and 2 (Phases 5-7) had no "donut", because Donut could not be hurt; she gets
+##   full health, 60 / 60 (_migrate_version_2()).
+## The file on disk is not touched by loading. It becomes version 3 at the next checkpoint save,
+## which happens as soon as Continue opens the saved floor (or a new game starts).
 ##
 ## A save file is untrusted input. Loading it:
 ## - rejects the whole file (the title screen then offers no Continue) if it is not valid JSON,
-##   has an unsupported save_version, an unknown floor, HP that is not a whole number in range,
-##   an unknown item, an innate item, a reusable item with a quantity, a consumable or unknown
-##   item in owned_items, an owned item listed twice, a quantity that is not a whole number
-##   from 0 to MAX_QUANTITY, or slots that are not exactly the four slot names with an id or
-##   null each;
+##   has an unsupported save_version, an unknown floor, HP that is not a whole number in range
+##   (Carl 1 to max_health, Donut 0 to max_health), no "donut" (version 3), an unknown item,
+##   an innate item, a reusable item with a quantity, a consumable or unknown item in
+##   owned_items, an owned item listed twice, a quantity that is not a whole number from 0 to
+##   MAX_QUANTITY, or slots that are not exactly the four slot names with an id or null each;
 ## - empties a slot, but keeps the rest of the save, if the slot names an unknown action or
 ##   an action Carl would not have (a potion with quantity 0, a Slingshot he does not own).
 ##   The same rules as in the game decide that (ActionSlots.assign()).
 ## Ids are only ever looked up in ActionRegistry and FloorRegistry; nothing in the file is ever
 ## used as a path. A rejected file is never changed, and loading reports why in `last_error`
 ## instead of logging an engine error.
+##
+## Test and tool runs can never touch the player's save (Phase 8). A run started with a script
+## as its main loop (godot -s <script>, which is how every test runs) may only read and write
+## files inside TEST_SAVE_FOLDER. Its save_path starts as DEFAULT_SAVE_PATH like the game's, so
+## a test or tool that forgets to choose its own file is refused with an error (which fails the
+## test) instead of silently reading or writing the player's save. The game itself (the title
+## screen as main scene, in the editor or an export) is not affected.
 
 ## The format written by this version. A future format bumps this and adds a migration from
 ## the previous version in decode().
-const SAVE_VERSION := 2
+const SAVE_VERSION := 3
 const DEFAULT_SAVE_PATH := "user://savegame.json"
+## The only place test and tool runs may keep save files.
+const TEST_SAVE_FOLDER := "user://test_saves/"
 const MAX_HEALTH_LIMIT := 1000
 const MAX_QUANTITY := 999
 
-## Where the save lives. Tests point this at their own file so a player's save is never touched.
+## Where the save lives. Tests point this at their own file under TEST_SAVE_FOLDER.
 var save_path: String = DEFAULT_SAVE_PATH
 ## Why the last load_checkpoint() returned null ("" after a successful load).
 var last_error: String = ""
 
 
-## True if a save file exists, loadable or not.
+## True if a save file exists, loadable or not. (Always false for a file this run may not use.)
 func has_save_file() -> bool:
-	return not _find_file_to_load().is_empty()
+	return _check_save_path_allowed() and not _find_file_to_load().is_empty()
+
+
+## True if this run may read and write `path`: always in the game, and only files inside
+## TEST_SAVE_FOLDER in a test or tool run (see the class description).
+func is_save_path_allowed(path: String) -> bool:
+	# The main loop is the SceneTree. It has a script only when the run was started with one.
+	# (Engine.get_main_loop() also works before this node has entered the tree.)
+	if Engine.get_main_loop().get_script() == null:
+		return true
+	return path.simplify_path().begins_with(TEST_SAVE_FOLDER)
 
 
 ## Writes `checkpoint` as the save, replacing the previous one only once the new file is
 ## complete. Returns false (the old save stays as it was) if it could not be written.
 func save_checkpoint(checkpoint: FloorEntry) -> bool:
+	if not _check_save_path_allowed():
+		return false
 	var data := encode(checkpoint)
 	if data.is_empty():
 		return false
@@ -82,6 +109,8 @@ func save_checkpoint(checkpoint: FloorEntry) -> bool:
 ## Reads and checks the save. Returns the checkpoint, or null (with the reason in last_error)
 ## if there is no save or it cannot be trusted.
 func load_checkpoint() -> FloorEntry:
+	if not _check_save_path_allowed():
+		return _reject("a test or tool run may not use %s" % save_path)
 	var path := _find_file_to_load()
 	if path.is_empty():
 		return _reject("there is no save file")
@@ -96,6 +125,8 @@ func load_checkpoint() -> FloorEntry:
 
 ## Deletes the save (and any unfinished temporary file). Does nothing if there is none.
 func delete_save() -> void:
+	if not _check_save_path_allowed():
+		return
 	for path in [save_path, _get_temp_path()]:
 		if FileAccess.file_exists(path):
 			DirAccess.remove_absolute(path)
@@ -126,6 +157,7 @@ func encode(checkpoint: FloorEntry) -> Dictionary:
 		"save_version": SAVE_VERSION,
 		"floor_id": String(floor_id),
 		"carl": {"health": checkpoint.carl_health, "max_health": checkpoint.carl_max_health},
+		"donut": {"health": checkpoint.donut_health, "max_health": checkpoint.donut_max_health},
 		"inventory": quantities,
 		"owned_items": owned_items,
 		"action_slots": slots,
@@ -143,7 +175,9 @@ func decode(data: Variant) -> FloorEntry:
 		return _reject("save_version is missing or not a whole number")
 	match int(version):
 		1:
-			return _decode_current_version(_migrate_version_1(data))
+			return _decode_current_version(_migrate_version_2(_migrate_version_1(data)))
+		2:
+			return _decode_current_version(_migrate_version_2(data))
 		SAVE_VERSION:
 			return _decode_current_version(data)
 	return _reject("save_version %d is not supported (this game reads versions 1 to %d)" % [int(version), SAVE_VERSION])
@@ -163,6 +197,20 @@ func _migrate_version_1(data: Dictionary) -> Dictionary:
 	return migrated
 
 
+## Version 2 -> version 3. Before Phase 8 Donut could not be hurt, so a version 2 (or migrated
+## version 1) checkpoint means she was unhurt: she gets full health, 60 / 60. Anything a version
+## 2 file might hold under "donut" is replaced. Everything else means the same in version 3.
+## Returns a changed copy.
+func _migrate_version_2(data: Dictionary) -> Dictionary:
+	var migrated := data.duplicate(true)
+	migrated["save_version"] = 3
+	migrated["donut"] = {
+		"health": GameState.NEW_RUN_DONUT_MAX_HEALTH,
+		"max_health": GameState.NEW_RUN_DONUT_MAX_HEALTH,
+	}
+	return migrated
+
+
 func _decode_current_version(data: Dictionary) -> FloorEntry:
 	var floor_id: Variant = data.get("floor_id")
 	if not floor_id is String or not FloorRegistry.has_floor(floor_id):
@@ -177,6 +225,17 @@ func _decode_current_version(data: Dictionary) -> FloorEntry:
 		return _reject("carl.max_health %s is not a whole number from 1 to %d" % [JSON.stringify(max_health), MAX_HEALTH_LIMIT])
 	if not _is_whole_number(health) or int(health) < 1 or int(health) > int(max_health):
 		return _reject("carl.health %s is not a whole number from 1 to max_health" % JSON.stringify(health))
+
+	# Donut's HP may be 0: she entered the floor downed.
+	var donut: Variant = data.get("donut")
+	if not donut is Dictionary:
+		return _reject("donut is missing")
+	var donut_max_health: Variant = donut.get("max_health")
+	var donut_health: Variant = donut.get("health")
+	if not _is_whole_number(donut_max_health) or int(donut_max_health) < 1 or int(donut_max_health) > MAX_HEALTH_LIMIT:
+		return _reject("donut.max_health %s is not a whole number from 1 to %d" % [JSON.stringify(donut_max_health), MAX_HEALTH_LIMIT])
+	if not _is_whole_number(donut_health) or int(donut_health) < 0 or int(donut_health) > int(donut_max_health):
+		return _reject("donut.health %s is not a whole number from 0 to max_health" % JSON.stringify(donut_health))
 
 	# Rebuild the inventory through the real Inventory, so the checkpoint holds exactly what
 	# the game itself would have recorded.
@@ -236,6 +295,8 @@ func _decode_current_version(data: Dictionary) -> FloorEntry:
 	checkpoint.scene_path = FloorRegistry.get_scene_path(floor_id)
 	checkpoint.carl_health = int(health)
 	checkpoint.carl_max_health = int(max_health)
+	checkpoint.donut_health = int(donut_health)
+	checkpoint.donut_max_health = int(donut_max_health)
 	checkpoint.inventory = inventory.get_snapshot()
 	checkpoint.action_slots = slots.get_layout()
 	last_error = ""
@@ -243,7 +304,8 @@ func _decode_current_version(data: Dictionary) -> FloorEntry:
 
 
 ## The file load_checkpoint() reads: the save, or else a finished temporary file left behind
-## if the game stopped between writing it and renaming it. "" if there is neither.
+## if the game stopped between writing it and renaming it. "" if there is neither. Callers
+## check first that this run may use save_path.
 func _find_file_to_load() -> String:
 	for path in [save_path, _get_temp_path()]:
 		if FileAccess.file_exists(path):
@@ -253,6 +315,15 @@ func _find_file_to_load() -> String:
 
 func _get_temp_path() -> String:
 	return save_path + ".tmp"
+
+
+## Reports an error and returns false if this run may not use save_path (see the class
+## description). Every read, write and delete goes through here first.
+func _check_save_path_allowed() -> bool:
+	if is_save_path_allowed(save_path):
+		return true
+	push_error("SaveManager refused to use %s: a test or tool run may only use save files inside %s. Set SaveManager.save_path first." % [save_path, TEST_SAVE_FOLDER])
+	return false
 
 
 func _reject(reason: String) -> FloorEntry:

@@ -9,7 +9,11 @@ extends "res://tests/support/game_test.gd"
 ## - the Spitting Blob, active but with Carl hidden behind a wall, never spits while he is hidden:
 ##   it walks around the wall without overlapping it, and spits once it can see him; every glob
 ##   reaches Carl, none hits the wall;
-## - neither enemy notices or targets Donut.
+## - Phase 8: Donut is a target like Carl. With Carl far away, a blob that notices Donut behind
+##   the wall walks around it the same way (never overlapping it), reaches her and hurts her by
+##   touch, 10 HP every 0.8 s. Choosing between Carl and Donut is covered by
+##   test_party_targeting.gd.
+## Enemies find their targets themselves (the "party" group), so the arenas only place them.
 ## Navigation maps are rebuilt a few ticks after a change, so every arena waits until the map
 ## holds exactly its mesh (build_navigation_arena() in game_test.gd) before any enemy is added.
 ##
@@ -46,7 +50,7 @@ func _run_checks() -> void:
 	await _check_blob_goes_around_a_wall()
 	await _check_blob_with_no_way_around()
 	await _check_spitter_goes_around_a_wall()
-	await _check_enemies_ignore_donut()
+	await _check_blob_goes_around_a_wall_to_donut()
 	finish()
 
 
@@ -55,7 +59,7 @@ func _check_blob_detection_and_give_up() -> void:
 	if not await _new_arena([WALL]):
 		return
 	var carl := _spawn_carl(Vector2(300, 320))
-	var blob := _spawn_enemy(BLOB_SCENE, Vector2(540, 320), carl)
+	var blob := _spawn_enemy(BLOB_SCENE, Vector2(540, 320))
 	var start := blob.global_position
 	await wait_seconds(1.0)
 	check(not blob.is_active() and blob.global_position == start, "Carl 240 px away: the blob waits where it is")
@@ -79,7 +83,7 @@ func _check_blob_goes_around_a_wall() -> void:
 	if not await _new_arena([WALL]):
 		return
 	var carl := _spawn_carl(Vector2(330, 320))
-	var blob := _spawn_enemy(BLOB_SCENE, Vector2(540, 320), carl)
+	var blob := _spawn_enemy(BLOB_SCENE, Vector2(540, 320))
 	check(not _is_clear(blob.global_position, carl.global_position), "the straight line from the blob to Carl is blocked by the wall")
 	var route := await navigation_route(blob.global_position, carl.global_position)
 	check(route.size() >= 3 and _passes_wall_end(route), "the navigation route bends around the wall", str(route))
@@ -132,7 +136,7 @@ func _check_blob_with_no_way_around() -> void:
 	if not await _new_arena([Rect2(700, 260, 32, 120), splitter]):
 		return
 	var carl := _spawn_carl(Vector2(300, 320))
-	var blob := _spawn_enemy(BLOB_SCENE, Vector2(500, 320), carl)
+	var blob := _spawn_enemy(BLOB_SCENE, Vector2(500, 320))
 	var smallest_clearance := INF
 	for i in 4 * Engine.physics_ticks_per_second:
 		await physics_frame
@@ -155,7 +159,7 @@ func _check_spitter_goes_around_a_wall() -> void:
 		return
 	var carl := _spawn_carl(Vector2(300, 320))
 	carl.health.set_health(1000, 1000)
-	var spitter := _spawn_enemy(SPITTER_SCENE, Vector2(620, 320), carl)
+	var spitter := _spawn_enemy(SPITTER_SCENE, Vector2(620, 320))
 	var shots := []
 	var stops := []
 	(spitter.spit_launcher as ProjectileLauncher).fired.connect(func(glob: Projectile) -> void:
@@ -181,29 +185,43 @@ func _check_spitter_goes_around_a_wall() -> void:
 			"every glob reaches Carl; none hits the wall", str(stops))
 
 
-func _check_enemies_ignore_donut() -> void:
-	print("-- Enemies ignore Donut")
+func _check_blob_goes_around_a_wall_to_donut() -> void:
+	print("-- Donut as the target: the blob walks around a wall to reach her")
 	if not await _new_arena([WALL]):
 		return
+	# Carl is far away (beyond every range); Donut stands still behind the wall.
 	var carl := _spawn_carl(Vector2(60, 60))
 	var donut: CharacterBody2D = DONUT_SCENE.instantiate()
 	donut.follow_target = carl
-	donut.set_physics_process(false)
-	donut.position = Vector2(700, 320)
+	donut.position = Vector2(330, 320)
 	_arena.add_child(donut)
-	var blob := _spawn_enemy(BLOB_SCENE, Vector2(730, 320), carl)
-	var spitter := _spawn_enemy(SPITTER_SCENE, Vector2(700, 470), carl)
-	var shots := [0]
-	(spitter.spit_launcher as ProjectileLauncher).fired.connect(func(_glob: Projectile) -> void: shots[0] += 1)
-	var blob_start := blob.global_position
-	var spitter_start := spitter.global_position
-	await wait_seconds(2.0)
-	check(not blob.is_active() and blob.global_position == blob_start and blob.contact_attack.find_targets(Vector2.ZERO).is_empty(),
-			"a blob next to Donut (Carl far away) stays idle, and its touch finds nothing to hurt")
-	check(not spitter.is_active() and spitter.global_position == spitter_start and shots[0] == 0,
-			"a Spitting Blob with Donut in plain sight (Carl far away) never spits")
-	check(donut.get_node_or_null("Health") == null and donut.get_node_or_null("Hurtbox") == null,
-			"Donut still has nothing enemies could damage")
+	donut.set_physics_process(false)
+	var blob := _spawn_enemy(BLOB_SCENE, Vector2(540, 320))
+	var damage := []
+	donut.health.damaged.connect(func(amount: int) -> void: damage.append([Engine.get_physics_frames(), amount]))
+	var route := await navigation_route(blob.global_position, donut.global_position)
+	var time_limit := route_length(route) / blob.move_speed + 2.0
+	await wait_physics_frames(2)
+	check(blob.target == donut, "Donut 210 px away behind the wall, Carl far away: the blob picks Donut")
+	var smallest_clearance := INF
+	var passed_wall_end := false
+	var ticks := 0
+	while ticks < time_limit * Engine.physics_ticks_per_second and damage.is_empty():
+		await physics_frame
+		ticks += 1
+		smallest_clearance = minf(smallest_clearance, _distance_to_rect(blob.global_position, WALL) - ENEMY_RADIUS)
+		passed_wall_end = passed_wall_end or _beside_wall_end(blob.global_position)
+	check(passed_wall_end and smallest_clearance > -0.5, "it walks around the end of the wall without overlapping it",
+			"closest %.2f px from its face" % smallest_clearance)
+	check(not damage.is_empty() and blob.global_position.x < WALL.position.x,
+			"it reaches Donut on the far side of the wall within %.1f s" % time_limit, "%.1f s" % (ticks / 60.0))
+	await wait_seconds(1.7)
+	var gaps := []
+	for i in range(1, damage.size()):
+		gaps.append(damage[i][0] - damage[i - 1][0])
+	check(damage.size() == 3 and damage.all(func(hit: Array) -> bool: return hit[1] == 10) and gaps.all(func(gap: int) -> bool: return gap == 48),
+			"its touch hurts Donut 10 HP every 0.8 s, like Carl", "hits %s" % [damage])
+	check(donut.health.current_health == 30 and carl.health.current_health == 100, "Donut is at 30 / 60; Carl, far away, is unhurt")
 
 
 ## Replaces the current arena with a new one with a navigation mesh and `walls`.
@@ -222,9 +240,9 @@ func _spawn_carl(at: Vector2) -> CharacterBody2D:
 	return carl
 
 
-func _spawn_enemy(scene: PackedScene, at: Vector2, carl: Node2D) -> Enemy:
+## An enemy in the arena. It finds its target (Carl or Donut) by itself.
+func _spawn_enemy(scene: PackedScene, at: Vector2) -> Enemy:
 	var enemy: Enemy = scene.instantiate()
-	enemy.target = carl
 	enemy.position = at
 	_arena.add_child(enemy)
 	return enemy

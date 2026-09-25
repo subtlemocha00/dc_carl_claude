@@ -9,8 +9,8 @@ extends "res://tests/support/game_test.gd"
 ## - shooting: a stone flies the way Carl faces (right, up, left, down); empty slots do nothing;
 ##   exactly 10 damage per hit, three hits kill a 30 HP blob; the stone disappears on the hit,
 ##   never hits two enemies, stops at a wall (nothing behind it is hit), flies through a dying
-##   enemy, and disappears after 320 px; it never hurts Carl or Donut, collects no pickups and
-##   triggers no stairs;
+##   enemy, and disappears after 320 px; it never hurts Carl or Donut (who has a Hurtbox since
+##   Phase 8), collects no pickups and triggers no stairs;
 ## - cooldown: one shot per short press, one every 0.6 s (36 ticks) while held, quick taps
 ##   cannot fire faster, and moving the Slingshot to another key keeps its cooldown;
 ## - the action menu: while it is open nothing fires and stones in flight freeze; closing it
@@ -176,7 +176,7 @@ func _check_pickup() -> void:
 	donut.follow_target = carl
 	donut.position = pickup.position
 	_arena.add_child(donut)
-	var blob := _spawn_blob(pickup.position + Vector2(0, 6), carl)
+	var blob := _spawn_blob(pickup.position + Vector2(0, 6))
 	await wait_seconds(0.5)
 	check(is_instance_valid(pickup) and not inventory.has(SLINGSHOT) and changes[0] == 0,
 			"Donut and an enemy standing on it do not take it")
@@ -250,7 +250,7 @@ func _check_firing_directions() -> void:
 func _check_damage_and_kill() -> void:
 	print("-- 10 damage per hit; three hits kill a Gelatinous Blob")
 	var carl := _new_arena_with_slingshot_on_w()
-	var blob := _spawn_blob(Vector2(150, 0), carl)
+	var blob := _spawn_blob(Vector2(150, 0))
 	# A longer fade keeps the dead blob around long enough to check it.
 	blob.death_fade_time = 3.0
 	check(blob.health.max_health == 30 and blob.health.current_health == 30, "the blob has its usual 30 HP")
@@ -287,8 +287,8 @@ func _check_projectile_collisions() -> void:
 	print("-- One target per stone; walls stop it")
 	var carl := _new_arena_with_slingshot_on_w()
 	var fired := _record_shots(carl)
-	var near_blob := _spawn_blob(Vector2(100, 0), carl)
-	var far_blob := _spawn_blob(Vector2(140, 0), carl)
+	var near_blob := _spawn_blob(Vector2(100, 0))
+	var far_blob := _spawn_blob(Vector2(140, 0))
 	await tap_key(KEY_RIGHT)
 	await tap_key(KEY_W)
 	await wait_seconds(0.5)
@@ -309,7 +309,7 @@ func _check_projectile_collisions() -> void:
 	# though the stone's next step then starts inside its Hurtbox.
 	carl = _new_arena_with_slingshot_on_w()
 	fired = _record_shots(carl)
-	var moving_blob := _spawn_blob(Vector2(0, 150), carl)
+	var moving_blob := _spawn_blob(Vector2(0, 150))
 	await tap_key(KEY_RIGHT)
 	await tap_key(KEY_W)
 	await wait_physics_frames(2)
@@ -323,7 +323,7 @@ func _check_projectile_collisions() -> void:
 	carl = _new_arena_with_slingshot_on_w()
 	fired = _record_shots(carl)
 	var wall := _spawn_wall(Vector2(100, 0), Vector2(20, 200))
-	var blob_behind := _spawn_blob(Vector2(160, 0), carl)
+	var blob_behind := _spawn_blob(Vector2(160, 0))
 	await tap_key(KEY_RIGHT)
 	var face_x := wall.global_position.x - 10.0
 	await tap_key(KEY_W)
@@ -382,7 +382,7 @@ func _check_friends_and_props_unaffected() -> void:
 	stairs.destination_scene_path = "res://scenes/levels/floor_01.tscn"
 	stairs.position = Vector2(210, 0)
 	_arena.add_child(stairs)
-	var blob := _spawn_blob(Vector2(275, 0), carl)
+	var blob := _spawn_blob(Vector2(275, 0))
 	var scene_before := current_scene
 	await wait_physics_frames(3)
 
@@ -393,8 +393,9 @@ func _check_friends_and_props_unaffected() -> void:
 			"the stone flies past Donut, a player, a pickup and stairs and hits the blob behind them",
 			"blob HP %d" % blob.health.current_health)
 	check(carl.health.current_health == 100 and other_carl.health.current_health == 100, "it never hurts Carl (player_hurtbox)")
-	check(is_instance_valid(donut) and donut.get_node_or_null("Health") == null and donut.get_node_or_null("Hurtbox") == null,
-			"Donut is unaffected: she has nothing it could damage")
+	# Since Phase 8 Donut has a Hurtbox (on player_hurtbox, like Carl's) right in the line of fire.
+	check(donut.get_node_or_null("Hurtbox") != null and donut.health.current_health == 60 and donut.health.max_health == 60,
+			"it never hurts Donut either: she keeps 60 / 60 HP", "Donut HP %d" % donut.health.current_health)
 	check(is_instance_valid(pickup) and not pickup.is_queued_for_deletion() and game_state().inventory.get_quantity(POTION) == 0,
 			"the pickup is not collected")
 	check(current_scene == scene_before and not stairs._is_transitioning, "the stairs are not triggered")
@@ -452,7 +453,7 @@ func _check_menu_pause() -> void:
 	var carl := _new_arena_with_slingshot_on_w()
 	var menu := _add_menu()
 	var fired := _record_shots(carl)
-	var blob := _spawn_blob(Vector2(250, 0), carl, 1000)
+	var blob := _spawn_blob(Vector2(250, 0), 1000)
 	await tap_key(KEY_RIGHT)
 	await tap_key(KEY_W)
 	await wait_physics_frames(3)
@@ -607,9 +608,8 @@ func _projectiles() -> Array:
 
 
 ## A blob that never moves (its detection range is 0).
-func _spawn_blob(at: Vector2, carl: Node2D, max_health: int = 30) -> CharacterBody2D:
+func _spawn_blob(at: Vector2, max_health: int = 30) -> CharacterBody2D:
 	var blob: CharacterBody2D = BLOB_SCENE.instantiate()
-	blob.target = carl
 	blob.detection_range = 0.0
 	blob.chase_range = 0.0
 	blob.get_node("Health").max_health = max_health

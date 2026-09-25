@@ -103,7 +103,7 @@ func _check_carl_follows_the_slots() -> void:
 	print("-- Carl uses whatever each slot holds")
 	var slots: ActionSlots = _new_arena().action_slots
 	var carl := _spawn_carl()
-	var blob := _spawn_blob(Vector2(45, 0), carl)
+	var blob := _spawn_blob(Vector2(45, 0))
 	var hud: CanvasLayer = HUD_SCENE.instantiate()
 	_arena.add_child(hud)
 	hud.show_action_slots(slots, game_state().inventory)
@@ -170,7 +170,7 @@ func _check_a_second_action() -> void:
 	game_state().inventory.add(jab, 1)
 
 	var carl := _spawn_carl()
-	var blob := _spawn_blob(Vector2(45, 0), carl)
+	var blob := _spawn_blob(Vector2(45, 0))
 	await tap_key(KEY_RIGHT)
 	slots.assign(jab, A)
 	await wait_physics_frames(1)
@@ -212,9 +212,8 @@ func _spawn_carl() -> CharacterBody2D:
 
 
 ## A blob with lots of HP that never moves (its detection range is 0), so every hit can be counted.
-func _spawn_blob(at: Vector2, carl: Node2D) -> CharacterBody2D:
+func _spawn_blob(at: Vector2) -> CharacterBody2D:
 	var blob: CharacterBody2D = BLOB_SCENE.instantiate()
-	blob.target = carl
 	blob.detection_range = 0.0
 	blob.chase_range = 0.0
 	blob.get_node("Health").max_health = 1000

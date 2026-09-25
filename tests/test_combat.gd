@@ -1,6 +1,9 @@
 extends "res://tests/support/game_test.gd"
 ## Combat checks in an empty arena (no level): Health, Carl's Fists, the Gelatinous Blob's
-## pursuit, contact damage and death, Carl's death, the HUD, and Donut staying out of combat.
+## pursuit, contact damage and death, Carl's death, the HUD, and Carl's punches never hurting
+## Donut. Donut's own combat (her HP, Scratch, being downed) is covered by test_donut.gd, and
+## enemies choosing between Carl and Donut by test_party_targeting.gd (Phase 8). Here the
+## blobs only ever have Carl to go after.
 ## Carl uses the run's action slots as a new game sets them up: Fists in D, W/A/S empty
 ## (Phase 3). Reassigning slots is covered by test_action_slots.gd.
 ##
@@ -53,7 +56,7 @@ func _check_fists() -> void:
 	print("-- Carl's Fists (action slot D in a new game)")
 	_new_arena()
 	var carl := _spawn_carl(Vector2.ZERO)
-	var blob := _spawn_blob(Vector2(48, 0), carl, false)
+	var blob := _spawn_blob(Vector2(48, 0), false)
 	var blob_health: Health = blob.health
 	var attacks := []
 	_fists(carl).performed.connect(func(direction: Vector2, hits: int) -> void: attacks.append([direction, hits]))
@@ -74,12 +77,16 @@ func _check_fists() -> void:
 	check(blob_health.current_health == 20, "facing right, D hits the blob for 10", "blob HP %d" % blob_health.current_health)
 	check(carl.health.current_health == 100, "Carl does not hit himself")
 
-	# Donut standing between Carl and the blob neither blocks the punch nor gets hurt.
-	var donut := _spawn_donut(Vector2(22, 0), carl)
+	# Donut standing between Carl and the blob (inside the punch, not touching the blob) neither
+	# blocks the punch nor gets hurt. She is kept still, so she does not scratch the blob herself.
+	var donut := _spawn_donut(Vector2(16, 0), carl)
+	donut.set_physics_process(false)
 	await wait_seconds(0.5)
 	await tap_key(KEY_D)
 	check(blob_health.current_health == 10, "Donut in the way does not block the punch", "blob HP %d" % blob_health.current_health)
-	check(is_instance_valid(donut) and donut.get_node_or_null("Health") == null, "Donut has no Health, so she cannot be damaged")
+	check(donut.health.current_health == 60 and donut.health.max_health == 60,
+			"Carl's punch never hurts Donut: she keeps 60 / 60 HP", "Donut HP %d" % donut.health.current_health)
+	donut.free()
 
 	# A diagonal facing sends the punch diagonally.
 	blob.global_position = carl.global_position + Vector2(34, -34)
@@ -101,7 +108,7 @@ func _check_fists_cooldown() -> void:
 	print("-- Fists cooldown")
 	_new_arena()
 	var carl := _spawn_carl(Vector2.ZERO)
-	var blob := _spawn_blob(Vector2(45, 0), carl, false, 1000)
+	var blob := _spawn_blob(Vector2(45, 0), false, 1000)
 	var attack_ticks := []
 	_fists(carl).performed.connect(func(_direction: Vector2, _hits: int) -> void: attack_ticks.append(Engine.get_physics_frames()))
 	await tap_key(KEY_RIGHT)
@@ -122,7 +129,7 @@ func _check_blob_pursuit() -> void:
 	print("-- Blob detection and pursuit")
 	_new_arena()
 	var carl := _spawn_carl(Vector2.ZERO)
-	var blob := _spawn_blob(Vector2(300, 0), carl, true)
+	var blob := _spawn_blob(Vector2(300, 0), true)
 	await wait_physics_frames(2)
 
 	var start := blob.global_position
@@ -156,8 +163,8 @@ func _check_blob_pursuit() -> void:
 func _check_blob_blocked_by_wall() -> void:
 	print("-- Blob and level collision")
 	_new_arena()
-	var carl := _spawn_carl(Vector2.ZERO)
-	var blob := _spawn_blob(Vector2(200, 0), carl, true)
+	_spawn_carl(Vector2.ZERO)  # what the blob chases
+	var blob := _spawn_blob(Vector2(200, 0), true)
 	var wall := StaticBody2D.new()
 	wall.collision_layer = 1  # "world", like the wall tiles
 	var shape := CollisionShape2D.new()
@@ -172,27 +179,22 @@ func _check_blob_blocked_by_wall() -> void:
 
 
 func _check_contact_damage_and_hud() -> void:
-	print("-- Blob contact damage, HUD, Donut")
+	print("-- Blob contact damage, HUD")
 	_new_arena()
 	var carl := _spawn_carl(Vector2.ZERO)
 	var hud: CanvasLayer = HUD_SCENE.instantiate()
 	_arena.add_child(hud)
 	hud.show_health(carl.health)
 	var health_label: Label = hud.get_node("%HealthLabel")
-	check(health_label.text == "HP: 100 / 100", "HUD shows full health", health_label.text)
+	check(health_label.text == "Carl HP: 100 / 100", "HUD shows full health", health_label.text)
 
 	var hit_ticks := []
 	var colors_on_hit := []
 	carl.health.damaged.connect(func(_amount: int) -> void:
 		hit_ticks.append(Engine.get_physics_frames())
 		colors_on_hit.append(carl.modulate))
-	var blob := _spawn_blob(Vector2(40, 0), carl, true)
-	var donut := _spawn_donut(Vector2(40, 10), carl)
+	var blob := _spawn_blob(Vector2(40, 0), true)
 	await wait_seconds(2.0)
-	# Put Donut right on top of the blob, next to Carl, and see what its touch reaches.
-	donut.global_position = blob.global_position
-	await wait_physics_frames(2)
-	var blob_targets: Array = blob.contact_attack.find_targets(Vector2.ZERO)
 
 	var interval_ticks := roundi(blob.contact_attack.cooldown * Engine.physics_ticks_per_second)
 	var gaps := []
@@ -201,17 +203,15 @@ func _check_contact_damage_and_hud() -> void:
 	check(hit_ticks.size() == 3, "touching Carl for about 2 s hurts him 3 times (every 0.8 s)", "%d hits" % hit_ticks.size())
 	check(gaps.all(func(gap: int) -> bool: return gap == interval_ticks), "contact hits are exactly one interval apart", "gaps %s ticks" % [gaps])
 	check(carl.health.current_health == 70, "each contact hit removes 10 HP", "Carl HP %d" % carl.health.current_health)
-	check(health_label.text == "HP: 70 / 100", "HUD updates after damage", health_label.text)
+	check(health_label.text == "Carl HP: 70 / 100", "HUD updates after damage", health_label.text)
 	check(colors_on_hit.size() > 0 and colors_on_hit[0] != Color.WHITE, "Carl flashes when hurt", str(colors_on_hit.slice(0, 1)))
-	check(blob_targets.size() == 1 and blob_targets[0] == carl.get_node("Hurtbox"), "the blob's touch only finds Carl's Hurtbox, not Donut")
-	check(is_instance_valid(donut), "Donut is unaffected by standing on the blob")
 
 
 func _check_blob_death() -> void:
 	print("-- Blob death")
 	_new_arena()
 	var carl := _spawn_carl(Vector2.ZERO)
-	var blob := _spawn_blob(Vector2(48, 0), carl, false)
+	var blob := _spawn_blob(Vector2(48, 0), false)
 	# A longer fade leaves time to check that the dead blob stays inactive.
 	blob.death_fade_time = 2.0
 	var died_count := [0]
@@ -247,10 +247,10 @@ func _check_carl_death() -> void:
 	var died_count := [0]
 	carl.health.died.connect(func() -> void: died_count[0] += 1)
 	carl.health.take_damage(95)
-	var blob := _spawn_blob(Vector2(30, 0), carl, true)
+	var blob := _spawn_blob(Vector2(30, 0), true)
 	await wait_seconds(0.5)
 	check(carl.health.is_dead() and died_count[0] == 1, "the blob's touch takes Carl from 5 HP to 0, died emitted once")
-	check(hud.get_node("%HealthLabel").text == "HP: 0 / 100", "HUD shows 0 HP")
+	check(hud.get_node("%HealthLabel").text == "Carl HP: 0 / 100", "HUD shows 0 HP")
 	check(hud.get_node("%GameOverMessage").visible, "HUD shows the game-over message")
 
 	var attacks := [0]
@@ -288,10 +288,10 @@ func _spawn_donut(at: Vector2, carl: Node2D) -> CharacterBody2D:
 	return donut
 
 
-## Spawns a blob hunting Carl. With `chases` false its detection range is 0, so it stays put.
-func _spawn_blob(at: Vector2, carl: Node2D, chases: bool, max_health: int = 30) -> CharacterBody2D:
+## Spawns a blob. It hunts Carl, the only party member in the arena, by itself. With `chases`
+## false its detection range is 0, so it stays put.
+func _spawn_blob(at: Vector2, chases: bool, max_health: int = 30) -> CharacterBody2D:
 	var blob: CharacterBody2D = BLOB_SCENE.instantiate()
-	blob.target = carl
 	if not chases:
 		blob.detection_range = 0.0
 		blob.chase_range = 0.0

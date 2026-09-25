@@ -5,10 +5,12 @@ extends Node
 ##
 ## It holds:
 ## - Carl's hit points (the current level keeps them up to date);
+## - Donut's hit points (Phase 8), kept up to date the same way. 0 means she is downed;
 ## - Carl's inventory: his innate actions (Fists), the reusable items he owns (the Slingshot)
 ##   and how many of each consumable he carries;
 ## - which W/A/S/D slot holds which of those actions;
-## - the floor-entry state (a FloorEntry): what Carl had when he entered the current level.
+## - the floor-entry state (a FloorEntry): what Carl and Donut had when they entered the
+##   current level.
 ##   After GAME OVER, retrying the level restores it; Continue on the title screen starts from it.
 ## It only stores state. The rules that use it live in the level, Carl, the HUD and the menu.
 ##
@@ -18,12 +20,17 @@ extends Node
 
 ## Carl's maximum HP at the start of a run (GAME_SPEC.md section 5).
 const NEW_RUN_CARL_MAX_HEALTH := 100
+## Donut's maximum HP at the start of a run (Phase 8).
+const NEW_RUN_DONUT_MAX_HEALTH := 60
 const FISTS: ActionDefinition = preload("res://resources/actions/fists.tres")
 ## Actions Carl always has, with no quantity. Nothing else may be innate.
 const INNATE_ACTIONS: Array[ActionDefinition] = [FISTS]
 
 var carl_health: int
 var carl_max_health: int
+## Donut's HP. Unlike Carl's it can be 0: she is downed, and gets up again later.
+var donut_health: int
+var donut_max_health: int
 ## Carl's actions and item quantities. The only place a quantity is stored.
 var inventory := Inventory.new()
 ## Which action each W/A/S/D slot holds. It only accepts actions in `inventory`.
@@ -36,11 +43,14 @@ func _init() -> void:
 	start_new_run()
 
 
-## Resets everything for a new game: full health, only Fists (in slot D), slots W, A and S
-## empty, no items (no consumables and no owned reusable items such as the Slingshot).
+## Resets everything for a new game: full health for Carl and Donut, only Fists (in slot D),
+## slots W, A and S empty, no items (no consumables and no owned reusable items such as the
+## Slingshot).
 func start_new_run() -> void:
 	carl_max_health = NEW_RUN_CARL_MAX_HEALTH
 	carl_health = carl_max_health
+	donut_max_health = NEW_RUN_DONUT_MAX_HEALTH
+	donut_health = donut_max_health
 	# The Inventory and ActionSlots are reset in place rather than replaced, so every
 	# reference to them stays valid.
 	inventory.reset(INNATE_ACTIONS)
@@ -49,7 +59,8 @@ func start_new_run() -> void:
 	floor_entry = null
 
 
-## Starts a run from a saved checkpoint (Continue): exactly its HP, inventory and slot layout.
+## Starts a run from a saved checkpoint (Continue): exactly its HP (Carl's and Donut's),
+## inventory and slot layout.
 ## The caller then loads `checkpoint.scene_path`.
 func continue_from(checkpoint: FloorEntry) -> void:
 	start_new_run()
@@ -64,17 +75,26 @@ func store_carl_health(current: int, maximum: int) -> void:
 	carl_max_health = maximum
 
 
-## Remembers what Carl has on entering the level `scene_path`.
+## Keeps Donut's HP here up to date. Levels connect Donut's Health.health_changed to this.
+func store_donut_health(current: int, maximum: int) -> void:
+	donut_health = current
+	donut_max_health = maximum
+
+
+## Remembers what Carl and Donut have on entering the level `scene_path`.
 func record_floor_entry(scene_path: String) -> void:
 	floor_entry = FloorEntry.new()
 	floor_entry.scene_path = scene_path
 	floor_entry.carl_health = carl_health
 	floor_entry.carl_max_health = carl_max_health
+	floor_entry.donut_health = donut_health
+	floor_entry.donut_max_health = donut_max_health
 	floor_entry.inventory = inventory.get_snapshot()
 	floor_entry.action_slots = action_slots.get_layout()
 
 
-## Puts Carl's HP and inventory back to what they were when he entered the current level.
+## Puts Carl's HP and inventory, and Donut's HP, back to what they were when they entered the
+## current level.
 ## Items picked up since then are gone again, and items used since then are back. A slot
 ## holding an item Carl no longer has becomes empty (ActionSlots does this by itself).
 ## The slot layout is otherwise the player's latest choice, but a slot that is empty now gets
@@ -83,5 +103,7 @@ func record_floor_entry(scene_path: String) -> void:
 func restore_floor_entry() -> void:
 	carl_health = floor_entry.carl_health
 	carl_max_health = floor_entry.carl_max_health
+	donut_health = floor_entry.donut_health
+	donut_max_health = floor_entry.donut_max_health
 	inventory.restore_snapshot(floor_entry.inventory)
 	action_slots.fill_empty_slots(floor_entry.action_slots)

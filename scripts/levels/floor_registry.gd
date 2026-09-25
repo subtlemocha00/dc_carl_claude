@@ -10,6 +10,7 @@ const FLOORS: Dictionary[StringName, Dictionary] = {
 	&"floor_02": {"name": "Floor 2", "scene": "res://scenes/levels/floor_02.tscn"},
 	&"floor_03": {"name": "Floor 3", "scene": "res://scenes/levels/floor_03.tscn"},
 	&"floor_04": {"name": "Floor 4", "scene": "res://scenes/levels/floor_04.tscn"},
+	&"floor_05": {"name": "Floor 5", "scene": "res://scenes/levels/floor_05.tscn"},
 }
 
 

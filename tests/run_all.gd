@@ -6,7 +6,10 @@ extends SceneTree
 ##
 ## Tests with "windowed" in their file name need a real window, so they are started
 ## without --headless (a game window opens briefly).
-## A test fails if it exits with a non-zero code or prints any engine ERROR or WARNING.
+## A test fails if it exits with a non-zero code or prints any engine ERROR or WARNING. The only
+## exception is an error the test provoked on purpose and checked: for each one it prints
+## "EXPECTED ERROR: <text>" (game_test.gd, take_engine_messages()), which excuses exactly one
+## "ERROR: <text>" line with that same text.
 ## Exits with code 0 when every test passes and 1 otherwise.
 
 
@@ -25,7 +28,16 @@ func _initialize() -> void:
 		var output := []
 		var exit_code := OS.execute(godot, arguments, output, true)
 		var log_text := "\n".join(output)
-		var engine_problems := Array(log_text.split("\n")).filter(func(line: String) -> bool:
+		var lines := Array(log_text.split("\n"))
+		var expected_errors := {}
+		for line: String in lines:
+			if line.begins_with("EXPECTED ERROR: "):
+				var text := line.trim_prefix("EXPECTED ERROR: ")
+				expected_errors[text] = expected_errors.get(text, 0) + 1
+		var engine_problems := lines.filter(func(line: String) -> bool:
+			if line.begins_with("ERROR: ") and expected_errors.get(line.trim_prefix("ERROR: "), 0) > 0:
+				expected_errors[line.trim_prefix("ERROR: ")] -= 1
+				return false
 			return line.begins_with("ERROR") or line.begins_with("WARNING") or line.begins_with("SCRIPT ERROR"))
 		var passed := exit_code == 0 and engine_problems.is_empty()
 		print("%s  %s" % ["PASS" if passed else "FAIL", file])

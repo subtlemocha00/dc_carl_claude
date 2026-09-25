@@ -6,11 +6,13 @@ extends "res://tests/support/game_test.gd"
 ## - it does nothing until Carl comes within 360 px, then closes in and spits once he is within
 ##   320 px; it holds at 280 px and backs away when he comes closer than 180 px;
 ## - touching it never hurts Carl: only its globs do;
+## Carl is the only party member in these arenas, so he is always the Spitting Blob's target.
 ## - line of sight: a wall between it and Carl stops it spitting (no glob is wasted on the wall);
 ##   as soon as Carl is in plain sight again it spits;
 ## - a glob hurts Carl exactly 10, once, and disappears; walls stop it (Carl behind one is safe);
-##   it flies through Donut, other enemies, pickups and stairs without affecting them, never hurts
-##   the blob that spat it, and disappears after 384 px (96 ticks);
+##   it flies through other enemies, pickups and stairs without affecting them, never hurts the
+##   blob that spat it, and disappears after 384 px (96 ticks). (Since Phase 8 a glob can hurt
+##   Donut too; that is covered by test_party_targeting.gd.);
 ## - cadence: one glob per shot, exactly 1.5 s (90 ticks) apart while Carl stays in sight, and no
 ##   burst when he comes back into sight after hiding;
 ## - Carl's weapons: each Slingshot stone takes exactly 10 of its 30 HP (three kill it, and a stone
@@ -25,7 +27,6 @@ extends "res://tests/support/game_test.gd"
 ## Exits with code 0 when every check passes and 1 otherwise.
 
 const CARL_SCENE: PackedScene = preload("res://scenes/actors/carl.tscn")
-const DONUT_SCENE: PackedScene = preload("res://scenes/actors/donut.tscn")
 const BLOB_SCENE: PackedScene = preload("res://scenes/enemies/gelatinous_blob.tscn")
 const SPITTER_SCENE: PackedScene = preload("res://scenes/enemies/spitting_blob.tscn")
 const GLOB_SCENE: PackedScene = preload("res://scenes/projectiles/spit_glob.tscn")
@@ -92,7 +93,7 @@ func _check_detection_and_distance() -> void:
 	print("-- It waits for Carl, closes in, spits within 320 px and keeps its distance")
 	var carl := _new_arena_with_carl()
 	carl.health.set_health(1000, 1000)
-	var spitter := _spawn_spitter(Vector2(400, 0), carl, true)
+	var spitter := _spawn_spitter(Vector2(400, 0), true)
 	var shots := _record_shots(spitter)
 	await wait_seconds(3.0)
 	check(not spitter.is_active() and shots.is_empty() and spitter.global_position == Vector2(400, 0),
@@ -127,14 +128,14 @@ func _check_detection_and_distance() -> void:
 func _check_no_touch_damage() -> void:
 	print("-- Touching it never hurts Carl; only its globs do")
 	var carl := _new_arena_with_carl()
-	var spitter := _spawn_spitter(Vector2(26, 0), carl)
+	var spitter := _spawn_spitter(Vector2(26, 0))
 	spitter.max_firing_distance = 0.0  # it never spits
 	await wait_seconds(3.0)
 	check(carl.health.current_health == 100, "3 s pressed against a Spitting Blob that does not spit: Carl is unhurt",
 			"HP %d" % carl.health.current_health)
 
 	carl = _new_arena_with_carl()
-	spitter = _spawn_spitter(Vector2(26, 0), carl)
+	spitter = _spawn_spitter(Vector2(26, 0))
 	var hits := _record_hits(spitter, carl)
 	var damage := []
 	carl.health.damaged.connect(func(amount: int) -> void: damage.append(amount))
@@ -148,7 +149,7 @@ func _check_line_of_sight() -> void:
 	print("-- Line of sight")
 	var carl := _new_arena_with_carl()
 	var wall := _add_wall(Rect2(100, -100, 20, 200))
-	var spitter := _spawn_spitter(Vector2(250, 0), carl)
+	var spitter := _spawn_spitter(Vector2(250, 0))
 	var shots := _record_shots(spitter)
 	var wall_hits := [0]
 	# The wall is freed later on, so it is recognised by its id.
@@ -183,7 +184,7 @@ func _check_line_of_sight() -> void:
 func _check_glob_hits_carl_once() -> void:
 	print("-- A glob deals exactly 10 to Carl, once, and disappears")
 	var carl := _new_arena_with_carl()
-	var spitter := _spawn_spitter(Vector2(250, 0), carl)
+	var spitter := _spawn_spitter(Vector2(250, 0))
 	var shots := _record_shots(spitter)
 	var damage := []
 	carl.health.damaged.connect(func(amount: int) -> void: damage.append(amount))
@@ -213,7 +214,7 @@ func _check_glob_and_walls() -> void:
 
 	# A real glob: the wall appears between Carl and a glob already in flight.
 	carl = _new_arena_with_carl()
-	var spitter := _spawn_spitter(Vector2(300, 0), carl)
+	var spitter := _spawn_spitter(Vector2(300, 0))
 	var shots := _record_shots(spitter)
 	await wait_until(func() -> bool: return not shots.is_empty(), "a glob")
 	stops = _record_stop(shots[0]["glob"])
@@ -224,10 +225,10 @@ func _check_glob_and_walls() -> void:
 
 
 func _check_glob_leaves_others_alone() -> void:
-	print("-- Globs fly past Donut, enemies, pickups and stairs")
+	print("-- Globs fly past enemies, pickups and stairs")
 	var carl := _new_arena_with_carl()
 	# In the line of fire, from Carl outward: stairs, a pickup, another Spitting Blob (which never
-	# notices Carl), a Gelatinous Blob (idle), Donut, then the Spitting Blob that spits.
+	# notices Carl), a Gelatinous Blob (idle), then the Spitting Blob that spits.
 	var stairs: Area2D = STAIRS_SCENE.instantiate()
 	stairs.destination_scene_path = "res://scenes/levels/floor_01.tscn"
 	stairs.position = Vector2(60, 0)
@@ -237,19 +238,13 @@ func _check_glob_leaves_others_alone() -> void:
 	pickup.quantity = 2
 	pickup.position = Vector2(110, 0)
 	_arena.add_child(pickup)
-	var other_spitter := _spawn_spitter(Vector2(160, 0), carl)
+	var other_spitter := _spawn_spitter(Vector2(160, 0))
 	other_spitter.detection_range = 0.0
 	var blob: Enemy = BLOB_SCENE.instantiate()
-	blob.target = carl
 	blob.detection_range = 0.0
 	blob.position = Vector2(215, 0)
 	_arena.add_child(blob)
-	var donut: CharacterBody2D = DONUT_SCENE.instantiate()
-	donut.follow_target = carl
-	donut.position = Vector2(270, 0)
-	_arena.add_child(donut)
-	donut.set_physics_process(false)
-	var spitter := _spawn_spitter(Vector2(310, 0), carl)
+	var spitter := _spawn_spitter(Vector2(310, 0))
 	var shots := _record_shots(spitter)
 	var scene_before := current_scene
 	await wait_until(func() -> bool: return carl.health.current_health < 100, "the glob to reach Carl")
@@ -258,8 +253,6 @@ func _check_glob_leaves_others_alone() -> void:
 	check(blob.health.current_health == MAX_HP and other_spitter.health.current_health == MAX_HP,
 			"it hurts neither the Gelatinous Blob nor another Spitting Blob in its way")
 	check(spitter.health.current_health == MAX_HP, "nor the Spitting Blob that spat it")
-	check(is_instance_valid(donut) and donut.get_node_or_null("Health") == null and donut.global_position == Vector2(270, 0),
-			"Donut is unaffected: she has nothing it could damage")
 	check(is_instance_valid(pickup) and not pickup.is_queued_for_deletion() and game_state().inventory.get_quantity(POTION) == 0,
 			"the pickup is not collected")
 	check(current_scene == scene_before and not stairs._is_transitioning, "the stairs are not triggered")
@@ -301,7 +294,7 @@ func _check_cadence() -> void:
 	print("-- One glob every 1.5 s")
 	var carl := _new_arena_with_carl()
 	carl.health.set_health(1000, 1000)
-	var spitter := _spawn_spitter(Vector2(250, 0), carl)
+	var spitter := _spawn_spitter(Vector2(250, 0))
 	var shots := _record_shots(spitter)
 	var globs_added := [0]
 	_arena.child_entered_tree.connect(func(node: Node) -> void:
@@ -331,7 +324,7 @@ func _check_carls_weapons() -> void:
 	var carl := _new_arena_with_carl()
 	carl.collect_item(SLINGSHOT, 1)
 	game_state().action_slots.assign(SLINGSHOT, ActionSlots.SLOT_W)
-	var spitter := _spawn_spitter(Vector2(150, 0), carl)
+	var spitter := _spawn_spitter(Vector2(150, 0))
 	spitter.max_firing_distance = 0.0
 	spitter.death_fade_time = 3.0
 	var damage := []
@@ -350,7 +343,6 @@ func _check_carls_weapons() -> void:
 	check(stones.size() == 3 and spitter.health.is_dead() and died[0] == 1, "three stones kill the 30 HP Spitting Blob")
 	check(carl.health.current_health == 100, "Carl is unhurt by his own stones")
 	var blob: Enemy = BLOB_SCENE.instantiate()
-	blob.target = carl
 	blob.detection_range = 0.0
 	blob.position = Vector2(150, 0)
 	_arena.add_child(blob)
@@ -360,7 +352,7 @@ func _check_carls_weapons() -> void:
 	check(blob.health.current_health == MAX_HP - 10, "a stone still takes 10 from a Gelatinous Blob")
 
 	carl = _new_arena_with_carl()
-	spitter = _spawn_spitter(Vector2(40, 0), carl)
+	spitter = _spawn_spitter(Vector2(40, 0))
 	spitter.max_firing_distance = 0.0
 	await tap_key(KEY_LEFT)
 	await tap_key(KEY_D)
@@ -381,11 +373,10 @@ func _check_menu_pause() -> void:
 	_arena.add_child(menu)
 	menu.setup(game_state().inventory, game_state().action_slots)
 	var blob: Enemy = BLOB_SCENE.instantiate()
-	blob.target = carl
 	blob.position = Vector2(-180, 100)
 	blob.get_node("Health").max_health = 1000
 	_arena.add_child(blob)
-	var spitter := _spawn_spitter(Vector2(330, 0), carl, true)
+	var spitter := _spawn_spitter(Vector2(330, 0), true)
 	spitter.get_node("Health").max_health = 1000
 	var shots := _record_shots(spitter)
 	var stones := []
@@ -461,10 +452,10 @@ func _new_arena_with_carl() -> CharacterBody2D:
 	return carl
 
 
-## A Spitting Blob hunting Carl. Unless `moves` is true it stands still (move_speed 0).
-func _spawn_spitter(at: Vector2, carl: Node2D, moves: bool = false) -> Enemy:
+## A Spitting Blob. It hunts Carl, the only party member in the arena, by itself. Unless
+## `moves` is true it stands still (move_speed 0).
+func _spawn_spitter(at: Vector2, moves: bool = false) -> Enemy:
 	var spitter: Enemy = SPITTER_SCENE.instantiate()
-	spitter.target = carl
 	if not moves:
 		spitter.move_speed = 0.0
 	spitter.position = at

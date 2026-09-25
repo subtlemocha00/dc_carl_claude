@@ -308,7 +308,9 @@ func _check_save(label: String, floor_id: String, health: int, inventory: Dictio
 	var expected_inventory := {}
 	for item_id: String in inventory:
 		expected_inventory[item_id] = float(inventory[item_id])
-	check(data.get("save_version") == 2 and data.get("floor_id") == floor_id and data["carl"]["health"] == health
+	# Phase 8: save_version 3, with Donut's HP. Nothing hurts Donut in these runs, so she is at 60 / 60.
+	check(data.get("save_version") == 3 and data.get("floor_id") == floor_id and data["carl"]["health"] == health
+			and data.get("donut") == {"health": 60.0, "max_health": 60.0}
 			and data["carl"]["max_health"] == 100 and data["inventory"] == expected_inventory and data.get("owned_items") == []
 			and data["action_slots"] == expected_slots,
 			label, _save_text().replace("\n", " ").replace("\t", ""))

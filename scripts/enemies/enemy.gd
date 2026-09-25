@@ -2,35 +2,45 @@ class_name Enemy
 extends CharacterBody2D
 ## What every enemy has in common (Phase 7). An enemy scene's root script extends this and
 ## writes its own _physics_process() from these pieces:
-## - update_activity(): whether it is after its target right now. It becomes active when the
-##   target comes within detection_range and gives up when the target is farther than
-##   chase_range (straight-line distance, so walls do not hide Carl, but enemies far away never
-##   notice him). It also gives up on a target that is down (0 HP).
+## - update_activity(): chooses the party member the enemy is after, `target` (Phase 8). The
+##   party is every node in the PARTY_GROUP group: Carl and Donut. A member is a valid target
+##   while its Health is above 0, so a downed Donut (or a downed Carl) is never one.
+##   - With no target, the enemy picks the nearest valid member within detection_range
+##     (straight-line distance, so walls do not hide anyone, but enemies far away never notice
+##     the party).
+##   - It then keeps that target while it stays valid and within chase_range, even if the
+##     other member is now a little closer, so it never flips between Carl and Donut.
+##   - When the target is downed or gets farther than chase_range, the enemy drops it and
+##     picks again the same way (possibly the other member, possibly nobody).
 ## - navigate_toward(goal) / stop_moving(): moves the body along the level's navigation mesh
 ##   (see EnemyNavigation), so it walks around walls instead of into them.
 ## - has_line_of_sight_to(point): whether a wall is in the way, for enemies that shoot.
 ## - hit flash, health bar, and dying (it stops, stops blocking, fades out and is removed).
 ## Attacks are separate nodes in each enemy scene: a MeleeAttack for a touch, a
-## ProjectileLauncher for spit. The expected children are Health, Hurtbox, CollisionShape2D,
+## ProjectileLauncher for spit. They hurt whoever is on player_hurtbox (Carl and Donut), not
+## only the target. The expected children are Health, Hurtbox, CollisionShape2D,
 ## NavigationAgent2D (an EnemyNavigation) and a unique HealthBarFill.
 
 ## Multiplying the colours by more than 1 briefly brightens an enemy when it is hit.
 const HIT_FLASH_COLOR := Color(2.2, 2.2, 2.2)
+## The group of the characters enemies hunt. carl.tscn and donut.tscn put themselves in it.
+const PARTY_GROUP := &"party"
 
-## The actor the enemy hunts. Each level sets this to Carl.
-@export var target: Node2D
 ## Movement speed in pixels per second (Carl walks at 180).
 @export var move_speed: float = 55.0
-## The enemy becomes active when its target comes this close (pixels).
+## The enemy picks a target among the party members this close (pixels).
 @export var detection_range: float = 220.0
-## Once active, the enemy only gives up when its target is farther away than this (pixels).
+## Once it has a target, the enemy only gives up when the target is farther than this (pixels).
 @export var chase_range: float = 320.0
 ## Physics layers that block the enemy's view: the "world" walls, which also stop projectiles.
 @export_flags_2d_physics var sight_blocking_layers: int = 1
 ## Seconds the enemy takes to fade away after dying.
 @export var death_fade_time: float = 0.5
 
-var _is_active := false
+## The party member the enemy is after (Carl or Donut), or null while it is idle. Chosen by
+## update_activity(); it is not set in the level.
+var target: Node2D
+
 var _hit_flash_tween: Tween
 
 @onready var health: Health = $Health
@@ -43,27 +53,30 @@ func _ready() -> void:
 	health.damaged.connect(_on_damaged)
 	health.health_changed.connect(_on_health_changed)
 	health.died.connect(_on_died)
-	if target == null:
-		push_warning("Enemy '%s' has no target set, so it will stay still." % name)
 
 
-## True while the enemy is after its target, as last decided by update_activity().
+## True while the enemy has a target, as last decided by update_activity().
 func is_active() -> bool:
-	return _is_active
+	return target != null
 
 
-## Updates and returns whether the enemy is after its target (see the class description).
+## Updates `target` (see the class description) and returns whether the enemy has one.
 ## Enemies call it once per physics tick.
 func update_activity() -> bool:
-	if target == null or _is_target_down():
-		_is_active = false
+	if target != null and (not is_valid_target(target)
+			or global_position.distance_to(target.global_position) > chase_range):
+		target = null
+	if target == null:
+		target = _find_nearest_party_member(detection_range)
+	return target != null
+
+
+## True if `member` can be hunted: a party member in the level whose Health is above 0.
+func is_valid_target(member: Node2D) -> bool:
+	if not is_instance_valid(member) or not member.is_inside_tree() or not member.is_in_group(PARTY_GROUP):
 		return false
-	var distance := global_position.distance_to(target.global_position)
-	if distance <= detection_range:
-		_is_active = true
-	elif distance > chase_range:
-		_is_active = false
-	return _is_active
+	var member_health := member.get_node_or_null(^"Health") as Health
+	return member_health != null and not member_health.is_dead()
 
 
 ## Moves this tick toward `goal` (global position) along the navigation mesh, at move_speed.
@@ -84,9 +97,20 @@ func has_line_of_sight_to(point: Vector2) -> bool:
 	return get_world_2d().direct_space_state.intersect_ray(query).is_empty()
 
 
-func _is_target_down() -> bool:
-	var target_health := target.get_node_or_null(^"Health") as Health
-	return target_health != null and target_health.is_dead()
+## The nearest valid party member at most `max_distance` away, or null. On an exact tie the one
+## earlier in the scene tree wins, so the choice is always the same.
+func _find_nearest_party_member(max_distance: float) -> Node2D:
+	var nearest: Node2D = null
+	var nearest_distance := max_distance
+	for member in get_tree().get_nodes_in_group(PARTY_GROUP):
+		var member_2d := member as Node2D
+		if member_2d == null or not is_valid_target(member_2d):
+			continue
+		var distance := global_position.distance_to(member_2d.global_position)
+		if distance <= nearest_distance and (nearest == null or distance < nearest_distance):
+			nearest = member_2d
+			nearest_distance = distance
+	return nearest
 
 
 func _on_damaged(_amount: int) -> void:
@@ -104,7 +128,7 @@ func _on_health_changed(current: int, maximum: int) -> void:
 func _on_died() -> void:
 	# A dead enemy stops moving and attacking at once. Its Health refuses further hits.
 	set_physics_process(false)
-	_is_active = false
+	target = null
 	velocity = Vector2.ZERO
 	# Stop blocking Carl. Physics shapes must not be switched off in the middle of a
 	# physics step, so this is deferred to the end of the frame.

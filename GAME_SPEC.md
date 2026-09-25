@@ -97,9 +97,24 @@ At 0 HP:
 
 Exact combat values may be tuned later.
 
-Current state (Phase 7): Donut's combat, damage and stun are not built yet. Until they are, she
-cannot be hurt: enemies never target her, and neither enemy attacks (touch, spit) nor Carl's
-attacks affect her.
+Canonical since Phase 8 (these values replace the initial concept values above):
+- Donut has **60 HP** (60 / 60 in a new run). Enemy attacks (a blob's touch, spit globs) can
+  hurt her. Carl's attacks (Fists, Slingshot stones) never can: there is no friendly fire.
+- Enemies may choose her as their target, like Carl (section 14a).
+- **Scratch**, her one attack, is automatic (there is no key for it): when a living enemy is
+  within about **42 px** of her, she scratches the nearest one for **10 damage**, at most once
+  every **1.0 s**. She never leaves Carl to hunt enemies: following Carl always comes first.
+- At 0 HP she is **DOWNED**, not dead: she lies still (greyed out, with a "DOWNED" label; the HUD
+  says DOWNED too), does not follow or scratch, and enemies ignore her. After **6 seconds of
+  play** she gets up with **30 / 60 HP** and carries on. The pause menu and GAME OVER stop that
+  countdown. There is no revive key, and potions heal Carl only.
+- Donut being downed never causes GAME OVER; only Carl reaching 0 HP does. Carl can take the
+  stairs while she is downed: she arrives on the next floor downed and gets up 6 s later.
+- Her HP carries over between floors (a floor transition does not heal her) and is part of the
+  floor-entry checkpoint: a retry or Continue gives her back the HP she had on entering the
+  floor (0 means she starts that floor downed, with a fresh 6 s).
+- The player never controls Donut directly: no Donut keys, commands, action slots or
+  equipment.
 
 ## 7. Combat and action slots
 
@@ -210,9 +225,10 @@ All three prototype dungeon floors should be manually authored scenes/layouts.
 General progression:
 Surface -> Floor 1 -> Floor 2 -> Floor 3 -> Prototype Complete screen.
 
-Playable progression since Phase 7: Surface -> Floor 1 -> Floor 2 -> Floor 3 -> Floor 4. Floor 3
-has stairs down to Floor 4, a manually authored combat-test floor (section 14a) with no exit yet.
-The Floor 3 Guardian and the Prototype Complete screen are still to come.
+Playable progression since Phase 8: Surface -> Floor 1 -> Floor 2 -> Floor 3 -> Floor 4 -> Floor 5.
+Floor 3 has stairs down to Floor 4 and Floor 4 has stairs down to Floor 5, both manually authored
+combat-test floors (sections 14a and 14b); Floor 5 has no exit yet. The Floor 3 Guardian and the
+Prototype Complete screen are still to come.
 
 Progression is downward only. Once Carl descends, he can never return to the Surface or to a
 shallower floor. Levels have no stairs, exits or triggers that lead back up. This is a design
@@ -312,11 +328,16 @@ All enemies:
   when he is farther away than their chase range;
 - move along the level's navigation mesh, so they walk around walls to reach him instead of
   getting stuck behind them. They never pass through walls;
-- ignore Donut: they never target her, and nothing they do can hurt her;
+- (until Phase 8: ignored Donut;) since Phase 8, choose their target between Carl and Donut:
+  when an enemy has no target it picks the nearest of the two within its detection range, and
+  it keeps that target until the target is downed or farther than its chase range, then picks
+  again the same way. It never flips between them just because the other one is a little
+  closer. A downed Donut is never a target;
 - freeze while the game is paused (the inventory menu, GAME OVER).
 
 Gelatinous Blob: 30 HP, 55 px/s, notices Carl within 220 px, gives up beyond 320 px. Its touch
-takes 10 HP, at most every 0.8 s.
+takes 10 HP, at most every 0.8 s. Since Phase 8 each touch hurts one party member, Carl or Donut
+(the nearer one if it touches both).
 
 **Spitting Blob** (stable id `spitting_blob`), the prototype's first ranged enemy (the Spitter
 of section 13, placed on Floor 4 for now):
@@ -330,13 +351,27 @@ of section 13, placed on Floor 4 for now):
 Spit glob (the Spitting Blob's projectile, the same kind of projectile as the Slingshot stone):
 - 10 damage to Carl, once, then it disappears; 240 px/s; gone after 384 px;
 - stopped by walls, so Carl can take cover;
-- never hurts Donut, the Spitting Blob that spat it or any other enemy; never collects pickups
-  or triggers stairs.
+- never hurts the Spitting Blob that spat it or any other enemy; never collects pickups or
+  triggers stairs;
+- since Phase 8 it hurts Donut the same way (10, once). It hits only the first of Carl and Donut
+  in its way, so one standing in front shields the other; a downed Donut does not stop it.
+The Spitting Blob treats Donut as it treats Carl when she is its target: it needs to see her,
+keeps 180-280 px from her, and stops spitting at her once she is downed.
 
 Floor 4 — Filtration Level: a walled room with one Gelatinous Blob and one Spitting Blob. A wall
 between Carl's arrival point and the Blob makes it walk around; a second wall hides the
-Spitting Blob at first, so it has to move before it can spit, and pillars give cover. Floor 4
-has no stairs yet, and no way back up.
+Spitting Blob at first, so it has to move before it can spit, and pillars give cover. Since
+Phase 8 its only exit is the stairs down to Floor 5 in the far south-east corner; nothing leads
+back up.
+
+## 14b. Floor 5 — Holding Pens (canonical since Phase 8)
+
+A walled companion-combat test room (stable id `floor_05`) with two Gelatinous Blobs and one
+Spitting Blob, and walls and pillars for navigation and cover. One blob waits in a pen close to
+where Donut arrives, farther from Carl, so it goes for Donut: she scratches it while it hurts
+her. Carl leads the way toward the others, so they usually pick him. Nothing is scripted: all of
+this is ordinary enemy targeting. Floor 5 has no exit yet (no Floor 6), and nothing leads back
+up.
 
 ## 15. Saving/checkpoints
 
@@ -378,6 +413,10 @@ Persistent save (canonical since Phase 5):
   version 2. Version 1 saves from Phase 5 load with the same floor, HP, potions and slots, and
   no Slingshot.) The version only changes when the saved data changes: adding a floor, such as
   Floor 4 in Phase 7, keeps version 2.
+- Since Phase 8, saves are **version 3**: the checkpoint also holds Donut's HP on entering the
+  floor (0 if she entered downed). Version 1 and version 2 saves still load, with Donut at full
+  health (60 / 60), and become version 3 at the next checkpoint (Continue writes one at once).
+  How far Donut's recovery countdown had got is never saved.
 - No mid-floor saving, multiple save slots or cloud saves in the prototype.
 
 Current-run state (what survives level changes during one playthrough, held in memory) is
@@ -436,6 +475,6 @@ Do not implement unless the user later expands scope:
 - randomized item affixes
 - advanced lighting/rendering
 - voice acting
-- floors 5–20 (Floor 4 was added in Phase 7 as a combat-test floor)
+- floors 6–20 (Floor 4 was added in Phase 7 and Floor 5 in Phase 8 as combat-test floors)
 - achievements
 - mod support

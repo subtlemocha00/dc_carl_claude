@@ -241,7 +241,6 @@ func _check_pickup() -> void:
 	donut.position = pickup.position
 	_arena.add_child(donut)
 	var blob: CharacterBody2D = BLOB_SCENE.instantiate()
-	blob.target = carl
 	blob.detection_range = 0.0
 	blob.chase_range = 0.0
 	blob.position = pickup.position + Vector2(0, 6)

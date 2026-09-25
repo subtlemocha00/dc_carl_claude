@@ -12,7 +12,7 @@ extends "res://tests/support/game_test.gd"
 ## - Floor 2 -> Floor 3: Carl, Donut and the camera arrive, with no transition loop. Floor 3's
 ##   only exit leads down to Floor 4 (Phase 7): nothing leads back up.
 ##   The Slingshot, W = Slingshot and A = potion x1 are kept, recorded in the floor-entry state,
-##   and saved (save_version 2, owned_items ["slingshot"]).
+##   and saved (save_version 3 since Phase 8, owned_items ["slingshot"]).
 ## - On Floor 3 a stone shot from the spawn point stops at the wall, and the blob behind it is unhurt.
 ## - Dying on Floor 3 keeps the Slingshot and W (they are in its checkpoint), without duplicates.
 ## - Title -> Continue opens Floor 3 directly with the Slingshot on W, and it fires: three stones
@@ -113,7 +113,8 @@ func _check_floor_2_entry() -> bool:
 			"Carl does not own the Slingshot, and neither does the floor-entry state")
 	var save := _save()
 	check(save.get("floor_id") == "floor_02" and save.get("owned_items") == [] and save.get("inventory") == {"small_health_potion": 1.0}
-			and save.get("save_version") == 2.0, "the Floor 2 checkpoint on disk: 1 potion, no owned items", str(save))
+			and save.get("save_version") == 3.0 and save.get("donut") == {"health": 60.0, "max_health": 60.0},
+			"the Floor 2 checkpoint on disk: 1 potion, no owned items, Donut unhurt", str(save))
 	var pickup := _slingshot_pickup()
 	check(pickup != null and pickup.get_node("Label").text == "Slingshot", "the Slingshot pickup is on Floor 2")
 	check(_destinations() == [FLOOR_3_PATH], "Floor 2's only exit leads down to Floor 3, nothing back up", str(_destinations()))
@@ -217,7 +218,8 @@ func _floor_2_to_floor_3() -> bool:
 	check(entry.scene_path == FLOOR_3_PATH and entry.inventory["items"].has(SLINGSHOT.id) and entry.action_slots.get(W) == SLINGSHOT,
 			"Floor 3's entry state has the Slingshot and W = Slingshot")
 	var save := _save()
-	check(save.get("save_version") == 2.0 and save.get("floor_id") == "floor_03" and save.get("owned_items") == ["slingshot"]
+	check(save.get("save_version") == 3.0 and save.get("floor_id") == "floor_03" and save.get("owned_items") == ["slingshot"]
+			and save.get("donut") == {"health": 60.0, "max_health": 60.0}
 			and save.get("inventory") == {"small_health_potion": 1.0} and save["carl"]["health"] == float(_entry_health)
 			and save.get("action_slots") == {"action_w": "slingshot", "action_a": "small_health_potion", "action_s": null, "action_d": "fists"},
 			"the Floor 3 checkpoint on disk owns the Slingshot, with W = Slingshot", _save_text().replace("\n", " ").replace("\t", ""))

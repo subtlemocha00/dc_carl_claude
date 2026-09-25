@@ -293,7 +293,7 @@ func _check_hud(label: String, hp: int, slots_text: String, game_over_visible: b
 	var hud := current_scene.get_node("HUD")
 	var hp_text: String = hud.get_node("%HealthLabel").text
 	var shown_slots: String = hud.get_node("%ActionSlotsLabel").text
-	check(hp_text == "HP: %d / 100" % hp and shown_slots == slots_text and hud.get_node("%GameOverMessage").visible == game_over_visible,
+	check(hp_text == "Carl HP: %d / 100" % hp and shown_slots == slots_text and hud.get_node("%GameOverMessage").visible == game_over_visible,
 			label + ": HUD shows HP, slots and GAME OVER correctly", "%s | %s" % [hp_text, shown_slots])
 
 

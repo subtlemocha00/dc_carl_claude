@@ -1,22 +1,25 @@
 extends "res://tests/support/game_test.gd"
-## Phase 5-7 SaveManager checks, on this test's own save file (never the player's):
+## Phase 5-8 SaveManager checks, on this test's own save file (never the player's):
 ## - the registries: every floor and action id maps back to itself, and the known floors are
-##   exactly surface, floor_01, floor_02, floor_03 and floor_04 (Phase 7);
-## - a checkpoint is written as JSON (save_version 2) with stable ids only, and loads back
-##   unchanged; a Floor 3 checkpoint keeps the owned Slingshot in owned_items, with no
-##   quantity; a Floor 4 checkpoint (Phase 7) is written the same way, still save_version 2;
-##   a new save replaces the old one and leaves no temporary file;
+##   exactly surface and floor_01 to floor_05 (Phase 8);
+## - a checkpoint is written as JSON (save_version 3, Phase 8) with stable ids only, and loads
+##   back unchanged, Donut's HP included; a Floor 3 checkpoint keeps the owned Slingshot in
+##   owned_items, with no quantity; Floor 4 and Floor 5 checkpoints are written the same way;
+##   Donut at 0 HP (downed) is saved and loaded as 0; a new save replaces the old one and leaves
+##   no temporary file;
 ## - untrusted data is rejected without a crash or an engine error: malformed JSON, wrong
 ##   root type, unsupported or missing version, missing fields, unknown floor (or a scene
-##   path instead of an id), bad HP, negative/fractional/string quantities, unknown or innate
-##   items, a reusable item with a quantity, bad owned_items (not a list, unknown, not a
-##   string, consumable, innate, listed twice), and a wrong slot structure. A rejected file is
-##   left untouched;
+##   path instead of an id), bad HP, bad Donut data (missing, not an object, negative, above
+##   her maximum, fractional, a string, a bad maximum), negative/fractional/string quantities,
+##   unknown or innate items, a reusable item with a quantity, bad owned_items (not a list,
+##   unknown, not a string, consumable, innate, listed twice), and a wrong slot structure. A
+##   rejected file is left untouched;
 ## - slots are sanitized, the rest of the save kept: unknown actions, items Carl would not
 ##   have (a potion with none left, a Slingshot he does not own), and one action in two slots;
 ## - deleting works with and without a save, and a save interrupted before its final rename
 ##   is still found.
-## Loading version 1 saves (migration) is covered by test_save_migration.gd.
+## Loading version 1 and 2 saves (migration) is covered by test_save_migration.gd, and the
+## rule that tests can never use the player's save by test_save_isolation.gd.
 ##
 ## Run from the project folder:
 ##     godot --headless --path . -s res://tests/test_save_manager.gd
@@ -29,6 +32,7 @@ const SLINGSHOT: ActionDefinition = preload("res://resources/actions/slingshot.t
 const FLOOR_2_PATH := "res://scenes/levels/floor_02.tscn"
 const FLOOR_3_PATH := "res://scenes/levels/floor_03.tscn"
 const FLOOR_4_PATH := "res://scenes/levels/floor_04.tscn"
+const FLOOR_5_PATH := "res://scenes/levels/floor_05.tscn"
 
 
 func _initialize() -> void:
@@ -55,9 +59,12 @@ func _check_registries() -> void:
 		check(ResourceLoader.exists(scene_path) and FloorRegistry.get_floor_id(scene_path) == floor_id,
 				"floor '%s' maps to an existing scene and back" % floor_id)
 	check(FloorRegistry.get_scene_path(&"floor_99") == "" and not FloorRegistry.has_floor(&"floor_99"), "an unknown floor has no scene")
-	check(FloorRegistry.FLOORS.keys() == [&"surface", &"floor_01", &"floor_02", &"floor_03", &"floor_04"],
-			"the known floors are surface, floor_01, floor_02, floor_03 and floor_04", str(FloorRegistry.FLOORS.keys()))
+	check(FloorRegistry.FLOORS.keys() == [&"surface", &"floor_01", &"floor_02", &"floor_03", &"floor_04", &"floor_05"],
+			"the known floors are surface and floor_01 to floor_05", str(FloorRegistry.FLOORS.keys()))
 	check(FloorRegistry.get_display_name(&"floor_04") == "Floor 4", "floor_04 is shown as 'Floor 4'")
+	check(FloorRegistry.get_display_name(&"floor_05") == "Floor 5" and FloorRegistry.get_scene_path(&"floor_05") == FLOOR_5_PATH,
+			"floor_05 is shown as 'Floor 5' and opens floor_05.tscn")
+	check(not FloorRegistry.has_floor(&"floor_06"), "there is no floor_06")
 
 
 func _check_round_trip() -> void:
@@ -69,9 +76,10 @@ func _check_round_trip() -> void:
 			"the save file exists and no temporary file is left")
 	var text := FileAccess.get_file_as_string(saves.save_path)
 	var data: Variant = JSON.parse_string(text)
-	check(data is Dictionary and data["save_version"] == 2, "the file is JSON with save_version 2")
+	check(data is Dictionary and data["save_version"] == 3, "the file is JSON with save_version 3")
 	check(data["floor_id"] == "floor_02" and data["carl"]["health"] == 90 and data["carl"]["max_health"] == 100,
 			"it stores the floor id and Carl's HP")
+	check(data["donut"] == {"health": 45.0, "max_health": 60.0}, "it stores Donut's HP", str(data.get("donut")))
 	check(data["inventory"] == {"small_health_potion": 1.0}, "it stores item quantities by id", str(data["inventory"]))
 	check(data["owned_items"] == [], "it stores an empty owned_items list when Carl owns no reusable item", str(data.get("owned_items")))
 	check(data["action_slots"] == {"action_w": null, "action_a": "small_health_potion", "action_s": null, "action_d": "fists"},
@@ -83,6 +91,8 @@ func _check_round_trip() -> void:
 	if loaded != null:
 		check(loaded.scene_path == FLOOR_2_PATH and loaded.carl_health == 90 and loaded.carl_max_health == 100,
 				"floor and HP come back")
+		check(loaded.donut_health == 45 and loaded.donut_max_health == 60, "Donut's HP comes back",
+				"%d / %d" % [loaded.donut_health, loaded.donut_max_health])
 		check(_quantity(loaded, POTION) == 1, "the potion quantity comes back")
 		check(loaded.action_slots == {ActionSlots.SLOT_A: POTION, ActionSlots.SLOT_D: FISTS}, "the slot layout comes back",
 				str(loaded.action_slots))
@@ -90,7 +100,7 @@ func _check_round_trip() -> void:
 	print("-- A Floor 3 checkpoint with the Slingshot")
 	check(saves.save_checkpoint(_floor_3_checkpoint()), "a Floor 3 checkpoint is saved")
 	data = JSON.parse_string(FileAccess.get_file_as_string(saves.save_path))
-	check(data["save_version"] == 2 and data["floor_id"] == "floor_03" and data["carl"]["health"] == 80,
+	check(data["save_version"] == 3 and data["floor_id"] == "floor_03" and data["carl"]["health"] == 80,
 			"it stores floor_03 and 80 HP")
 	check(data["owned_items"] == ["slingshot"] and data["inventory"] == {"small_health_potion": 1.0},
 			"the Slingshot is stored as an owned item, with no quantity; the potion keeps its quantity",
@@ -107,19 +117,35 @@ func _check_round_trip() -> void:
 		check(loaded.action_slots == {ActionSlots.SLOT_W: SLINGSHOT, ActionSlots.SLOT_A: POTION, ActionSlots.SLOT_D: FISTS},
 				"the loaded layout has W = Slingshot, A = potion, D = Fists", str(loaded.action_slots))
 
-	print("-- A Floor 4 checkpoint (Phase 7): same format, save_version 2")
-	check(saves.SAVE_VERSION == 2, "the game still writes save_version 2: Floor 4 added no new kind of saved data")
-	var floor_4 := _floor_3_checkpoint()
-	floor_4.scene_path = FLOOR_4_PATH
+	print("-- Floor 4 and Floor 5 checkpoints, and Donut's HP (Phase 8: save_version 3)")
+	check(saves.SAVE_VERSION == 3, "the game writes save_version 3: Donut's HP is a new kind of saved data")
 	var floor_3_data: Dictionary = saves.encode(_floor_3_checkpoint())
-	var floor_4_data: Dictionary = saves.encode(floor_4)
-	check(floor_4_data.keys() == floor_3_data.keys() and floor_4_data["floor_id"] == "floor_04"
-			and floor_4_data["save_version"] == 2, "it has exactly the fields of a Floor 3 checkpoint, with floor_id floor_04")
-	check(saves.save_checkpoint(floor_4), "a Floor 4 checkpoint is saved")
+	check(floor_3_data.keys() == ["save_version", "floor_id", "carl", "donut", "inventory", "owned_items", "action_slots"],
+			"a checkpoint has exactly the fields save_version, floor_id, carl, donut, inventory, owned_items, action_slots",
+			str(floor_3_data.keys()))
+	for floor_path: String in [FLOOR_4_PATH, FLOOR_5_PATH]:
+		var checkpoint := _floor_3_checkpoint()
+		checkpoint.scene_path = floor_path
+		checkpoint.donut_health = 40
+		var floor_data: Dictionary = saves.encode(checkpoint)
+		var floor_id := FloorRegistry.get_floor_id(floor_path)
+		check(floor_data.keys() == floor_3_data.keys() and floor_data["floor_id"] == String(floor_id) and floor_data["save_version"] == 3
+				and floor_data["donut"] == {"health": 40, "max_health": 60},
+				"a %s checkpoint has the same fields, with floor_id %s and Donut at 40 / 60" % [FloorRegistry.get_display_name(floor_id), floor_id])
+		check(saves.save_checkpoint(checkpoint), "the %s checkpoint is saved" % FloorRegistry.get_display_name(floor_id))
+		loaded = saves.load_checkpoint()
+		check(loaded != null and loaded.scene_path == floor_path and loaded.carl_health == 80 and loaded.donut_health == 40
+				and loaded.donut_max_health == 60
+				and loaded.action_slots == {ActionSlots.SLOT_W: SLINGSHOT, ActionSlots.SLOT_A: POTION, ActionSlots.SLOT_D: FISTS},
+				"it loads back as %s with Carl's and Donut's HP and the slots" % FloorRegistry.get_display_name(floor_id), saves.last_error)
+	var downed := _floor_3_checkpoint()
+	downed.scene_path = FLOOR_5_PATH
+	downed.donut_health = 0
+	saves.save_checkpoint(downed)
+	data = JSON.parse_string(FileAccess.get_file_as_string(saves.save_path))
 	loaded = saves.load_checkpoint()
-	check(loaded != null and loaded.scene_path == FLOOR_4_PATH and loaded.carl_health == 80
-			and loaded.action_slots == {ActionSlots.SLOT_W: SLINGSHOT, ActionSlots.SLOT_A: POTION, ActionSlots.SLOT_D: FISTS},
-			"it loads back as Floor 4 with its HP and slots", saves.last_error)
+	check(data["donut"]["health"] == 0 and loaded != null and loaded.donut_health == 0 and loaded.donut_max_health == 60,
+			"Donut entering a floor downed is saved and loaded as 0 / 60", saves.last_error)
 
 	var surface := _floor_2_checkpoint()
 	surface.scene_path = FloorRegistry.get_scene_path(&"surface")
@@ -138,14 +164,14 @@ func _check_rejected_data() -> void:
 	for label: String in cases:
 		_expect_rejected(cases[label], label)
 	var edits := {
-		"unsupported save_version 3": func(d: Dictionary) -> void: d["save_version"] = 3,
+		"unsupported save_version 4": func(d: Dictionary) -> void: d["save_version"] = 4,
 		"unsupported save_version 999": func(d: Dictionary) -> void: d["save_version"] = 999,
 		"save_version 0": func(d: Dictionary) -> void: d["save_version"] = 0,
 		"save_version as a string": func(d: Dictionary) -> void: d["save_version"] = "1",
 		"no save_version": func(d: Dictionary) -> void: d.erase("save_version"),
 		"no floor_id": func(d: Dictionary) -> void: d.erase("floor_id"),
 		"an unknown floor": func(d: Dictionary) -> void: d["floor_id"] = "floor_99",
-		"floor_05, which does not exist": func(d: Dictionary) -> void: d["floor_id"] = "floor_05",
+		"floor_06, which does not exist": func(d: Dictionary) -> void: d["floor_id"] = "floor_06",
 		"a scene path instead of a floor id": func(d: Dictionary) -> void: d["floor_id"] = FLOOR_2_PATH,
 		"no carl": func(d: Dictionary) -> void: d.erase("carl"),
 		"HP as a string": func(d: Dictionary) -> void: d["carl"]["health"] = "90",
@@ -153,6 +179,20 @@ func _check_rejected_data() -> void:
 		"HP above max": func(d: Dictionary) -> void: d["carl"]["health"] = 101,
 		"fractional HP": func(d: Dictionary) -> void: d["carl"]["health"] = 90.5,
 		"max HP 0": func(d: Dictionary) -> void: d["carl"]["max_health"] = 0,
+		"no donut": func(d: Dictionary) -> void: d.erase("donut"),
+		"donut as null": func(d: Dictionary) -> void: d["donut"] = null,
+		"donut as a number": func(d: Dictionary) -> void: d["donut"] = 60,
+		"donut as a list": func(d: Dictionary) -> void: d["donut"] = [45, 60],
+		"no donut health": func(d: Dictionary) -> void: d["donut"].erase("health"),
+		"no donut max_health": func(d: Dictionary) -> void: d["donut"].erase("max_health"),
+		"Donut HP as a string": func(d: Dictionary) -> void: d["donut"]["health"] = "45",
+		"negative Donut HP": func(d: Dictionary) -> void: d["donut"]["health"] = -1,
+		"Donut HP above her maximum": func(d: Dictionary) -> void: d["donut"]["health"] = 61,
+		"fractional Donut HP": func(d: Dictionary) -> void: d["donut"]["health"] = 44.5,
+		"Donut HP as null": func(d: Dictionary) -> void: d["donut"]["health"] = null,
+		"Donut max HP 0": func(d: Dictionary) -> void: d["donut"]["max_health"] = 0,
+		"Donut max HP above the limit": func(d: Dictionary) -> void: d["donut"]["max_health"] = 5000,
+		"Donut max HP as a string": func(d: Dictionary) -> void: d["donut"]["max_health"] = "60",
 		"no inventory": func(d: Dictionary) -> void: d.erase("inventory"),
 		"inventory as a list": func(d: Dictionary) -> void: d["inventory"] = [],
 		"a negative quantity": func(d: Dictionary) -> void: d["inventory"]["small_health_potion"] = -1,
@@ -223,7 +263,16 @@ func _check_sanitized_slots() -> void:
 	check(loaded != null and loaded.action_slots.get(ActionSlots.SLOT_W) == SLINGSHOT, "with the Slingshot owned, W = Slingshot is kept")
 	data = _valid_data()
 	data["carl"]["health"] = 90.0
+	data["donut"]["health"] = 45.0
 	check(_load_data(data) != null, "whole numbers written as 90.0 are accepted")
+	data = _valid_data()
+	data["donut"]["health"] = 0
+	loaded = _load_data(data)
+	check(loaded != null and loaded.donut_health == 0, "Donut at 0 HP is valid: she entered the floor downed")
+	data = _valid_data()
+	data["donut"]["health"] = 60
+	loaded = _load_data(data)
+	check(loaded != null and loaded.donut_health == 60, "Donut at exactly her maximum is valid")
 
 
 func _check_delete_and_recovery() -> void:
@@ -250,7 +299,7 @@ func _check_delete_and_recovery() -> void:
 	check(not FileAccess.file_exists(temp_path) and not FileAccess.file_exists(saves.save_path), "delete_save removes both files")
 
 
-## A Floor 2 checkpoint: 90/100 HP, 1 potion on A, Fists on D.
+## A Floor 2 checkpoint: Carl 90/100 HP, Donut 45/60 HP, 1 potion on A, Fists on D.
 func _floor_2_checkpoint() -> FloorEntry:
 	var inventory := Inventory.new()
 	inventory.reset([FISTS])
@@ -259,12 +308,15 @@ func _floor_2_checkpoint() -> FloorEntry:
 	checkpoint.scene_path = FLOOR_2_PATH
 	checkpoint.carl_health = 90
 	checkpoint.carl_max_health = 100
+	checkpoint.donut_health = 45
+	checkpoint.donut_max_health = 60
 	checkpoint.inventory = inventory.get_snapshot()
 	checkpoint.action_slots = {ActionSlots.SLOT_A: POTION, ActionSlots.SLOT_D: FISTS}
 	return checkpoint
 
 
-## A Floor 3 checkpoint: 80/100 HP, 1 potion on A, the Slingshot owned and on W, Fists on D.
+## A Floor 3 checkpoint: Carl 80/100 HP, Donut 60/60 HP, 1 potion on A, the Slingshot owned
+## and on W, Fists on D.
 func _floor_3_checkpoint() -> FloorEntry:
 	var inventory := Inventory.new()
 	inventory.reset([FISTS])
@@ -274,6 +326,8 @@ func _floor_3_checkpoint() -> FloorEntry:
 	checkpoint.scene_path = FLOOR_3_PATH
 	checkpoint.carl_health = 80
 	checkpoint.carl_max_health = 100
+	checkpoint.donut_health = 60
+	checkpoint.donut_max_health = 60
 	checkpoint.inventory = inventory.get_snapshot()
 	checkpoint.action_slots = {ActionSlots.SLOT_W: SLINGSHOT, ActionSlots.SLOT_A: POTION, ActionSlots.SLOT_D: FISTS}
 	return checkpoint

@@ -247,3 +247,52 @@ Required:
       OVER and the title fit and are visible at 1280×720, 640×360 and 1024×768.
 - [ ] No Donut combat or HP, bosses, Floor 5, other new enemies, ammunition, new weapons,
       procedural spawning or save-slot changes were added.
+
+# Phase 8 — Donut Health, Companion Combat, Enemy Targeting, Save v3 and Floor 5
+
+The Phase 3–7 rules still apply (arrow keys move Carl; W/A/S/D are Carl's configurable slots
+with Fists on D in a new game; downward-only; GAME OVER waits for Enter; one floor-entry
+checkpoint). Donut stays AI-controlled: no new keys, commands, slots or equipment.
+
+Required:
+- [ ] Donut has 60 / 60 HP in a new run, through the shared Health and Hurtbox (her Hurtbox on
+      the player's side, player_hurtbox). Enemy attacks hurt her; her HP never goes below 0.
+- [ ] Carl's Fists and Slingshot stones never hurt Donut (no friendly fire); her Scratch never
+      hurts Carl or herself; enemy attacks never hurt enemies.
+- [ ] The HUD shows "Carl HP: x / 100" and "Donut HP: y / 60", and "Donut HP: 0 / 60 - DOWNED"
+      when she is downed, with the W/A/S/D bar still readable, at 1280×720, 640×360 and 1024×768.
+- [ ] Enemies pick the nearest valid party member (Carl or Donut) within their detection range,
+      keep that target while it stays valid and within their chase range (no flipping between
+      them at small distance changes), and pick again when it is downed or out of range. A
+      downed Donut is never a target; once she gets up she can be picked again.
+- [ ] The Gelatinous Blob (30 HP, 55 px/s, 220/320 px, 10 every 0.8 s) navigates around walls to
+      Donut as to Carl, and each touch hurts one party member (the nearer one).
+- [ ] The Spitting Blob (Phase 7 numbers unchanged) picks Donut, needs to see her (a wall blocks
+      its view and its globs), keeps 180–280 px from her, and stops spitting at her once she is
+      downed. It still spits at Carl as before.
+- [ ] Globs deal 10 to Carl or Donut, only the first of them in the way, once; walls stop them;
+      a downed Donut does not stop them; they never hurt the enemy that spat them or others.
+- [ ] Scratch: automatic, 10 damage to the nearest enemy within about 42 px, at most once per
+      1.0 s; never with no enemy near; Donut never walks toward enemies, only after Carl.
+- [ ] At 0 HP Donut is DOWNED: visibly (grey, on her side, DOWNED label); she stops following and
+      scratching; more hits do nothing; there is no GAME OVER. After exactly 6 s of play she gets
+      up with 30 / 60, looks normal, follows Carl, scratches and can be targeted again. The
+      menu and GAME OVER stop the countdown; there is no revive key; potions heal Carl only.
+- [ ] Carl reaching 0 HP is GAME OVER whatever Donut's state; Donut reaching 0 is not. GAME OVER
+      freezes Donut and her countdown and waits for Enter.
+- [ ] Donut's HP carries over between floors unhealed and is part of the floor-entry state. A
+      retry and Continue restore her floor-entry HP; 0 starts her downed with a fresh 6 s. No
+      stairs lock while she is downed: she arrives downed and gets up 6 s later.
+- [ ] Save format version 3 stores Donut's HP ("donut": {"health", "max_health"}), validated
+      (whole numbers, 0 ≤ health ≤ max, max 1–1000; a v3 save without it is rejected). Phase 5
+      (v1) and Phase 6/7 (v2) saves still load, with Donut at 60 / 60, and become v3 at the next
+      checkpoint. Unsupported versions are rejected. The recovery countdown is never saved.
+- [ ] New Game resets Donut to 60 / 60, not downed; nothing from an old run leaks in.
+- [ ] Floor 4 has stairs down to Floor 5 (`floor_05`, in FloorRegistry): signs, HUD, menu, two
+      Gelatinous Blobs and a Spitting Blob, walls, safe arrival, a checkpoint on entry, Continue
+      straight into it. Floor 5 has no exits; nothing leads up from any floor.
+- [ ] Tests and tools can never read or write the player's save: SaveManager refuses, with an
+      error, any file outside user://test_saves/ in a test or tool run.
+- [ ] No Donut controls, commands, slots or equipment, permanent Donut death, Donut items or
+      potion targeting, bosses, Floor 6, other enemy species, new weapons, ammunition, stair
+      locking or other Phase 9+ features were added.

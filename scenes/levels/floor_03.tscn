@@ -16,9 +16,10 @@ parsed_geometry_type = 1
 parsed_collision_mask = 1
 agent_radius = 14.0
 
-[node name="Floor03" type="Node2D" node_paths=PackedStringArray("carl", "hud", "action_menu")]
+[node name="Floor03" type="Node2D" node_paths=PackedStringArray("carl", "donut", "hud", "action_menu")]
 script = ExtResource("6_level")
 carl = NodePath("Actors/Carl")
+donut = NodePath("Actors/Donut")
 hud = NodePath("HUD")
 action_menu = NodePath("ActionMenu")
 
@@ -80,13 +81,11 @@ position = Vector2(160, 320)
 position = Vector2(104, 332)
 follow_target = NodePath("../Carl")
 
-[node name="GelatinousBlob" parent="Actors" node_paths=PackedStringArray("target") instance=ExtResource("8_blob")]
+[node name="GelatinousBlob" parent="Actors" instance=ExtResource("8_blob")]
 position = Vector2(736, 320)
-target = NodePath("../Carl")
 
-[node name="GelatinousBlob2" parent="Actors" node_paths=PackedStringArray("target") instance=ExtResource("8_blob")]
+[node name="GelatinousBlob2" parent="Actors" instance=ExtResource("8_blob")]
 position = Vector2(864, 160)
-target = NodePath("../Carl")
 
 [node name="HUD" parent="." instance=ExtResource("7_hud")]
 

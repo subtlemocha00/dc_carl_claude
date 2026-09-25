@@ -7,7 +7,7 @@
 [sub_resource type="CircleShape2D" id="CircleShape2D_carl"]
 radius = 12.0
 
-[node name="Carl" type="CharacterBody2D"]
+[node name="Carl" type="CharacterBody2D" groups=["party"]]
 collision_layer = 2
 collision_mask = 9
 motion_mode = 1

@@ -15,9 +15,10 @@ parsed_geometry_type = 1
 parsed_collision_mask = 1
 agent_radius = 14.0
 
-[node name="Surface" type="Node2D" node_paths=PackedStringArray("carl", "hud", "action_menu")]
+[node name="Surface" type="Node2D" node_paths=PackedStringArray("carl", "donut", "hud", "action_menu")]
 script = ExtResource("6_level")
 carl = NodePath("Actors/Carl")
+donut = NodePath("Actors/Donut")
 hud = NodePath("HUD")
 action_menu = NodePath("ActionMenu")
 
