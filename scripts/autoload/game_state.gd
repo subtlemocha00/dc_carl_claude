@@ -59,6 +59,14 @@ func start_new_run() -> void:
 	floor_entry = null
 
 
+## Forgets the run in memory (Phase 10). The title screen calls this: there, no run is in
+## progress, so nothing a level left behind (HP, items found or used, slots, the floor entry)
+## can leak into the next Continue or New Game. Nothing is saved: the save file keeps the last
+## floor-entry checkpoint, and Continue reads it from disk.
+func end_run() -> void:
+	start_new_run()
+
+
 ## Starts a run from a saved checkpoint (Continue): exactly its HP (Carl's and Donut's),
 ## inventory and slot layout.
 ## The caller then loads `checkpoint.scene_path`.

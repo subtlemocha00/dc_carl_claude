@@ -13,7 +13,10 @@ extends "res://tests/support/game_test.gd"
 ## bar, with the Baseball Bat on S ("W: Slingshot   A: Potion x2   S: Baseball Bat   D: Fists"),
 ## fully on screen with its text fitting; the menu listing the Bat; Floor 5's new hint and its
 ## Bat pickup (icon and label) on screen from the spawn point; Floor 6's three signs clear of the
-## HUD; and a blob knocked back by the Bat, drawn on screen while it is pushed.
+## HUD; and a blob knocked back by the Bat, drawn on screen while it is pushed. Phase 10 adds: the
+## HUD hint "Space: action menu     Esc: pause" on screen and fitting; the pause menu and its two
+## questions (Return to Title, Quit Game) on screen, centred and fitting, above the HUD; and the
+## title screen reached through Return to Title, on screen with the Floor 6 checkpoint.
 ## Then the title screen at each size, with a Floor 6 save: Continue and New Game, the "could not
 ## be loaded" message, and the New Game confirmation.
 ##
@@ -88,6 +91,10 @@ func _run_checks() -> void:
 		check(not donut_label.get_global_rect().intersects(health_label.get_global_rect())
 				and not donut_label.get_global_rect().intersects(action_slots_label.get_global_rect()),
 				label + ": Donut's HP label overlaps neither Carl's HP nor the slot bar")
+		var menu_hint: Label = hud.get_node("MenuHint")
+		check(visible_rect.encloses(menu_hint.get_global_rect()) and menu_hint.get_minimum_size().x <= menu_hint.size.x
+				and not menu_hint.get_global_rect().intersects(action_slots_label.get_global_rect()),
+				label + ": the hint \"%s\" is on screen, fits and is clear of the slot bar" % menu_hint.text)
 		game_over_message.visible = true
 		await process_frame
 		var message_rect := game_over_message.get_global_rect()
@@ -128,6 +135,7 @@ func _run_checks() -> void:
 	await _check_floor_4()
 	await _check_floor_5()
 	await _check_floor_6()
+	await _check_pause_menu()
 	await _check_title_screen()
 	finish()
 
@@ -329,6 +337,65 @@ func _check_floor_6() -> void:
 				"pushed %.1f px" % (blob.global_position.x - start.x))
 		await wait_seconds(0.5)
 	check(FloorRegistry.get_floor_id(game_state().floor_entry.scene_path) == &"floor_06", "the save now holds the Floor 6 checkpoint")
+
+
+## Phase 10: on Floor 6 at each size, the pause menu (its three rows) and both of its questions
+## (Return to Title, Quit Game: the warning text fits) are on screen and centred, drawn over the
+## HUD. Then Return to Title through the menu: the title screen is on screen at each size and
+## describes the Floor 6 checkpoint.
+func _check_pause_menu() -> void:
+	var pause: CanvasLayer = current_scene.get_node("PauseMenu")
+	var hud: CanvasLayer = current_scene.get_node("HUD")
+	check(pause.layer > hud.layer and pause.layer > (current_scene.get_node("ActionMenu") as CanvasLayer).layer,
+			"the pause menu is drawn above the HUD and the action menu")
+	await tap_key(KEY_ESCAPE)
+	for window_size in WINDOW_SIZES:
+		DisplayServer.window_set_size(window_size)
+		await wait_physics_frames(10)
+		var label := "%dx%d" % [window_size.x, window_size.y]
+		var visible_rect := root.get_visible_rect()
+		var panel_rect := (pause.get_node("%MenuPanel") as Control).get_global_rect()
+		check(pause.is_open() and visible_rect.encloses(panel_rect) and panel_rect.get_center().distance_to(visible_rect.get_center()) < 2.0,
+				label + ": the pause menu is on screen and centred", str(panel_rect))
+		for row_name: String in ["%ResumeRow", "%ReturnToTitleRow", "%QuitRow"]:
+			var row: Label = pause.get_node(row_name)
+			check(panel_rect.encloses(row.get_global_rect()) and row.get_minimum_size().x <= row.size.x,
+					"%s: %s \"%s\" is inside the panel and fits" % [label, row_name.trim_prefix("%"), row.text])
+	for option: int in [1, 2]:
+		await tap_key(KEY_DOWN)
+		await tap_key(KEY_ENTER)
+		var question: Label = pause.get_node("%ConfirmQuestion")
+		for window_size in WINDOW_SIZES:
+			DisplayServer.window_set_size(window_size)
+			await wait_physics_frames(10)
+			var label := "%dx%d" % [window_size.x, window_size.y]
+			var visible_rect := root.get_visible_rect()
+			var panel_rect := (pause.get_node("%ConfirmPanel") as Control).get_global_rect()
+			check(pause.is_confirming() and visible_rect.encloses(panel_rect) and panel_rect.get_center().distance_to(visible_rect.get_center()) < 2.0,
+					"%s: the \"%s\" question is on screen and centred" % [label, question.text.get_slice("
+", 0)], str(panel_rect))
+			check(panel_rect.encloses(question.get_global_rect()) and question.get_minimum_size().x <= question.size.x
+					and panel_rect.encloses((pause.get_node("%NoRow") as Control).get_global_rect())
+					and panel_rect.encloses((pause.get_node("%YesRow") as Control).get_global_rect()),
+					label + ": the warning, No and Yes fit inside it")
+		await tap_key(KEY_ESCAPE)
+	# Quit Game is selected now: Up, then Return to Title > Yes.
+	await tap_key(KEY_UP)
+	await tap_key(KEY_ENTER)
+	await tap_key(KEY_DOWN)
+	await tap_key(KEY_ENTER)
+	var title_path: String = ProjectSettings.get_setting("application/run/main_scene")
+	if not await wait_for_scene(title_path):
+		return
+	for window_size in WINDOW_SIZES:
+		DisplayServer.window_set_size(window_size)
+		await wait_physics_frames(10)
+		var visible_rect := root.get_visible_rect()
+		var info: Label = current_scene.get_node("%SaveInfoLabel")
+		check(visible_rect.encloses(info.get_global_rect()) and visible_rect.encloses(current_scene.get_node("%ContinueRow").get_global_rect())
+				and info.text.begins_with("Saved at the start of Floor 6"),
+				"%dx%d: after Return to Title, the title is on screen and describes the Floor 6 checkpoint" % [window_size.x, window_size.y], info.text)
+	DisplayServer.window_set_size(WINDOW_SIZES[0])
 
 
 ## A world-space Control's rectangle on screen (after the camera).

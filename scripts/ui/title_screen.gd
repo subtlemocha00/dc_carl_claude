@@ -6,6 +6,10 @@ extends Control
 ##   so if a save file exists (loadable or not) the menu asks first, with No selected.
 ## An unloadable save never stops the game: Continue stays unavailable, a short message says
 ## so, and New Game still works.
+## Phase 10: the pause menu's Return to Title comes back here in the same process. The title
+## then drops the run GameState still held (GameState.end_run()) and describes the save file
+## again, so the line under the menu is the saved checkpoint, never the live floor that was
+## left, and Continue loads that checkpoint from disk.
 
 const SELECTED_COLOR := Color(1.0, 0.86, 0.35)
 const NORMAL_COLOR := Color(0.9, 0.91, 0.94)
@@ -43,6 +47,7 @@ func _ready() -> void:
 	version_label.text = "Version %s  |  Godot %s" % [game_version, engine_version]
 	confirm_panel.visible = false
 	confirm_dim.visible = false
+	GameState.end_run()
 	_read_save()
 
 

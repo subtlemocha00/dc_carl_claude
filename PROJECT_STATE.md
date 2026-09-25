@@ -7,8 +7,10 @@ Godot 4.7.2 stable (Standard build, not .NET)
 GDScript
 
 ## Current phase
-Phase 9 — Second Reusable Weapon (Baseball Bat), Knockback, Combat Reactions and Floor 6:
-**complete, awaiting human review**.
+Phase 10 — Pause Menu, Return to Title, Clean Quit and Runtime Stability: **complete, awaiting
+human review**.
+- Phase 9 — Second Reusable Weapon (Baseball Bat), Knockback, Combat Reactions and Floor 6:
+  complete (commit `042d76b`).
 - Phase 8 — Donut Health, Companion Combat, Enemy Targeting, Save v3 and Floor 5: complete
   (commit `3351ceb`).
 - Phase 7 — Enemy Navigation, Ranged Enemy Combat and Floor 4: complete (commit `02b1fb2`).
@@ -21,7 +23,7 @@ Phase 9 — Second Reusable Weapon (Baseball Bat), Knockback, Combat Reactions a
 - Phase 1 — First Traversal Slice: complete (commit `3cb8854`).
 - Phase 0 — Project Foundation: complete (commit `37b2c87`).
 
-There are no `PHASE_02_*.md` to `PHASE_09_*.md` files. Phases 2–9 came from the owner's
+There are no `PHASE_02_*.md` to `PHASE_10_*.md` files. Phases 2–10 came from the owner's
 prompts. Their acceptance criteria are recorded in `ACCEPTANCE_TESTS.md`.
 
 ## Canonical design decisions (do not reintroduce the old behaviour)
@@ -175,6 +177,38 @@ Phase 9 decisions (also written into `GAME_SPEC.md` §8, §9, §10, §14a, §14b
   - the knockback event carries direction, distance and duration only: no source (nothing needs
     it yet).
 
+Phase 10 decisions (also written into `GAME_SPEC.md` §4, §15 and §15a):
+- **Escape during play opens the pause menu**: Resume, Return to Title, Quit Game, Resume
+  selected each time. Up/Down choose (wrapping), Enter confirms, Escape resumes.
+- **One pause model:** the pause menu pauses the scene tree, exactly as the action menu and GAME
+  OVER already did. Everything in play counts physics ticks (cooldowns, pushes, Donut's
+  countdown, projectiles), so all of it stops, and nothing needed its own pause flag.
+- **Only one modal at a time:** the action menu and the pause menu each open only while the tree
+  is not paused, and an open menu takes every key press. So Escape closes the action menu without
+  opening the pause menu, Space never opens the action menu over the pause menu, and neither
+  opens over GAME OVER.
+- **Escape at GAME OVER does nothing** (the narrower of the two options the prompt allowed):
+  GAME OVER keeps Enter = retry and nothing else; the window can still be closed.
+- **Return to Title and Quit Game ask first** ("… Progress since entering this floor will be
+  lost.", No selected; Escape and No go back to the pause menu, still paused).
+- **Leaving never saves.** The save keeps the floor-entry checkpoint. Return to Title goes to the
+  title screen in the same process; the title screen drops the run from memory
+  (`GameState.end_run()`), describes the save file, and Continue loads it from disk. Quit Game
+  calls `quit()`; closing the window is left to Godot's default (quit, no question), and nothing
+  writes on the way out either way.
+- **The pause menu belongs to every level, from `Level._ready()`**, not to the floor scenes, so no
+  floor has pause logic and future floors get it for free.
+- **The save stays version 3.** Pausing, its selection and its questions are never saved.
+- **Lifecycle fix (found in this phase):** stairs no longer change level once the game is frozen
+  (see Architecture > Pause menu and the game session).
+- **Phase 10 choices the prompt left open** (the narrowest fit with the existing code):
+  - No in a question goes back to the pause menu (still paused), not straight to the game;
+  - the pause menu's selection wraps round (Up on Resume selects Quit Game);
+  - a key held while resuming counts as released until let go (the existing
+    `NOTIFICATION_UNPAUSED` rule in `carl.gd`), as after the action menu;
+  - the HUD hint now reads "Space: action menu     Esc: pause";
+  - closing the window never asks (Godot's default), as the prompt preferred.
+
 ## Implemented
 - **Title screen** (main scene):
   - **Continue** (available only when the save loads) resumes the saved floor checkpoint;
@@ -184,6 +218,15 @@ Phase 9 decisions (also written into `GAME_SPEC.md` §8, §9, §10, §14a, §14b
     replaced." with No selected.
   - An unloadable save shows "Save data could not be loaded." and leaves Continue
     unavailable.
+  - **Phase 10:** it is also where Return to Title lands, in the same process. On opening it
+    drops the run from memory (`GameState.end_run()`) and reads the save again, so its line
+    describes the saved checkpoint, never the floor just left.
+- **Pause menu (Phase 10,** `scenes/ui/pause_menu.tscn` + `scripts/ui/pause_menu.gd`**):** Escape
+  during play. "Paused" with Resume / Return to Title / Quit Game (a CanvasLayer on layer 11,
+  above the HUD and the action menu, over a dimmed screen); the two leaving options first ask
+  "Return to title? / Quit game?" + "Progress since entering this floor will be lost." with No
+  and Yes (an orange-bordered panel like the title's New Game question). Every level adds one in
+  `Level._ready()`. See Architecture > Pause menu and the game session.
 - **Carl** (`scenes/actors/carl.tscn`): **unchanged in Phases 6–9** (Phase 8 only puts his scene in
   the `party` group; Phase 9 added the Bat without touching his script).
   - Arrow-key movement at 180 px/s, wall collision, facing arrow, smoothed camera.
@@ -297,11 +340,13 @@ Phase 9 decisions (also written into `GAME_SPEC.md` §8, §9, §10, §14a, §14b
     HUD and menu;
   - **no exits**: no way up, and Floor 7 is out of scope.
 - **Stairs** (`scenes/props/stairs.tscn`): stairs **down**. They load `destination_scene_path`
-  and ignore Carl for the first 2 physics frames of a level (no transition loops).
+  and ignore Carl for the first 2 physics frames of a level (no transition loops). **Phase 10:**
+  they never change level once the game is frozen (Carl killed in the tick he reached them).
 - **HUD** (`scenes/ui/hud.tscn`): "Carl HP: x / 100" and, beside it (Phase 8), "Donut HP: y / 60"
   in orange, or "Donut HP: 0 / 60  -  DOWNED" in red; the slot bar, for example
   `W: Slingshot   A: Potion x1   S: Baseball Bat   D: Fists` (no quantity for the Slingshot or the
-  Bat); a "Space: action menu" hint; the centred GAME OVER panel. Unchanged in Phase 9: the longest
+  Bat); a "Space: action menu     Esc: pause" hint (Phase 10; it said "Space: action menu"); the
+  centred GAME OVER panel. Unchanged in Phase 9: the longest
   slot bar still fits (checked at every window size).
 - **Action menu** (`scenes/ui/action_menu.tscn`): lists the four slots and Carl's inventory,
   for example "Fists (on D)", "Small Health Potion x1 (on A)", "Slingshot (on W)", "Baseball Bat
@@ -316,29 +361,34 @@ healing, a revive key, permanent Donut death, ammunition, more weapons, weapon u
 durability, equipment slots or stats, critical hits, status effects, knockback on anything but
 the Bat, Floor 7, other enemy types (Dungeon Rat, Crawler, Dungeon Brute), bosses (Floor Guardian), the
 prototype-complete screen, stairs that open only after goals or events, countdown timers,
-shops/economy, multiple save slots, mid-floor or cloud saving, pause menu.
+shops/economy, multiple save slots, mid-floor or cloud saving, save-anywhere, key rebinding,
+settings or options in the pause menu.
 
 ## Controls
 | Action             | Key         | Effect                                                              |
 |--------------------|-------------|---------------------------------------------------------------------|
-| `move_up`          | Up Arrow    | Moves Carl north. In the menu: select the previous item             |
-| `move_down`        | Down Arrow  | Moves Carl south. In the menu: select the next item                 |
+| `move_up`          | Up Arrow    | Moves Carl north. In a menu: select the previous item               |
+| `move_down`        | Down Arrow  | Moves Carl south. In a menu: select the next item                   |
 | `move_left`        | Left Arrow  | Moves Carl west                                                     |
 | `move_right`       | Right Arrow | Moves Carl east                                                     |
 | `action_w`         | W           | Uses slot W (empty in a new game). In the menu: put the selection on W |
 | `action_a`         | A           | Uses slot A (empty in a new game). In the menu: put the selection on A |
 | `action_s`         | S           | Uses slot S (empty in a new game). In the menu: put the selection on S |
 | `action_d`         | D           | Uses slot D (**Fists** in a new game). In the menu: put the selection on D |
-| `inventory_toggle` | Space       | Opens / closes the action menu (not over GAME OVER)                 |
-| `ui_confirm_game`  | Enter       | Title: confirm Continue / New Game / Yes / No. GAME OVER: retry the floor |
-| `pause_back`       | Escape      | Closes the action menu; on the title confirmation, means No. No other effect yet |
+| `inventory_toggle` | Space       | Opens / closes the action menu (not over GAME OVER or the pause menu) |
+| `ui_confirm_game`  | Enter       | Title and pause menu: confirm the selection / Yes / No. GAME OVER: retry the floor |
+| `pause_back`       | Escape      | Play: opens the pause menu. Action menu: closes it (only). Pause menu: resumes. A question: No. GAME OVER: nothing |
+
+Pause menu (Phase 10): **Up/Down** choose Resume, Return to Title or Quit Game (wrapping),
+**Enter** confirms, **Escape** resumes. In its questions, Up/Down (or Left/Right) choose No or Yes,
+Enter confirms, Escape means No. Space and W/A/S/D do nothing there.
 
 Title screen: **Up/Down** choose Continue or New Game, **Enter** confirms. In the New Game
 confirmation, Up/Down (or Left/Right) choose No or Yes, Enter confirms, and **Escape** means No.
 
 Whatever slot holds the Slingshot fires it; whatever slot holds the Baseball Bat swings it.
 Holding a slot key repeats its action as fast as the action's cooldown allows: Fists every
-0.4 s, the Slingshot every 0.6 s, the Bat every 0.75 s, a potion every 1 s while it can heal. Pickups need no key. No input actions were added in Phases 3–9: Donut
+0.4 s, the Slingshot every 0.6 s, the Bat every 0.75 s, a potion every 1 s while it can heal. Pickups need no key. No input actions were added in Phases 3–10 (the pause menu uses the existing `pause_back`, `ui_confirm_game` and `move_up`/`move_down`): Donut
 has no keys (her Scratch is automatic), and W/A/S/D never move or command her.
 
 ## Scene structure
@@ -361,6 +411,7 @@ scenes/projectiles/spit_glob.tscn               The Spitting Blob's Projectile (
 scenes/ui/title_screen.tscn                     Main scene: Continue / New Game menu, overwrite confirmation
 scenes/ui/hud.tscn                              Carl's and Donut's HP, slot bar, menu hint, GAME OVER panel (CanvasLayer)
 scenes/ui/action_menu.tscn                      The action/inventory menu (CanvasLayer 10)
+scenes/ui/pause_menu.tscn                       The pause menu and its two questions (CanvasLayer 11; Phase 10)
 scenes/actors/carl.tscn                         Carl (group "party"): Health, Hurtbox, Camera2D (performers added at run time)
 scenes/actors/donut.tscn                        Donut (group "party"): Look (her shapes), DownedLabel, Health, Hurtbox, Scratch (MeleeAttack), NavigationAgent2D
 scenes/enemies/gelatinous_blob.tscn             Blob: Health, Hurtbox, ContactAttack (MeleeAttack), KnockbackReceiver (Phase 9), NavigationAgent2D (EnemyNavigation)
@@ -390,7 +441,8 @@ scripts/enemies/enemy_navigation.gd             class EnemyNavigation (a Navigat
 scripts/enemies/gelatinous_blob.gd              The Gelatinous Blob (an Enemy): chase and touch
 scripts/enemies/spitting_blob.gd                The Spitting Blob (an Enemy): keep distance, spit when in sight (Phase 7)
 scripts/actors/donut.gd                         Donut: follow, Scratch, downed and recovery (Phase 8)
-scripts/levels/level.gd                         class Level: run-state wiring (Carl and Donut), GAME OVER, retry
+scripts/levels/level.gd                         class Level: run-state wiring (Carl and Donut), GAME OVER, retry; adds the pause menu, Return to Title, Quit Game (Phase 10)
+scripts/ui/pause_menu.gd                        The pause menu: Resume / Return to Title / Quit Game, the questions (Phase 10)
 scripts/levels/level_navigation.gd              Bakes a level's navigation mesh on load
 scripts/props/item_pickup.gd                    Walk-over pickup: gives its item to Carl once
 scripts/<actors|enemies|props|ui>/*.gd          One script per scene that needs one
@@ -412,7 +464,8 @@ Every level scene uses this layout:
 │   ├── enemies          e.g. GelatinousBlob, SpittingBlob (they find Carl and Donut themselves)
 │   └── (projectiles)    Stones and globs are added here while they fly
 ├── HUD                  hud.tscn instance
-└── ActionMenu           action_menu.tscn instance
+├── ActionMenu           action_menu.tscn instance
+└── (PauseMenu)          pause_menu.tscn, added by Level._ready() (Phase 10; not in the scene file)
 ```
 **To add a floor:** duplicate `floor_06.tscn` (or another floor), then:
 1. Repaint Terrain and resize the NavigationPolygon outline.
@@ -888,10 +941,58 @@ Composition first, with one thin shared base:
     prints `EXPECTED ERROR: <text>`; `run_all.gd` then excuses exactly one `ERROR: <text>` line
     with that text. Any other error or warning still fails the test.
 
+### Pause menu and the game session (Phase 10)
+- **Where it lives:** `Level._ready()` instantiates `scenes/ui/pause_menu.tscn` as the level's last
+  child and connects its two signals. The floor scenes do not contain it, so every level, including
+  future ones, has exactly one, and none has pause code of its own. It never touches GameState or
+  the save; it only emits `return_to_title_requested` / `quit_requested`, like the HUD's
+  `retry_requested`.
+- **Pausing:** `open()` sets `get_tree().paused = true`, `resume()` sets it back. That is the same
+  pause the action menu and GAME OVER use. Everything in play is `process_mode` Inherit and counts
+  physics ticks (MeleeAttack/ProjectileLauncher/HealAction cooldowns, KnockbackReceiver, Donut's
+  countdown, projectile flight, Stairs arming), so all of it stops, and it all picks up exactly
+  where it left off. The paused tree also turns the physics server off, so stairs and pickups
+  (Area2D) report nothing. Only the three CanvasLayers (HUD, ActionMenu, PauseMenu) run while
+  paused (`process_mode` Always).
+- **Which menu gets a key (modal precedence).** The rule has two parts, and each menu follows both:
+  1. a menu opens only while the tree is **not** paused, so the action menu, the pause menu and GAME
+     OVER can never stack;
+  2. an open menu takes **every** key event (`set_input_as_handled()`), and Escape/Enter are read
+     without key repeat.
+  So one Escape that closes the action menu cannot also open the pause menu. The pause menu (the
+  level's last child) sees the event first, but the tree is still paused then, so it ignores it;
+  the action menu then closes. Space over the pause menu is taken by the pause menu, and the action
+  menu would refuse anyway (paused). At GAME OVER both refuse (paused) and only the HUD's Enter
+  works. Carl reads key *state*, not events, but he is paused, and keys still held on resuming are
+  ignored until released (`NOTIFICATION_UNPAUSED` in `carl.gd`).
+- **Return to Title:** `Level._on_return_to_title_requested()` unpauses and calls
+  `change_scene_to_file(application/run/main_scene)`. In Godot 4.7 that takes the level out of the
+  tree at once and frees it at the end of the frame, so no tick of it runs unpaused (checked: the
+  old scene is out of the tree before the next physics step). Its nodes (Carl, Donut, enemies,
+  projectiles, pushes, tweens, menus) all go with it, and their connections to GameState's
+  Inventory and ActionSlots are removed automatically when they are freed (the tests count the
+  connections: the same after every cycle).
+- **No stale run:** `title_screen.gd` calls `GameState.end_run()` (a new run's values, no floor
+  entry) in `_ready()`, then reads the save as it always did. Continue already re-read the save
+  and called `GameState.continue_from()`; now nothing from the floor that was left is in memory
+  at all while the title is up.
+- **Quit Game:** `get_tree().quit()`, with the game still paused, so nothing runs before the
+  process ends. **Window close / Alt+F4:** left to Godot's default (`auto_accept_quit`): the game
+  quits without asking. Nothing saves in either path; no script has `_exit_tree()`,
+  `NOTIFICATION_WM_CLOSE_REQUEST` or file code that runs at shutdown.
+- **Lifecycle fix: stairs in a frozen game.** Stairs change level with a deferred call, at the end
+  of the physics step in which Carl touched them. If Carl was killed in that same step (a blob's
+  touch or a glob), GAME OVER paused the tree first, and in Phase 9 the deferred call still ran:
+  the next floor opened **still paused, with no GAME OVER screen** (no key did anything), and its
+  `Level._ready()` saved a checkpoint with **Carl at 0 HP**, which `decode()` rejects, so the save
+  could no longer be loaded. Reproduced on the Phase 9 code by emitting the stairs' `body_entered`
+  and killing Carl in one tick. `Stairs._change_level()` now returns when the tree is paused; the
+  retry reloads the floor, stairs included. `test_pause_menu.gd` checks it.
+
 ### Earlier decisions still in force
 - Compatibility renderer; 1280×720 base with `canvas_items` stretch and `expand` aspect;
   physical-keycode bindings; Godot's `ui_*` actions untouched.
-- Version in Project Settings, now `0.9.0`.
+- Version in Project Settings, now `0.10.0` (the game's version; the save format is still 3).
 - `.godot/` ignored, `.uid` files committed, LF line endings.
 - Carl is a floating-mode `CharacterBody2D`; Camera2D inside Carl (zoom 1.5, smoothing);
   physics interpolation on.
@@ -933,6 +1034,20 @@ Consequences:
 - Stones and globs are stopped by layer 1 only: they fly over bodies, pickups and stairs.
   Enemies see through everything but walls, exactly where their globs can fly.
 - Navigation baking reads only layer 1.
+
+## Earlier behaviour changed in Phase 10
+1. **Escape does something during play** (it opens the pause menu); before, it only closed the
+   action menu and answered No on the title's question. It still does both.
+2. **The title screen clears GameState** (`GameState.end_run()`) when it opens. Nothing used to
+   rely on GameState surviving a visit to the title: Continue and New Game both reset it anyway.
+   `test_save_game.gd`'s "Quit to the title" steps now pass through a cleared GameState.
+3. **Stairs ignore Carl once the game is frozen** (the lifecycle fix above). Normal stairs use is
+   unchanged; every stairs test passes as before.
+4. **Every level has a PauseMenu child** (added at run time). Tests that list a level's children
+   by name still find what they did; nothing depended on the child count.
+5. **The HUD hint is "Space: action menu     Esc: pause"** and its label is wider (340 px, was
+   220 px); `test_windowed_resolutions.gd` checks it fits and stays clear of the signs.
+6. Version in Project Settings: `0.10.0`.
 
 ## Earlier behaviour changed in Phase 9
 1. **Floor 5 has an exit** (stairs down to Floor 6) and the Bat pickup; its note
@@ -991,7 +1106,7 @@ It runs every `tests/test_*.gd` in its own Godot process. A test fails on a non-
 code or on any engine ERROR/WARNING in its output, except an error the test provoked on purpose
 and checked (it prints `EXPECTED ERROR: <text>`, which excuses exactly one `ERROR: <text>` line;
 only `test_save_isolation.gd` does this). Tests with "windowed" in their name get a real window,
-which opens briefly. The full run takes about 11 minutes (24 test files). Each test file can
+which opens briefly. The full run takes about 12 minutes (27 test files). Each test file can
 also be run on its own; the first lines of each file give the command.
 
 | Test file                               | Covers |
@@ -1010,7 +1125,7 @@ also be run on its own; the first lines of each file give the command.
 | `test_save_migration.gd` (Phase 6–9)    | The two real Phase 5 fixtures (version 1), the two real Phase 6 fixtures and **the real Phase 7 Floor 4 fixture** (version 2) load with their floor, HP, items and slots and **Donut at 60 / 60**, the files untouched, and are written back with the same values as version 3 plus Donut; a v1 Slingshot slot is emptied, a v1 `owned_items` ignored, a v1 Slingshot quantity rejected; 13 kinds of malformed v1 data rejected; v2 loads (a `donut` in a v2 file is ignored), v2 without owned_items rejected; **v3 loads with its own Donut HP, v3 without `donut` rejected**; versions 0/4/999/-1 rejected; title → Continue on the v1 Floor 2 save and **on the Phase 7 Floor 4 save** open those floors with their state and Donut at 60 / 60, and the files become version 3; the migrated game plays on; **Phase 9: the real Phase 8 Floor 5 save (version 3, no Bat) loads unchanged and is written back identically; no migrated v1/v2 fixture owns the Bat; a v1 file naming the Bat in owned_items and on W owns no Bat and W is emptied** |
 | `test_slingshot.gd` (Phase 6, 8)        | Ownership model (innate/reusable/consumable, owned once, never removed, snapshots, new run clears it); slots; pickup; firing in four directions; exactly 10 damage, 3 hits kill a blob; one target only; flies through a dying blob; hits a blob that steps onto it; stops at a wall face; 320 px / 40 ticks; never hurts Carl, **nor Donut, whose real Hurtbox is in the line of fire (60 / 60, Phase 8)**; no pickup, no stairs; point blank; cooldown; menu; HUD and menu labels |
 | `test_slingshot_run.gd` (Phase 6–8)     | Real run: New Game clears a previous Slingshot; Surface → Floor 1 → Floor 2 → Floor 3, nothing leads up (Floor 3's only exit leads down to Floor 4); Floor 2 entry has no Slingshot (run, entry state, disk: version 3, Donut 60 / 60); collect + W doesn't save; two Floor 2 deaths take it back; quit before Floor 3 → Continue without it; three stones kill the Floor 2 blob; Floor 3 arrival, the Floor 3 checkpoint owns it with W = Slingshot; a stone stops at Floor 3's wall tiles; two Floor 3 deaths keep it; Continue opens Floor 3 and it fires; New Game clears it |
-| `test_windowed_resolutions.gd` (Phase 2–9) | At 1280×720, 640×360, 1024×768: HUD with `W: Slingshot   A: Potion x2` **and "Donut HP: 0 / 60 - DOWNED" fully on screen, its text fitting, clear of Carl's HP and the slot bar**, GAME OVER panel, action menu, camera; Floor 2's Slingshot pickup; Floor 3's signs clear of the HUD; a flying stone; Floor 4's three signs clear of the HUD; the two blobs, a glob and a stone on screen together; **Floor 5's three signs clear of the HUD; a downed Donut's DOWNED label drawn on screen, clear of the HUD; Donut's colour unlike both blobs'**; **Phase 9: the slot bar `W: Slingshot   A: Potion x2   S: Baseball Bat   D: Fists` on screen with its text fitting; "Baseball Bat   (on S)" in the menu; Floor 5's Hint and its Bat pickup (icon and label) on screen and clear of the HUD; Floor 6's three signs clear of the HUD; a blob drawn on screen while the Bat knocks it back**; the title screen (with a Floor 6 save) and its confirmation. Prints SKIP and passes when run headless |
+| `test_windowed_resolutions.gd` (Phase 2–10) | At 1280×720, 640×360, 1024×768: HUD with `W: Slingshot   A: Potion x2` **and "Donut HP: 0 / 60 - DOWNED" fully on screen, its text fitting, clear of Carl's HP and the slot bar**, GAME OVER panel, action menu, camera; Floor 2's Slingshot pickup; Floor 3's signs clear of the HUD; a flying stone; Floor 4's three signs clear of the HUD; the two blobs, a glob and a stone on screen together; **Floor 5's three signs clear of the HUD; a downed Donut's DOWNED label drawn on screen, clear of the HUD; Donut's colour unlike both blobs'**; **Phase 9: the slot bar `W: Slingshot   A: Potion x2   S: Baseball Bat   D: Fists` on screen with its text fitting; "Baseball Bat   (on S)" in the menu; Floor 5's Hint and its Bat pickup (icon and label) on screen and clear of the HUD; Floor 6's three signs clear of the HUD; a blob drawn on screen while the Bat knocks it back**; **Phase 10: the HUD hint "Space: action menu     Esc: pause" on screen and fitting; the pause menu above the HUD and action menu, on screen and centred with its rows fitting; both questions on screen and centred with the warning, No and Yes fitting; the title after Return to Title on screen with the Floor 6 checkpoint**; the title screen (with a Floor 6 save) and its confirmation. Prints SKIP and passes when run headless |
 | `test_enemy_navigation.gd` (Phase 7, 8) | Arenas with a real baked navigation mesh, each waiting until the map holds exactly its mesh: the Blob waits beyond 220 px, notices Carl behind a wall, gives up beyond 320 px; it follows a route around a wall to Carl (its own path bends round the wall's end), never overlaps the wall, never stalls, reaches him and hurts him every 0.8 s; with no way around it stops beside the wall without jittering; the Spitting Blob with Carl hidden walks around the wall and spits only once it sees him; **Phase 8: with Carl far away, a blob picks Donut behind the wall, walks around it without overlapping it, reaches her and hurts her 10 every 0.8 s (60 → 30)** |
 | `test_spitting_blob.gd` (Phase 7, 8)    | Arenas (Carl the only party member): its numbers; waits beyond 360 px, closes in and spits at 320 px, holds at 280 px, backs off to 180 px, gives up beyond 480 px; touching it never hurts; a wall stops it spitting, stepping into sight or removing the wall makes it spit at once; a glob takes exactly 10 HP once; walls stop globs; a glob flies past stairs, a pickup, another Spitting Blob and a Gelatinous Blob and hits Carl, hurting none of them nor its own blob, even when made to target enemies; 384 px / 96 ticks; 5 globs exactly 90 ticks apart, no burst; three stones kill it; Fists by facing; the menu freezes everything, no free glob, stone or burst |
 | `test_donut.gd` (Phase 8)               | Arenas: a new run (also after one where she was downed) gives Donut 60 / 60; Health 60, Hurtbox on `player_hurtbox`, the `party` group, Scratch's numbers; an enemy's touch takes 10 every 0.8 s; HP never below 0; Carl's point-blank punch and a stone through her never hurt her; Scratch never hurts Carl or Donut and never fires with no enemy near; exactly 10 per scratch, exactly 60 ticks apart, three kill a blob, none on a dead one; an enemy 38 px away is scratched, 46 px is not; the nearest of two only; she stays by Carl and follows him, never toward an enemy; downed at 0: HUD "0 / 60 - DOWNED" in another colour, grey, on her side, DOWNED label, cannot be hit; no following, no scratching, a touch finds nothing, nothing paused; she gets up on her 360th downed tick (not at 359) with exactly 30 / 60, looks normal, catches up with Carl, scratches again; 5 s of menu do not count toward the 6 s; GAME OVER (the tree pause) and a downed Carl hold her countdown |
@@ -1019,126 +1134,167 @@ also be run on its own; the first lines of each file give the command.
 | `test_baseball_bat.gd` (Phase 9)        | Arenas: a new run owns no Bat; its data (id, reusable, own icon; MeleeAttack 20 damage, 0.75 s, 36 px + 28 px = 64 px reach, `enemy_hurtbox`, blocked by `world`, 80 px / 0.3 s knockback); owned once, never removed, "Baseball Bat" with no quantity, snapshots, a new run clears it; not assignable before owned, then on W/A/S/D one at a time, next to Fists/Slingshot/potion, emptied when taken back; the pickup (label, icon; Donut and both enemies standing on it don't take it; Carl does, once; two collectors: one); swings right/up/left/down hit the enemy in front for 20, not the ones behind or beside; empty slots nothing; 20 then 10 (its last HP) kill a blob, which dies normally and is not pushed; one swing per tap and per 10-tick press, every 45 ticks while held, taps no faster, moving it to W keeps the cooldown; a swing through Donut hurts neither her nor Carl and pushes neither (no KnockbackReceiver); a thin wall within reach blocks the hit; knockback in four directions: visible at once, exactly 80 px, then no drift; exactly 18 ticks and the full 80 px for a blob chasing Carl, which then comes back; against a thick and a thin wall: stops against it, never overlaps or crosses, no sideways deflection; killed mid-push: stops at once, never moves or touches Carl; on a real navigation mesh: pushed into a wall it stops, then navigates back (fresh path ending at Carl) and touches him for 10; the Spitting Blob: no glob during the 18 push ticks, exactly 80 px, backs off again afterwards, next globs exactly 90 ticks after the one before; on a mesh it returns to 180 px and spits again; Fists (10, no push), stones (10, no push), Scratch (10 every 60 ticks, no push) and globs unchanged; a touch never pushes Carl; the menu: S selects nothing, freezes a push, completes it after, no free swing with S held, the blob chases again; a tree pause (GAME OVER) freezes a push, which then finishes its 80 px; HUD "S: Baseball Bat" and menu rows, unchanged by swinging |
 | `test_floor_06_run.gd` (Phase 9)        | Real run from a real Phase 8 save (`phase8_save_v3_floor_05.json`): every exit leads one floor down, Floor 5's to Floor 6, Floor 6 none, `floor_06` registered; Continue → Floor 5 without the Bat, its pickup there; collect it, menu "Baseball Bat   (no slot)", assign S through the menu, HUD, save unchanged; two Floor 5 deaths take it back (pickup back, S empty, entry HP, nothing duplicated); quit before Floor 6 → Continue without it; the Bat hits a Floor 5 blob for 20 and pushes it 80 px, a second hit kills it where it stands; Floor 5 → Floor 6: spawn, Donut, camera, sign, HUD with S: Baseball Bat, two blobs and a Spitting Blob as authored, no exits, entry state and save (version 3, owned_items slingshot + baseball_bat, S = baseball_bat), no loop; the Backstop blob comes for Carl, the Bat pushes it into the Backstop wall where it stops at x 563 without overlapping, then it comes back at Carl; GAME OVER during a push freezes it, nothing about it is saved, the retry has the blobs as authored with no push; two Floor 6 deaths keep the Bat on S with the entry HP; Continue opens Floor 6 with the Bat on S and it swings and knocks back at once; New Game: no Bat, no items, D = Fists, the Surface checkpoint owns nothing |
 | `test_save_isolation.gd` (Phase 8)      | The save guard: in a test run the player's save path, look-alike paths (`user://test_saves/../savegame.json`, `user://test_saves_old/...`), the `.tmp` beside it and other files are refused, test-folder paths allowed; a stray file outside the folder is neither written, loaded nor deleted, each refusal reported; then, pointed at the player's save, SaveManager finds and loads nothing and refuses to write, and a level starting in that state cannot save its checkpoint; the player's save (if any) keeps its modification time; the test's own file still works |
+| `test_pause_menu.gd` (Phase 10)         | Real levels, keys through the input pipeline: every level (Surface, Floors 1–6) has exactly one pause menu, Escape opens it (Resume selected, rows, no focus), gameplay ticks stop, Escape and Enter on Resume resume, the save untouched; Up/Down wrap, Resume selected on reopening; paused Carl cannot move, turn, punch, fire, swing, drink or reassign; a key held while resuming gives no free action, then D/W/S/A work; Donut stops mid-stride; a blob touching Carl while Donut scratches it: nothing happens for 180 paused ticks, then the next scratch is exactly 60 and the next touch exactly 48 ticks of play after the last; the Spitting Blob's glob freezes in flight, nothing is spat for 180 ticks, globs exactly 90 ticks of play apart; a stone freezes then flies on, no extra stone; a Bat push freezes unfinished, then completes exactly 80 px; Donut gets up after exactly 360 ticks of play with or without a 180-tick pause (her countdown holds); Space/Escape between the two menus (echo included, same-frame key pairs): never both open, paused exactly when one is open; GAME OVER: Escape/Space open nothing, everything frozen, Enter retries, the pause menu works after; stairs and a pickup do nothing while paused and work after; **the lifecycle fix: stairs + death in one tick keep GAME OVER on the floor with a loadable checkpoint, then retry and stairs work** |
+| `test_return_to_title.gd` (Phase 10)    | Real title and Floor 6 from a seeded checkpoint (Carl 80, Donut 40, potion on A, Slingshot W, Bat S): the question's text, No selected, Escape and No go back to the paused menu, Down/Up toggle Yes/No, the live floor untouched (Carl 60, Donut 10, no potion, stone flying on); Yes: the title in the same process, unpaused, the level freed, no Carl/Donut/enemy/projectile left, the save byte-identical and not rewritten, the title says HP 80 (not 60), GameState holds no run; Continue restores everything (HP, items, slots, the killed blob back, 30 HP each, no projectiles); **Continue reads the disk: a different checkpoint written while the title is up and a stale run planted in GameState → Continue opens the disk's Carl 55 / Donut 25**; 5 Continue → play → Return cycles with identical node and connection counts (one Carl, Donut, HUD, action menu, pause menu, 3 enemies); New Game after returning asks (No keeps the save), Yes gives the canonical Surface run and checkpoint; the save is version 3 with its seven fields; a Phase 5 v1 and a Phase 6 v2 save load after returning, Continue twice each, the file becomes version 3 |
+| `test_quit_game.gd` (Phase 10)          | Real process exits: a seeded Floor 6 checkpoint, then `tests/support/quit_game_child.gd` in its own Godot process: Continue, live changes (Carl 60, Donut 10, no potion, a kill, a stone), pause > Quit Game (the warning, No selected, Escape and No cancel, Yes quits): exit code 0, no engine error or crash marker, the save byte-identical and last written on floor entry; the same with the window's close request; after each, this process's title and Continue restore the checkpoint; the helper refuses (exit 2, nothing run) the player's save path, a `test_saves/../` path and no path, and the player's save keeps its modification time |
 | `test_floor_04_run.gd` (Phase 7–9)      | Real run from a real Phase 6 Floor 3 save: title → Continue → Floor 3 (the same checkpoint saved again as version 3 with Donut 60 / 60); every level's exits lead one floor down, **Floor 4's only exit to Floor 5**, Floor 5's to Floor 6 (Phase 9), Floor 6 none; Floor 3 → Floor 4 arrival and checkpoint (version 3); the Blob walks around wall A and three punches kill it; the Spitting Blob walks around wall B, spits only in sight, the menu freezes it and its glob; globs take Carl to 0 HP, GAME OVER waits; retry restores everything; GAME OVER with a glob in flight freezes it; three stones kill the Spitting Blob; quit and Continue on Floor 4; New Game starts clean (Donut 60 / 60). Donut is present and fights along throughout |
 
 Every test uses its own save file under `user://test_saves/`, and SaveManager refuses anything
-else in a test run (see Persistent save > Test save isolation).
+else in a test run (see Persistent save > Test save isolation). `test_quit_game.gd`'s child process
+(`tests/support/quit_game_child.gd`, not a test itself: it only runs when the quit test starts it)
+takes its save file on the command line and refuses, before doing anything, a path outside that
+folder or no path; being a `-s` run, SaveManager would refuse the player's save too.
 
-## Validation performed (Phase 9)
-All runs used Godot 4.7.2.stable.official on this machine (Intel UHD Graphics, OpenGL 3.3,
-Compatibility renderer, 60 Hz). Everything that could write a save ran either as a test
-(protected by the Phase 8 guard, with its own file in `user://test_saves/`) or in a scratch copy
-of the project with its own user-data folder (`config/custom_user_dir_name`: `dc_carl_p9_baseline`,
-`dc_carl_p9_mutation`, `dc_carl_p9_play`, `dc_carl_p9_probe8`/`probe9`). (Phase 8's validation
-record is in `PROJECT_STATE.md` at commit `3351ceb`.)
-- **Baseline before changes:** the Phase 8 suite at HEAD `3351ceb` (= `origin/main`, clean tree)
-  passed **22 of 22** (9 min 43 s), in a scratch export of HEAD with its own user-data folder. The
-  normal entry point (the title screen, a real window, no script) ran there for 240 frames: exit
-  0, no engine errors.
-- **The Phase 8 fixture from the real Phase 8 code:** in that same copy, Phase 8's own GameState,
-  Level and SaveManager entered Floor 5 with Carl 80, Donut 40, the Slingshot on W and a potion on
-  A, and wrote `tests/fixtures/phase8_save_v3_floor_05.json` (version 3); Phase 8 loaded it back.
-- **Imports:** the new files (icon, scenes, scripts) import with no errors or warnings (the very
-  first import reported the Bat icon missing once, because the `.tres` was read before the PNG
-  was imported; every import since is clean).
-- **Test suite:** `run_all.gd` passed **24 of 24** on the final code (10 min 55 s), and 24 of 24
-  earlier (10 min 56 s). New: `test_baseball_bat.gd` (127 checks) and `test_floor_06_run.gd`.
-  Changed: `test_save_manager.gd`, `test_save_migration.gd`, `test_floor_04_run.gd`,
-  `test_floor_05_run.gd`, `test_windowed_resolutions.gd` (138 checks, real window).
-- **Mutation checks:** 18 regressions were injected, one at a time, into a scratch copy with its
-  own user-data folder, each restored afterwards; the chosen tests all passed in the copy first.
-  **Every one was caught** (the failing tests in brackets):
-  - the Bat dealing 10 instead of 20 (`test_baseball_bat`, `test_floor_06_run`);
-  - the Bat able to hit Donut (and Carl): `player_hurtbox` added to its targets (`test_baseball_bat`);
-  - the Bat hitting through walls (no `blocking_layers`) (`test_baseball_bat`);
-  - knockback moving enemies through walls (position set directly instead of `move_and_slide()`)
-    (`test_baseball_bat`, `test_floor_06_run`);
-  - navigation cancelling the push (the Blob keeps chasing during it) (`test_baseball_bat`);
-  - the Spitting Blob moving and spitting during a push (`test_baseball_bat`);
-  - an enemy stuck in its push forever (`test_baseball_bat`);
-  - a killing hit still pushing; a dead enemy still being pushed (`test_baseball_bat`);
-  - Fists, Slingshot stones or Donut's Scratch gaining knockback (`test_baseball_bat`);
-  - the Bat still owned after a Floor 5 retry (`test_floor_06_run`);
-  - the Bat missing after a Floor 6 Continue (`baseball_bat` left out of `ActionRegistry`)
-    (`test_floor_06_run`, `test_save_manager`);
-  - an unnecessary save schema bump to version 4 (`test_save_manager`, `test_save_migration`,
-    `test_floor_06_run`);
-  - `floor_06` missing from `FloorRegistry` (`test_save_manager`, `test_floor_06_run`);
-  - stairs back up from Floor 6 to Floor 5 (`test_floor_06_run`, `test_floor_05_run`,
-    `test_floor_04_run`);
-  - a persistence test that forgets to choose its own save file (SaveManager refuses with an
-    error: `test_floor_06_run`, `test_save_manager`).
-  After the Backstop blob was moved (see the real playthrough), the eight mutations that involve
-  `test_floor_06_run` were run again on the final code: **all 8 caught again**, by the same tests.
-- **Real playthrough** (the scratch copy `dc_carl_p9_play`, the **normal entry point**: the title
+## Validation performed (Phase 10)
+All runs used Godot 4.7.2.stable.official on this machine (Intel UHD Graphics, driver
+31.0.101.4032, OpenGL 3.3, Compatibility renderer, 60 Hz). Everything that could write a save ran
+either as a test (the Phase 8 guard, its own file in `user://test_saves/`) or in a scratch copy of
+the project with its own user-data folder (`config/custom_user_dir_name`: `dc_carl_p10_baseline`,
+`dc_carl_p10_probe`, `dc_carl_p10_stress`, `dc_carl_p10_mutation`, `dc_carl_p10_empty_probe`). No
+game-mode (non-`-s`) run used this project's own user-data folder. (Phase 9's validation record is
+in `PROJECT_STATE.md` at commit `042d76b`.)
+- **Baseline before changes:** HEAD `042d76b` = `origin/main`, clean tree. The Phase 9 suite, in a
+  scratch export of HEAD, passed **24 of 24** (656 s). The normal entry point (title screen, real
+  window, no script) ran 240 frames there: exit 0, no engine errors.
+- **Test suite:** `run_all.gd` passed **27 of 27** on the final code (728 s). New: `test_pause_menu.gd`
+  (145 checks), `test_return_to_title.gd` (127), `test_quit_game.gd` (32, with real child
+  processes). Changed: `test_windowed_resolutions.gd` (169 checks, real window). An earlier full run
+  on the code before the stairs fix also passed 27 of 27 (727 s).
+- **Mutation checks:** regressions injected one at a time into a scratch copy with its own
+  user-data folder (the chosen tests all passed there first), each restored afterwards. **Every one
+  was caught** (failing tests in brackets):
+  - Escape both closes the action menu and opens the pause menu (`test_pause_menu`);
+  - Carl processing while paused, so D/W/S punch, fire and swing (`test_pause_menu`);
+  - projectiles flying while paused (the glob in flight, Carl hurt, the stone) (`test_pause_menu`);
+  - Donut's recovery counted in real time, so a pause counts toward it (`test_pause_menu`);
+  - Return to Title saving the live floor as the checkpoint (`test_return_to_title`);
+  - the title screen keeping the stale run in GameState (`test_return_to_title`);
+  - Continue using GameState's memory instead of the save file (`test_return_to_title`);
+  - the pause menu attached to the root instead of the level (`test_return_to_title`);
+  - an extra pause menu left on the root by every level (`test_return_to_title`: two pause menus
+    take the same Escape);
+  - a copy of the HUD left on the root by every level (`test_return_to_title`: the node counts
+    grow from one Continue to the next);
+  - Quit Game saving the live floor (`test_quit_game`);
+  - pause state written into the save (`test_return_to_title`, `test_save_manager`);
+  - an unnecessary save version 4 (`test_return_to_title`, `test_save_manager`);
+  - the quit test's helper accepting a save file outside `user://test_saves/` (`test_quit_game`:
+    given the player's save path, a `test_saves/../` path or none, the helper played on, was refused
+    by SaveManager and stopped at its 60 s watchdog, exit 4, instead of refusing at once, exit 2);
+  - the stairs' deferred level change running in a frozen game (the Phase 9 behaviour)
+    (`test_pause_menu`);
+  - Escape opening the pause menu over GAME OVER (`test_pause_menu`);
+  - the pause menu opening without pausing the game (`test_pause_menu`).
+- **Real playthrough** (the scratch copy `dc_carl_p10_stress`, the **normal entry point**: the title
   screen as main scene in a real 1280×720 window, no `-s`; a scratch-only driver autoload pressed
-  keys through Godot's input pipeline, steered Carl with the arrow keys along navigation routes,
-  logged, and took screenshots; its save was seeded with the real Phase 8 Floor 5 save):
-  1. the title offered "Saved at the start of Floor 5 - HP 80 / 100"; **Enter (Continue) opened
-     Floor 5**: Carl 80, Donut 40, `W: Slingshot   A: Potion x1   S: —   D: Fists`, **no Bat, its
-     pickup there**;
-  2. Carl walked over the pickup: **owned, pickup gone**. Space: the menu listed
-     "Baseball Bat   (no slot)"; Down ×3, **S**: "Baseball Bat   (on S)", "Baseball Bat is now on
-     S."; Space closed it: **HUD `W: Slingshot   A: Potion x1   S: Baseball Bat   D: Fists`**;
-  3. the second Gelatinous Blob came for Carl: **S: 30 → 10**, pushed **79.1 px** (Carl faced
-     diagonally), then it **walked 37 px back at Carl**, targeting him; a second swing killed it;
-  4. **Fists (D): 30 → 20**, no push (1.6 px: its own step); **Slingshot (W): 20 → 10**;
-  5. the Spitting Blob: Carl caught up with it and swung: **30 → 10, pushed 80.9 px** (80 + its own
-     step before the hit), **no glob during the push**; then it moved 49 px and spat at ticks
-     657, 756, 846, 936: the glob at 756 came as the push ended, 99 ticks after the one before
-     (its 90-tick cooldown had run out during the push), then **exactly 90 apart: no burst**;
-  6. **the stairs → Floor 6** with Carl 50, Donut 30, **`S: Baseball Bat` kept**; the Floor 6
-     checkpoint on disk: version 3, `owned_items` `["slingshot", "baseball_bat"]`, `action_s`
-     `"baseball_bat"`; **no stairs on Floor 6**;
-  7. Carl stood in the Floor 6 Spitting Blob's line of fire: **GAME OVER** (paused, panel up);
-     **Enter → Floor 6 again with Carl 50, Donut 30 and the Bat on S** (the Floor 6 checkpoint owns it);
-  8. **Floor 5 rollback** (a second session from the same Phase 8 save): Carl waited at the arrival
-     point and the penned blob went for Donut: **Donut's Scratch hit it at ticks 394, 454 and 514
-     (exactly 1.0 s apart), 30 → 20 → 10 → 0**; Carl then collected the Bat, put it on S, and stood
-     in the Spitting Blob's fire until GAME OVER; **Enter: the Bat is no longer owned, S is empty,
-     the pickup is back**, Carl 80 and Donut 40 (the Floor 5 entry). (The driver's own logging
-     lambda raised a script error in this session when Donut later scratched another blob: it
-     still referred to the dead penned blob. That was the driver, not the game.)
-  9. **Wall stop in natural play:** the first layout had the Backstop blob 64 px from its wall;
-     it walked ~70 px toward Carl before he could swing, so the push (hit at x 434) never reached
-     the wall. The blob was moved to 40 px from the wall (x 536) and the Floor 6 test updated.
-     Then, walking straight at it and facing it with **Right**, Carl hit it at about x 496: it was
-     pushed to **x 563.00, against the wall face (576 − 13)**, stopped there without overlapping,
-     then **walked 41 px back toward Carl**, still targeting him. The blob in the open south-west
-     was pushed **79.2 px** and came back **37 px**.
-- **Real save / restart** (the same copy; separate processes):
-  1. from the Phase 8 Floor 5 save: collect the Bat, S, stairs → Floor 6 checkpoint on disk
-     (version 3, Carl 80, Donut 40, `owned_items` Slingshot + Bat, `action_s` Bat); the game quit
-     normally (window-close request, exit 0);
-  2. **a fresh process**: the title said "Saved at the start of Floor 6 - HP 80 / 100"; **Continue
-     opened Floor 6** with Carl 80, Donut 40, Slingshot, 1 potion and **S = Baseball Bat**; S swung
-     at once: the Backstop blob **30 → 10** and **pushed into the wall** as in item 9; the open-area
-     blob **30 → 10, pushed 79.2 px**, killed by a second swing. Exit 0.
-  3. **older saves:** the Phase 5 **version 1** Floor 2 save → Continue opened Floor 2 (Carl 70,
-     `S: Potion x2`, Donut 60 / 60, no Bat) and the file became version 3 with `owned_items: []`;
-     the Phase 7 **version 2** Floor 4 save → Floor 4 (Carl 80, Slingshot on W, Donut 60 / 60, no
-     Bat), file version 3. The Phase 8 **version 3** save is item 1 of the playthrough.
-- **One unexplained crash:** one of these sessions (the fresh-process Continue, item 2) ended with
-  a segmentation fault **during shutdown**, after all its work was done and logged (exit 139,
-  no backtrace; the file log was rotated away). It could not be reproduced: the same session
-  run 5 more times, and 16 probe runs that quit while an enemy is fading out (8 with Phase 9
-  code, 8 with the untouched Phase 8 code), all exited 0 with no errors. The driver quits by
-  sending a window-close request and calling `quit()` at once; nothing in Phase 9 runs at
-  shutdown. Recorded here as a known issue.
-- **Visual check** (screenshots inspected) at 1280×720, 640×360 and 1024×768: Floor 5 on arrival
-  with the Bat pickup (a tan bat with a dark grip on the pickup's glow, "Baseball Bat" above it)
-  and the new hint; the action menu with "> Baseball Bat   (on S)" and `S   Baseball Bat`; the HUD
-  `W: Slingshot   A: Potion x1   S: Baseball Bat   D: Fists`; a swing (a tan circle) with a blob
-  mid-push; Floor 6 ("Floor 6 - Batting Cage" and its hint) with the Backstop blob pinned
-  against the wall; GAME OVER on Floor 6; the title with a Floor 6 save ("Version 0.9.0").
-  Everything is readable and on screen; at 640×360 the HUD text is small but legible, as before.
-  `test_windowed_resolutions.gd` checks the same things by geometry at all three sizes.
-- **The player's save was not touched by this work.** `%APPDATA%\Godot\app_userdata\Carl & Donut
-  Dungeon Prototype\savegame.json` (267 bytes, modified 2026-09-24 14:03) has the same SHA-256
-  (`c8801e3c…afcf2`), size and modification time at the end as at the start. No test file is left
-  in `test_saves/`, and no save file is tracked by Git.
+  keys through Godot's input pipeline, logged, and took screenshots; its save held a Floor 6
+  checkpoint: Carl 80, Donut 40, a potion on A, the Slingshot on W, the Bat on S):
+  1. the title said "Saved at the start of Floor 6 - HP 80 / 100"; **Enter opened Floor 6** with
+     exactly that and the three enemies as authored;
+  2. Carl walked and fired; **Escape: "Paused", Resume selected**; for 2 s every actor and the stone
+     in flight stayed exactly where they were; **Escape: play resumed** and everything moved again;
+  3. **Space opened the action menu; Escape closed it and nothing else** (no pause menu, not
+     paused); Escape again opened the pause menu; **Enter on Resume** closed it;
+  4. **the live floor changed:** Carl hurt and the potion drunk (A emptied), Donut 10, the
+     open-area blob killed;
+  5. **Return to Title: "Return to title? | Progress since entering this floor will be lost.", No
+     selected; Enter (No), Escape: back in the same live floor** (Carl 30, Donut 10, no potion, the
+     blob still dead);
+  6. **Return to Title > Yes: the title in the same process**, "HP 80 / 100" (not 30), the level
+     freed, the save file unchanged, GameState with no floor entry and 100 HP;
+  7. **Continue ×4**, each followed by play and Return to Title: every Continue gave Carl 80, Donut
+     40, the potion on A and the three enemies at full HP where authored, with exactly 2 party
+     members, 3 enemies, 1 HUD, 1 pause menu and no projectiles;
+  8. **GAME OVER: Escape and Space opened nothing**; Enter retried with the Floor 6 checkpoint;
+  9. **Quit Game: the question with No selected; Escape cancelled; then Yes: the game closed
+     (exit 0).**
+- **Real save / restart** (the same copy, separate processes, real windows): Continue on Floor 6,
+  then Carl 60, Donut 10, the potion drunk and the open-area blob killed; pause > Quit Game,
+  cancelled once with Escape, then Yes: **exit 0, the save's SHA-256 unchanged** (its time changes
+  only because Continue rewrites the same checkpoint on entering the floor). **A fresh process**:
+  the title said "HP 80 / 100", and **Continue gave Carl 80, Donut 40, the potion on A and all
+  three enemies**. The same with the window closed by the operating system (`WM_CLOSE`) after the
+  same changes: exit 0, save unchanged, the next launch's Continue restored the same checkpoint.
+- **Visual check** (screenshots inspected) at 1280×720, 640×360 and 1024×768: the pause menu over
+  the dimmed floor, both questions, the action menu, the HUD with the new hint, GAME OVER and the
+  title after Return to Title (with "Version 0.10.0"). All readable and on screen; at 640×360 the
+  HUD text is small but legible, as before. (While paused, a resized window shows the level
+  off-centre because the paused camera does not move; the menus stay centred.)
+  `test_windowed_resolutions.gd` checks the same things by geometry.
+- **Shutdown investigation.**
+  1. *Code review* of everything that runs at teardown: no script has `_exit_tree()`, a
+     close-request handler, threads, timers or file access at shutdown; deferred calls
+     (`Stairs._change_level`, pickups' and enemies' `set_deferred`) and bound tweens (hit flashes,
+     the death fade, the pickup bob) die with their nodes; navigation meshes bake on the main
+     thread; GameState's persistent Inventory/ActionSlots signals are disconnected automatically
+     when level nodes are freed (the Return to Title test counts them: the same every cycle).
+     `change_scene_to_file()` takes the old level out of the tree at once (checked: no physics tick
+     of it runs after Enter on GAME OVER or Return to Title).
+  2. *One real lifecycle defect found and fixed:* stairs + death in one physics tick (see
+     Architecture > Pause menu and the game session). Reproduced on the Phase 9 code: Floor 2
+     opened still paused with no GAME OVER screen, and the save was rewritten with Carl at 0 HP and
+     rejected on loading ("carl.health 0.0 is not a whole number from 1 to max_health"). Fixed in
+     `stairs.gd`, with a regression check in `test_pause_menu.gd`. It is not a crash and does not
+     explain the Phase 9 segfault.
+  3. *Stress runs* (real processes, real windows, the stress copy; "OS close" = a real `WM_CLOSE`
+     sent with `CloseMainWindow()` to that process only; exit code, engine errors, crash markers
+     and the save hash recorded for every run):
+
+     | Run | Renderer | Runs | Exit 0 | Crashed (0xC0000005) |
+     |-----|----------|------|--------|----------------------|
+     | Title screen, OS close | OpenGL (Intel driver) | 60 | 58 | 2 |
+     | Continue, play (walk, punch, fire, swing), OS close mid-play | OpenGL | 20 | 20 | 0 |
+     | Continue, play, pause menu > Quit Game > Yes | OpenGL | 60 | 56 | 4 |
+     | 10 × (Continue, play, Return to Title), then Quit Game | OpenGL | 3 processes (30 cycles) | 3 | 0 |
+     | Phase 9 code (`042d76b`), title screen, OS close | OpenGL | 60 | 59 | 1 |
+     | Empty Godot project (one Label), OS close | OpenGL | 40 | 40 | 0 |
+     | Title screen, OS close | ANGLE (Direct3D 11) | 40 | 40 | 0 |
+     | Continue, play, pause menu > Quit Game > Yes | ANGLE | 60 | 60 | 0 |
+     | Continue, play, OS close mid-play | ANGLE | 20 | 20 | 0 |
+
+     No run printed an engine error, warning or script error; every run left the save file with
+     the same hash (no corruption, no mid-floor write); every Return to Title cycle came back with
+     the same node counts.
+  4. *Where the crashes are:* Windows Error Reporting (Application log, events 1000/1001) recorded
+     **every one of them as an `APPCRASH` in `igxelpicd64.dll`**, Intel's OpenGL driver (version
+     31.0.101.4032, built in 2022), **at the same offset `0x1ba457`**, exception `0xc0000005`.
+     Godot's own crash handler printed nothing, because the fault comes after the engine has shut
+     down, while the driver is torn down at process exit. It happens with no level loaded (the
+     title screen), with the Phase 9 code, and after an ordinary OS close, so it is not caused by
+     Phase 10's pause or quit code, by gameplay nodes, or by anything this project runs at
+     shutdown. With the same game on the same GPU driven through ANGLE (Direct3D 11) instead of
+     OpenGL, it never happened.
+  5. *Conclusion:* **the intermittent crash on exit reproduces (about 4 % of real exits with the
+     OpenGL driver), and where it happens is identified: inside the Intel OpenGL driver, at process
+     exit.** Phase 10 does not fix it: nothing in the project's code causes it, so no code change
+     here can. It never damaged the save (saves are written only on floor entry, through a
+     temporary file and a rename; nothing writes at exit). Phase 9's single crash (exit 139, no
+     backtrace) looks the same, but Windows has no record of it, so that is **consistent with, not
+     proven**. Options for the owner are in Known issues ("Crash on closing"); none was applied,
+     because changing the renderer's driver is a project-wide choice this phase did not ask for.
+- **The player's save.** `%APPDATA%\Godot\app_userdata\Carl & Donut Dungeon Prototype\savegame.json`
+  was 389 bytes, modified 12:48:09, SHA-256 `ebb26958…6746a` at the start. At 13:38:00 it was
+  replaced by a 281-byte file in **another project's format** (`"hp"`, `"max_hp"`,
+  `"owned_reusables"`, `"slots"`, `save_version` 2), which this project's `SaveManager` cannot
+  write. It came from the sibling project `../codex`: its `project.godot` has the same
+  `config/name`, so it shares this user-data folder (its folder was modified at 13:37, and its
+  `save_manager.gd` uses `owned_reusables`). No Phase 10 run wrote it: game-mode runs all used their
+  own folders, and every run in this project was a guarded test (`-s`) or an import.
+  From 13:38:00 to the end of the phase it stayed as it was (281 bytes, SHA-256 `597663e4…`).
+  No test file is left in `test_saves/`, and no save file is tracked by Git.
 
 ## Known issues / limitations
+- **Pause menu (Phase 10 placeholders and simplifications):**
+  - keyboard only (no mouse), three options only: no settings, volume, key rebinding or
+    save-anywhere (out of scope);
+  - the title screen has no Quit option: close the window there (nothing is lost; the game
+    saves only on entering a floor);
+  - Return to Title and Quit Game drop everything since the floor was entered, by design: that
+    is what the question warns about;
+  - closing the window (or Alt+F4) quits at once without asking, the same as Quit Game > Yes;
+  - while the game is paused the camera does not move, so resizing the window during a pause
+    (or GAME OVER, as before) shows the level off-centre until play resumes. The menus
+    themselves stay centred.
 - **Baseball Bat and knockback (Phase 9 placeholders and simplifications):**
   - the swing is shown only as a brief tan circle where it hits (like Fists' white one); there is
     no bat sprite on Carl, swing animation, sound or impact effect. The pickup icon is a small
@@ -1162,10 +1318,27 @@ record is in `PROJECT_STATE.md` at commit `3351ceb`.)
     during its push restarts the push;
   - enemies still have no invulnerability after a hit: Donut can scratch a blob while it is
     being pushed.
-- **One unreproduced crash at shutdown** (Phase 9 validation): a single driver-run session
-  segfaulted while quitting, after all its gameplay had finished correctly. 21 repeat and probe
-  runs (Phase 9 and Phase 8 code) did not reproduce it. If you ever see the game crash on
-  closing, note what was happening on screen; see Validation performed for details.
+- **Crash on closing (Intel OpenGL driver; found in Phase 10, not fixed).** On this machine about
+  1 real exit in 25 ends in an access violation (exit code `-1073741819` / `0xC0000005`, no Godot
+  backtrace) *after* the game has shut down. Windows Error Reporting puts every one of them in
+  `igxelpicd64.dll` (Intel's OpenGL driver, version 31.0.101.4032) at the same offset. It happens on
+  the title screen, after a normal window close, and with the Phase 9 code; it never happened
+  through ANGLE (Direct3D 11). Nothing is lost when it happens: the game only saves on entering a
+  floor, never at exit. See Validation performed > Shutdown investigation. Options, not applied
+  here:
+  - update the Intel graphics driver (31.0.101.4032 dates from 2022), then re-run the stress test;
+  - or run the Compatibility renderer through ANGLE on Windows: the project setting
+    `rendering/gl_compatibility/driver.windows = "opengl3_angle"`, or `--rendering-driver
+    opengl3_angle` for one run. That changes the graphics path for everyone, so it is the owner's
+    call; the tests and the visual check would then need repeating on it.
+- **This project shares its user-data folder with `../codex`.** Both `project.godot` files say
+  `config/name="Carl & Donut Dungeon Prototype"`, so both games use
+  `%APPDATA%\Godot\app_userdata\Carl & Donut Dungeon Prototype\` and overwrite each other's
+  `savegame.json` (during Phase 10 the file here was replaced by one in the codex project's
+  format). This
+  game then shows "Save data could not be loaded." (it never loads another format), and New Game
+  replaces the file. Giving one project its own `config/custom_user_dir_name` (or another name)
+  separates them, but moves that project's save; not changed here.
 - **Donut and party targeting (Phase 8 placeholders and simplifications):**
   - the downed look is a placeholder: her shapes greyed and turned on their side, and a small
     "DOWNED" label; no animation, sound or particle. Scratch shows only a brief orange circle;
@@ -1246,8 +1419,6 @@ record is in `PROJECT_STATE.md` at commit `3351ceb`.)
 - **Carried over from earlier phases:**
   - there is no invulnerability after a hit (a glob and a Blob's touch can land in the same
     moment); knockback exists only for the Bat (Phase 9);
-  - Escape does nothing outside the menus;
-  - there is no way back to the title screen during play (close the window, then Continue);
   - camera limits are not set, and world-space signs can slide under the HUD at the top left;
   - hand-written scenes gain `unique_id` fields the first time the editor saves them.
 - Godot's `--check-only -s <script>` reports "Identifier not found" for the scripts that
@@ -1257,32 +1428,30 @@ record is in `PROJECT_STATE.md` at commit `3351ceb`.)
 
 ## Manual verification required
 Your own save is `%APPDATA%\Godot\app_userdata\Carl & Donut Dungeon Prototype\savegame.json`.
-Phase 9 reads it exactly as Phase 8 did (still version 3; older versions are still upgraded).
-Tests never touch that file.
-1. Open the project in Godot 4.7.2 and let it import the new files (the Bat icon, Floor 6). The
-   Output panel should show no errors.
-2. Press **F5** and play to Floor 5 (Continue, or New Game and down through the floors). Floor 5's
-   second sign now says the stairs down to Floor 6 are in the far south-east corner.
-3. A short walk east of where you arrive lies the **Baseball Bat** (a small wooden bat, labelled
-   "Baseball Bat"). Walk over it. **Space**: the menu lists "Baseball Bat" (no "x1"). Select it
-   and press **S**; close the menu. The HUD shows "S: Baseball Bat".
-4. Face a blob (arrow keys) and press **S**: it loses 20 HP (two-thirds of its bar) and is shoved
-   about two and a half tiles away, then comes back at you. Knock one toward a wall: it stops
-   against the wall. Your punches (D) and stones (W) still deal 10 and push nothing; Donut's
-   scratches still work.
-5. Die on Floor 5 before taking the stairs (or quit and Continue): the Bat is gone, S is empty
-   and the pickup is back. Pick it up again.
-6. Take the stairs ("Down to Floor 6"). Floor 6, "Batting Cage": the HUD still shows the Bat on
-   S. Walk east: the blob in front of the tall wall comes for you; hit it toward the wall and
-   watch it stop there. There are no stairs back up.
-7. Let Carl lose: GAME OVER as always. **Enter**: Floor 6 again, with the Bat still on S.
-8. Close the window. **F5**: "Saved at the start of Floor 6 …". **Enter** opens Floor 6 with the
-   Bat on S; S swings at once.
-9. On the title, New Game (Down, Enter, Down, Enter for Yes) starts over without the Bat.
+Phase 10 reads it exactly as Phase 9 did (still version 3). Tests never touch that file, and
+nothing in Phase 10 writes it except, as always, entering a floor or starting a new game.
+1. Open the project in Godot 4.7.2 and let it import the new files (the pause menu). The Output
+   panel should show no errors.
+2. Press **F5**, **Continue** (or New Game and go down to any floor with enemies). Note your HP.
+3. Press **Escape**: "Paused" with Resume / Return to Title / Quit Game appears and everything
+   stops: enemies, Donut, stones and globs in the air. Wait a few seconds; nothing moves.
+4. **Escape** again: play carries on exactly where it was.
+5. **Space** opens the action menu; **Escape** closes it, and only it (no pause menu). Escape
+   again opens the pause menu; **Enter** on Resume closes it.
+6. Lose some HP (or drink a potion, or kill an enemy). Escape, **Down**, **Enter** (Return to
+   Title): the question says progress since entering this floor will be lost, with **No**
+   selected. **Enter** (No): back in the pause menu. **Escape**: back in the game, nothing lost.
+7. Escape, Down, Enter, **Down** (Yes), **Enter**: the title screen, without restarting. It
+   shows the HP you had on entering the floor, not your current HP. **Enter** (Continue): the
+   floor starts over from its entry, with its enemies back. Repeat a few times.
+8. Escape, Down, Down (Quit Game), Enter: the quit question, No selected. Escape cancels. Enter,
+   Down, Enter: the game closes. **F5**, Continue: the same floor-entry checkpoint.
+9. Let Carl lose: GAME OVER. Escape and Space do nothing; Enter retries as before.
+10. If the game ever crashes while closing, see Known issues ("Crash on closing").
 
 ## Next phase
-Phase 10 is **not specified** here. Provide its prompt, with acceptance criteria, after
-Phase 9 is reviewed. (Stairs that open only after goals or events, and countdown timers,
+Phase 11 is **not specified** here. Provide its prompt, with acceptance criteria, after
+Phase 10 is reviewed. (Stairs that open only after goals or events, and countdown timers,
 discussed as possible future designs, were deliberately not started.)
 
 Groundwork for later phases:

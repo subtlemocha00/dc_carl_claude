@@ -48,6 +48,16 @@ Gameplay:
 
 Title screen: Up/Down choose between Continue and New Game, Enter confirms.
 
+Escape and Space by situation (canonical since Phase 10, section 15a):
+- during play: Escape opens the pause menu; Space opens the action/inventory menu;
+- in the action menu: Escape or Space closes it (and does nothing else: the same key press
+  never opens the pause menu);
+- in the pause menu: Escape resumes; Up/Down choose; Enter confirms; Space and W/A/S/D do
+  nothing;
+- in a pause-menu question: Escape means No;
+- on the GAME OVER screen: Enter retries; Escape and Space do nothing.
+At most one of the action menu, the pause menu and the GAME OVER screen is ever up.
+
 Carl's facing direction is determined by his most recent non-zero movement direction.
 
 W/A/S/D are never movement controls in this game. Movement is the arrow keys only.
@@ -460,6 +470,9 @@ Persistent save (canonical since Phase 5):
 - Phase 9 keeps **version 3**: owning the Baseball Bat is one more id in the list of owned
   reusable items, not a new kind of saved data (like Floor 6, one more floor id). Knockback is
   never saved.
+- Phase 10 keeps **version 3**: pausing adds nothing to the save. Whether the pause menu is
+  open, what it has selected and its questions are never saved, and neither is anything else
+  mid-floor.
 - No mid-floor saving, multiple save slots or cloud saves in the prototype.
 
 Current-run state (what survives level changes during one playthrough, held in memory) is
@@ -471,6 +484,28 @@ Persisted state should eventually include at least:
 - Carl's relevant health/state
 - inventory
 - action-slot assignments
+
+## 15a. Pause menu, Return to Title and quitting (canonical since Phase 10)
+
+- Escape during play opens the **pause menu**: Resume, Return to Title, Quit Game, with Resume
+  selected each time it opens. Up/Down choose (wrapping round), Enter confirms, Escape resumes.
+- While it is open the game is paused exactly as it is while the action menu is open: Carl
+  cannot move or act, Donut, the enemies, projectiles and knockback stop, cooldowns and Donut's
+  recovery countdown stop counting, and stairs and pickups do nothing. Resume carries on from
+  that exact moment: nothing is reset, nothing fires, and no cooldown comes due early.
+- The pause menu, the action menu and the GAME OVER screen are never up together: each opens
+  only while the game is running.
+- **Return to Title** and **Quit Game** first ask, with **No** selected:
+  "Return to title? / Quit game? Progress since entering this floor will be lost." Up/Down
+  choose, Enter confirms, Escape means No. No goes back to the pause menu, still paused.
+- **Neither ever saves.** The save keeps the checkpoint written when Carl entered the floor.
+  Everything since (HP lost, Donut's HP, items found or used, enemies killed) is dropped:
+  Continue restores the floor-entry checkpoint, with the floor's enemies and pickups as authored.
+- Return to Title goes back to the title screen in the same running game. The title describes
+  the saved checkpoint (never the live floor that was left), and Continue and New Game work as
+  from a fresh start, any number of times.
+- Quit Game closes the game. Closing the window (or Alt+F4) does the same, without asking:
+  nothing is saved, and the checkpoint is kept.
 
 ## 16. HUD
 

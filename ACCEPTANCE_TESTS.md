@@ -355,3 +355,51 @@ Required:
 - [ ] Tests can never touch the player's save (the Phase 8 guard); no test save is tracked.
 - [ ] No other weapons, upgrades, durability, ammunition, equipment slots, critical hits, status
       effects, new enemies, Floor 7, stair locking, timers or other Phase 10+ features were added.
+
+# Phase 10 — Pause Menu, Return to Title, Clean Quit and Runtime Stability
+
+The Phase 3–9 rules still apply (arrow keys move Carl; W/A/S/D are Carl's configurable slots
+with Fists on D in a new game; downward-only; GAME OVER waits for Enter; one floor-entry
+checkpoint; Donut is AI-controlled). No new floor, weapon, enemy, timer or stair lock.
+
+Required:
+- [ ] Escape during play opens the pause menu (Resume, Return to Title, Quit Game) with Resume
+      selected every time; Up/Down choose (wrapping); Enter confirms; Escape, or Enter on Resume,
+      resumes. It is one generic menu that every level (Surface, Floors 1–6) adds for itself:
+      no floor has pause logic of its own.
+- [ ] While it is open the scene tree is paused: Carl cannot move, turn, punch, fire, swing or
+      drink; Donut does not follow or scratch and her recovery countdown holds; blobs do not move
+      or touch; the Spitting Blob does not move or spit; stones and globs in flight freeze; a Bat
+      push freezes; gameplay ticks stop; stairs and pickups do nothing. Pausing never saves.
+- [ ] Resume continues exactly where it was: no reset, no free action (a key held while
+      resuming is ignored until released), no burst: the next scratch, touch and glob come one
+      full cooldown of play after the last; a frozen push completes its 80 px; Donut gets up
+      after exactly 6 s of play.
+- [ ] Only one of the action menu, the pause menu and GAME OVER is ever up. Escape closes the
+      action menu without opening the pause menu (also when held, with key repeat); Space and
+      W/A/S/D do nothing to the pause menu; keys arriving in the same frame never open both.
+- [ ] GAME OVER: Escape and Space open nothing; everything stays frozen; Enter still retries.
+- [ ] Return to Title and Quit Game ask first, "… Progress since entering this floor will be
+      lost.", with No selected; Escape and No go back to the pause menu, still paused, with the
+      live floor untouched.
+- [ ] Return to Title (Yes) opens the title screen in the same process. Nothing is saved (the
+      file is byte for byte the floor-entry checkpoint and is not rewritten). The level and all
+      its nodes are freed; GameState holds no run; the title describes the saved checkpoint, not
+      the live floor.
+- [ ] Continue after returning restores the checkpoint from disk (Carl's and Donut's HP, items,
+      slots, the floor's enemies as authored, no projectiles), never from memory; repeated
+      Continue/Return cycles never duplicate Carl, Donut, the HUD, menus or enemies, leave nothing
+      behind and pile up no signal connections. New Game still asks first and starts clean.
+- [ ] Quit Game (Yes) and closing the window end the process with exit code 0 and no engine
+      errors, without writing the save; a fresh launch's Continue restores the checkpoint.
+- [ ] The save stays `save_version: 3` with its seven fields and nothing about pausing; version
+      1 and 2 saves still load and migrate; version 3 Continue works.
+- [ ] Stairs never change level in a frozen game: Carl reaching the stairs and dying in the same
+      physics tick leaves GAME OVER up on that floor with its checkpoint intact (Phase 10 fix).
+- [ ] The pause menu, both questions, the HUD hint and the title reached through Return to Title
+      fit at 1280×720, 640×360 and 1024×768.
+- [ ] Tests never touch the player's save; the quit test's child process refuses any save file
+      outside `user://test_saves/`.
+- [ ] Shutdown stress: repeated real-process title/gameplay/pause-quit/return cycles, with exit
+      codes and crash causes recorded in `PROJECT_STATE.md`.
+- [ ] Version in Project Settings: `0.10.0`.

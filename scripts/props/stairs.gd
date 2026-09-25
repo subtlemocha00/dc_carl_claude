@@ -37,4 +37,11 @@ func _on_body_entered(_body: Node2D) -> void:
 
 
 func _change_level() -> void:
+	# The change waited for the end of the physics step, and something in that same step may
+	# have frozen the game: Carl reaching the stairs and being killed in one tick means GAME OVER.
+	# A frozen game never changes level (Phase 10 fix): going on would open the next floor still
+	# paused, with no GAME OVER screen, and save its checkpoint with Carl at 0 HP, which cannot be
+	# loaded. The retry reloads this level, stairs included.
+	if get_tree().paused:
+		return
 	get_tree().change_scene_to_file(destination_scene_path)

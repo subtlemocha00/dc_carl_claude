@@ -1,0 +1,160 @@
+[gd_scene format=3 uid="uid://c5is3ll1v0ran"]
+
+[ext_resource type="Script" path="res://scripts/ui/pause_menu.gd" id="1_pause"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_menu"]
+content_margin_left = 40.0
+content_margin_top = 24.0
+content_margin_right = 40.0
+content_margin_bottom = 24.0
+bg_color = Color(0.1, 0.11, 0.15, 0.97)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.45, 0.5, 0.62, 1)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_confirm"]
+content_margin_left = 32.0
+content_margin_top = 22.0
+content_margin_right = 32.0
+content_margin_bottom = 22.0
+bg_color = Color(0.1, 0.11, 0.15, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.95, 0.55, 0.45, 1)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+
+[node name="PauseMenu" type="CanvasLayer"]
+process_mode = 3
+layer = 11
+visible = false
+script = ExtResource("1_pause")
+
+[node name="Dim" type="ColorRect" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0, 0, 0, 0.55)
+
+[node name="MenuPanel" type="PanelContainer" parent="."]
+unique_name_in_owner = true
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -230.0
+offset_top = -140.0
+offset_right = 230.0
+offset_bottom = 140.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_menu")
+
+[node name="Layout" type="VBoxContainer" parent="MenuPanel"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 8
+alignment = 1
+
+[node name="Title" type="Label" parent="MenuPanel/Layout"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.96, 0.93, 0.85, 1)
+theme_override_font_sizes/font_size = 32
+text = "Paused"
+horizontal_alignment = 1
+
+[node name="ResumeRow" type="Label" parent="MenuPanel/Layout"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 24
+text = "Resume"
+horizontal_alignment = 1
+
+[node name="ReturnToTitleRow" type="Label" parent="MenuPanel/Layout"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 24
+text = "Return to Title"
+horizontal_alignment = 1
+
+[node name="QuitRow" type="Label" parent="MenuPanel/Layout"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 24
+text = "Quit Game"
+horizontal_alignment = 1
+
+[node name="Hint" type="Label" parent="MenuPanel/Layout"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.62, 0.65, 0.72, 1)
+theme_override_font_sizes/font_size = 14
+text = "Up/Down: choose     Enter: confirm     Esc: resume"
+horizontal_alignment = 1
+
+[node name="ConfirmPanel" type="PanelContainer" parent="."]
+unique_name_in_owner = true
+visible = false
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -300.0
+offset_top = -110.0
+offset_right = 300.0
+offset_bottom = 110.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_confirm")
+
+[node name="Layout" type="VBoxContainer" parent="ConfirmPanel"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 10
+alignment = 1
+
+[node name="ConfirmQuestion" type="Label" parent="ConfirmPanel/Layout"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.96, 0.93, 0.85, 1)
+theme_override_font_sizes/font_size = 22
+text = "Return to title?
+Progress since entering this floor will be lost."
+horizontal_alignment = 1
+
+[node name="NoRow" type="Label" parent="ConfirmPanel/Layout"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 24
+text = "No"
+horizontal_alignment = 1
+
+[node name="YesRow" type="Label" parent="ConfirmPanel/Layout"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 24
+text = "Yes"
+horizontal_alignment = 1
+
+[node name="ConfirmHint" type="Label" parent="ConfirmPanel/Layout"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.62, 0.65, 0.72, 1)
+theme_override_font_sizes/font_size = 14
+text = "Up/Down: choose     Enter: confirm     Esc: back"
+horizontal_alignment = 1
