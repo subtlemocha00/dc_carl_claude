@@ -173,7 +173,8 @@ W, A, S or D to put it in that slot. Escape also closes the menu.
 
 Inventory contents:
 - Innate actions (Fists) are always available, have no quantity and are never used up.
-- Reusable items (the Slingshot) are found once and then owned. They have no quantity, are
+- Reusable items (the Slingshot; since Phase 9 the Baseball Bat) are found once and then owned.
+  They have no quantity, are
   never used up, and the menu and the HUD show only their name. Finding one Carl already
   owns changes nothing.
 - Consumables have a quantity, shown in the menu and the HUD (for example "x2"). A consumable
@@ -216,6 +217,29 @@ The first ranged weapon is the **Slingshot** (stable id `slingshot`):
 - stones never hurt Carl or Donut, never collect pickups and never trigger stairs. Like
   everything else in play, they freeze while the game is paused.
 
+The second reusable weapon is the **Baseball Bat** (stable id `baseball_bat`, canonical since
+Phase 9), a melee weapon that knocks enemies back:
+- a reusable item, found on Floor 5: once found it is owned, with no quantity (the menu and the
+  HUD say "Baseball Bat"), and never used up. There is no ammunition;
+- it can be put on any of W, A, S or D, in one slot at a time, next to Fists, the Slingshot and
+  the potion;
+- each use swings once in Carl's facing direction (the same facing as Fists and the Slingshot).
+  Holding the key swings once every 0.75 s (its cooldown); a short press swings once;
+- a swing covers a circle of 28 px radius centred 36 px in front of Carl: it reaches from 8 px to
+  64 px in front of his centre, so it hits enemies in front of him (all of them in that area),
+  never behind him. It never reaches through a wall: an enemy with a wall between it and Carl
+  is not hit;
+- each hit deals exactly 20 damage (two hits kill a 30 HP blob; Fists deal 10);
+- knockback: an enemy it hits and does not kill is pushed 80 px in the direction of the swing,
+  away from Carl, over 0.3 s (fast at first, then slowing). Walls stop the push: the enemy
+  ends up against the wall, never in it or beyond it. While it is pushed it neither moves by
+  itself nor attacks; then it carries on as before (chasing, keeping its distance, spitting at
+  its usual pace). A killing hit does not push: the enemy dies where it stands;
+- only enemies are knocked back. The Bat never hurts or pushes Carl or Donut. Fists, Slingshot
+  stones, Donut's Scratch and enemy attacks do not knock back;
+- a push freezes with everything else while the game is paused (the menu, GAME OVER) and is
+  never saved.
+
 ## 10. Dungeon structure
 
 Do not implement procedural generation for the three-floor prototype.
@@ -225,10 +249,10 @@ All three prototype dungeon floors should be manually authored scenes/layouts.
 General progression:
 Surface -> Floor 1 -> Floor 2 -> Floor 3 -> Prototype Complete screen.
 
-Playable progression since Phase 8: Surface -> Floor 1 -> Floor 2 -> Floor 3 -> Floor 4 -> Floor 5.
-Floor 3 has stairs down to Floor 4 and Floor 4 has stairs down to Floor 5, both manually authored
-combat-test floors (sections 14a and 14b); Floor 5 has no exit yet. The Floor 3 Guardian and the
-Prototype Complete screen are still to come.
+Playable progression since Phase 9: Surface -> Floor 1 -> Floor 2 -> Floor 3 -> Floor 4 -> Floor 5
+-> Floor 6. Floor 3 has stairs down to Floor 4, Floor 4 down to Floor 5 and Floor 5 down to Floor 6,
+all manually authored combat-test floors (sections 14a, 14b and 14c); Floor 6 has no exit yet.
+The Floor 3 Guardian and the Prototype Complete screen are still to come.
 
 Progression is downward only. Once Carl descends, he can never return to the Surface or to a
 shallower floor. Levels have no stairs, exits or triggers that lead back up. This is a design
@@ -333,7 +357,10 @@ All enemies:
   it keeps that target until the target is downed or farther than its chase range, then picks
   again the same way. It never flips between them just because the other one is a little
   closer. A downed Donut is never a target;
-- freeze while the game is paused (the inventory menu, GAME OVER).
+- freeze while the game is paused (the inventory menu, GAME OVER);
+- since Phase 9, can be knocked back by the Baseball Bat (section 9): while pushed they do not
+  move by themselves or attack; afterwards they go on as before, finding a new path from where
+  they landed.
 
 Gelatinous Blob: 30 HP, 55 px/s, notices Carl within 220 px, gives up beyond 320 px. Its touch
 takes 10 HP, at most every 0.8 s. Since Phase 8 each touch hurts one party member, Carl or Donut
@@ -370,8 +397,18 @@ A walled companion-combat test room (stable id `floor_05`) with two Gelatinous B
 Spitting Blob, and walls and pillars for navigation and cover. One blob waits in a pen close to
 where Donut arrives, farther from Carl, so it goes for Donut: she scratches it while it hurts
 her. Carl leads the way toward the others, so they usually pick him. Nothing is scripted: all of
-this is ordinary enemy targeting. Floor 5 has no exit yet (no Floor 6), and nothing leads back
-up.
+this is ordinary enemy targeting. Nothing leads back up.
+Since Phase 9 Floor 5 also holds the **Baseball Bat** pickup, a short walk east of where Carl
+arrives, and its only exit is the stairs down to Floor 6 in the far south-east corner.
+
+## 14c. Floor 6 — Batting Cage (canonical since Phase 9)
+
+A walled weapon/knockback test room (stable id `floor_06`, 36 × 20 tiles) with two Gelatinous
+Blobs and one Spitting Blob. One blob waits just in front of a tall wall (the "backstop"), so
+knocking it back with the Bat pushes it into the wall, where it stops; another waits in the
+open south-west part of the room, where a push travels its full distance; the Spitting Blob is
+east of the backstop, with a pillar for cover. Nothing is scripted. Floor 6 has no exit yet
+(no Floor 7), and nothing leads back up to Floor 5.
 
 ## 15. Saving/checkpoints
 
@@ -392,6 +429,9 @@ Initial save design:
   Reusable items follow the same rule. A Slingshot found after entering Floor 2 is taken back
   by a Floor 2 retry (its pickup is back, and its slot empties). Once Carl enters Floor 3
   with it, it is part of the Floor 3 checkpoint and a retry keeps it, with its slot.
+  The Baseball Bat (Phase 9) works the same way: found after entering Floor 5, it is taken back
+  by a Floor 5 retry or by quitting and continuing (pickup back, slot empty); once Carl enters
+  Floor 6 with it, the Floor 6 checkpoint owns it, with its slot, for retries and Continue.
 
 Persistent save (canonical since Phase 5):
 - There is one save slot, holding one floor-entry checkpoint: the floor Carl last entered,
@@ -417,6 +457,9 @@ Persistent save (canonical since Phase 5):
   floor (0 if she entered downed). Version 1 and version 2 saves still load, with Donut at full
   health (60 / 60), and become version 3 at the next checkpoint (Continue writes one at once).
   How far Donut's recovery countdown had got is never saved.
+- Phase 9 keeps **version 3**: owning the Baseball Bat is one more id in the list of owned
+  reusable items, not a new kind of saved data (like Floor 6, one more floor id). Knockback is
+  never saved.
 - No mid-floor saving, multiple save slots or cloud saves in the prototype.
 
 Current-run state (what survives level changes during one playthrough, held in memory) is
@@ -475,6 +518,7 @@ Do not implement unless the user later expands scope:
 - randomized item affixes
 - advanced lighting/rendering
 - voice acting
-- floors 6–20 (Floor 4 was added in Phase 7 and Floor 5 in Phase 8 as combat-test floors)
+- floors 7–20 (Floor 4 was added in Phase 7, Floor 5 in Phase 8 and Floor 6 in Phase 9 as
+  combat-test floors)
 - achievements
 - mod support

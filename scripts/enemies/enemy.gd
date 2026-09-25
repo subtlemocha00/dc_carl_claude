@@ -15,11 +15,18 @@ extends CharacterBody2D
 ## - navigate_toward(goal) / stop_moving(): moves the body along the level's navigation mesh
 ##   (see EnemyNavigation), so it walks around walls instead of into them.
 ## - has_line_of_sight_to(point): whether a wall is in the way, for enemies that shoot.
+## - update_knockback() (Phase 9): call it first in _physics_process(). While a hit's push (the
+##   Baseball Bat's) is going on, it moves the enemy one tick of it and returns true, and the
+##   enemy does nothing else that tick: no target choice, no navigation, no attack. So pursuit
+##   never fights the push. When the push ends, the enemy simply carries on: its next
+##   navigate_toward() asks for a fresh path from wherever it landed.
 ## - hit flash, health bar, and dying (it stops, stops blocking, fades out and is removed).
 ## Attacks are separate nodes in each enemy scene: a MeleeAttack for a touch, a
 ## ProjectileLauncher for spit. They hurt whoever is on player_hurtbox (Carl and Donut), not
 ## only the target. The expected children are Health, Hurtbox, CollisionShape2D,
-## NavigationAgent2D (an EnemyNavigation) and a unique HealthBarFill.
+## NavigationAgent2D (an EnemyNavigation) and a unique HealthBarFill, and (Phase 9) a
+## KnockbackReceiver that the Hurtbox's knockback_receiver points at. Without one the enemy is
+## never knocked back.
 
 ## Multiplying the colours by more than 1 briefly brightens an enemy when it is hit.
 const HIT_FLASH_COLOR := Color(2.2, 2.2, 2.2)
@@ -47,6 +54,8 @@ var _hit_flash_tween: Tween
 @onready var navigation: EnemyNavigation = $NavigationAgent2D
 @onready var body_shape: CollisionShape2D = $CollisionShape2D
 @onready var health_bar_fill: Node2D = %HealthBarFill
+## Null for an enemy that cannot be knocked back.
+@onready var knockback_receiver: KnockbackReceiver = get_node_or_null(^"KnockbackReceiver")
 
 
 func _ready() -> void:
@@ -69,6 +78,17 @@ func update_activity() -> bool:
 	if target == null:
 		target = _find_nearest_party_member(detection_range)
 	return target != null
+
+
+## Moves the enemy one tick of a knockback push, if one is going on, and returns true; the enemy
+## must then skip everything else this tick. Returns false (nothing moved) otherwise.
+func update_knockback() -> bool:
+	return knockback_receiver != null and knockback_receiver.step()
+
+
+## True while the enemy is being knocked back.
+func is_knocked_back() -> bool:
+	return knockback_receiver != null and knockback_receiver.is_active()
 
 
 ## True if `member` can be hunted: a party member in the level whose Health is above 0.
@@ -129,6 +149,9 @@ func _on_died() -> void:
 	# A dead enemy stops moving and attacking at once. Its Health refuses further hits.
 	set_physics_process(false)
 	target = null
+	# Death comes first: a push still going on ends here (a killing hit never starts one).
+	if knockback_receiver != null:
+		knockback_receiver.stop()
 	velocity = Vector2.ZERO
 	# Stop blocking Carl. Physics shapes must not be switched off in the middle of a
 	# physics step, so this is deferred to the end of the frame.

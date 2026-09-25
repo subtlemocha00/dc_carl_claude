@@ -6,6 +6,7 @@
 [ext_resource type="Script" uid="uid://c1jybnwpqscpb" path="res://scripts/combat/hurtbox.gd" id="4_hurtbox"]
 [ext_resource type="Script" uid="uid://bq3lls4jl15v1" path="res://scripts/enemies/enemy_navigation.gd" id="5_navigation"]
 [ext_resource type="PackedScene" uid="uid://cvjk5r0mnflce" path="res://scenes/projectiles/spit_glob.tscn" id="6_glob"]
+[ext_resource type="Script" uid="uid://b4akfmhil25v5" path="res://scripts/combat/knockback_receiver.gd" id="7_knockback"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_body"]
 radius = 13.0
@@ -77,15 +78,19 @@ cooldown = 1.5
 script = ExtResource("3_health")
 max_health = 30
 
-[node name="Hurtbox" type="Area2D" parent="." node_paths=PackedStringArray("health")]
+[node name="Hurtbox" type="Area2D" parent="." node_paths=PackedStringArray("health", "knockback_receiver")]
 collision_layer = 32
 collision_mask = 0
 monitoring = false
 script = ExtResource("4_hurtbox")
 health = NodePath("../Health")
+knockback_receiver = NodePath("../KnockbackReceiver")
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="Hurtbox"]
 shape = SubResource("CircleShape2D_hurtbox")
+
+[node name="KnockbackReceiver" type="Node" parent="."]
+script = ExtResource("7_knockback")
 
 [node name="NavigationAgent2D" type="NavigationAgent2D" parent="."]
 path_desired_distance = 6.0

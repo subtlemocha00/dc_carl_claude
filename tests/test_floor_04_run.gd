@@ -5,7 +5,7 @@ extends "res://tests/support/game_test.gd"
 ## - Title -> Continue opens Floor 3 with that state; the save it writes on entry holds the same
 ##   values, as save_version 3 with Donut at full health (Phase 8 migration).
 ## - Every level's exits lead one floor down: Floor 4's only exit leads to Floor 5 (Phase 8), and
-##   Floor 5 has none (downward-only).
+##   Floor 5's only exit to Floor 6 (Phase 9), Floor 6 none (downward-only).
 ## - Floor 3 -> Floor 4: Carl, Donut and the camera arrive, with no transition loop. Floor 4 has
 ##   its sign, a Gelatinous Blob and a Spitting Blob, and walls that matter: the straight line from
 ##   the blob to Carl's side is blocked, and wall B hides the approach from the Spitting Blob.
@@ -35,6 +35,7 @@ const FLOOR_2_PATH := "res://scenes/levels/floor_02.tscn"
 const FLOOR_3_PATH := "res://scenes/levels/floor_03.tscn"
 const FLOOR_4_PATH := "res://scenes/levels/floor_04.tscn"
 const FLOOR_5_PATH := "res://scenes/levels/floor_05.tscn"
+const FLOOR_6_PATH := "res://scenes/levels/floor_06.tscn"
 const BLOB_PATH := "res://scenes/enemies/gelatinous_blob.tscn"
 const SPITTER_PATH := "res://scenes/enemies/spitting_blob.tscn"
 const FISTS: ActionDefinition = preload("res://resources/actions/fists.tres")
@@ -106,10 +107,11 @@ func _continue_phase_6_save() -> bool:
 
 
 func _check_downward_only() -> bool:
-	print("-- Every exit leads one floor down; Floor 5 has none")
+	print("-- Every exit leads one floor down; Floor 6 has none")
 	var expected := {
 		SURFACE_PATH: [FLOOR_1_PATH], FLOOR_1_PATH: [FLOOR_2_PATH], FLOOR_2_PATH: [FLOOR_3_PATH],
-		FLOOR_3_PATH: [FLOOR_4_PATH], FLOOR_4_PATH: [FLOOR_5_PATH], FLOOR_5_PATH: [],
+		FLOOR_3_PATH: [FLOOR_4_PATH], FLOOR_4_PATH: [FLOOR_5_PATH], FLOOR_5_PATH: [FLOOR_6_PATH],
+		FLOOR_6_PATH: [],
 	}
 	for level_path: String in expected:
 		var level: Node = (load(level_path) as PackedScene).instantiate()

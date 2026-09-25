@@ -11,6 +11,9 @@ extends Enemy
 ## It gives up when Carl is farther than chase_range. The glob (scenes/projectiles/spit_glob.tscn)
 ## is a Projectile that only hurts player_hurtbox (Carl) and stops at walls; the SpitLauncher is
 ## the same ProjectileLauncher that fires Carl's Slingshot.
+## While it is knocked back (Phase 9) it neither moves by itself nor spits
+## (Enemy.update_knockback()). Its launcher's cooldown keeps counting meanwhile, so afterwards it
+## spits at its usual pace: at most one glob, never a burst.
 
 ## While Carl is too close, it heads for a point this far behind itself, away from him (pixels).
 const RETREAT_STEP := 48.0
@@ -32,6 +35,8 @@ func _ready() -> void:
 
 
 func _physics_process(_delta: float) -> void:
+	if update_knockback():
+		return
 	if not update_activity():
 		stop_moving()
 		return

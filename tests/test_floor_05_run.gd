@@ -5,8 +5,8 @@ extends "res://tests/support/game_test.gd"
 ##   a potion on A) opens Floor 4 with both HPs. Carl walks to Floor 4's new stairs (its enemies
 ##   are kept idle: their fights are test_floor_04_run.gd's) and arrives on Floor 5 with Donut:
 ##   Carl 80, Donut 40 carried over, the HUD, the sign, two Gelatinous Blobs and a Spitting Blob,
-##   no exits, no transition loop, and the Floor 5 checkpoint (version 3, Donut 40) in memory and
-##   on disk. Every level's exits lead one floor down; nothing leads up, not even from Floor 5.
+##   (Phase 9) only the stairs down to Floor 6, no transition loop, and the Floor 5 checkpoint (version 3, Donut 40) in memory and
+##   on disk. Every level's exits lead one floor down; nothing leads up, not even from Floor 5 or 6.
 ##   The penned blob picks Donut, who is nearer to it than Carl, walks around the pen wall,
 ##   and fights her: her scratches kill it (10 each), its touches take 10 each from her; Carl is
 ##   never touched. Her damage changes neither the floor-entry state nor the save.
@@ -39,6 +39,7 @@ const FLOOR_2_PATH := "res://scenes/levels/floor_02.tscn"
 const FLOOR_3_PATH := "res://scenes/levels/floor_03.tscn"
 const FLOOR_4_PATH := "res://scenes/levels/floor_04.tscn"
 const FLOOR_5_PATH := "res://scenes/levels/floor_05.tscn"
+const FLOOR_6_PATH := "res://scenes/levels/floor_06.tscn"
 const BLOB_PATH := "res://scenes/enemies/gelatinous_blob.tscn"
 const SPITTER_PATH := "res://scenes/enemies/spitting_blob.tscn"
 const FISTS: ActionDefinition = preload("res://resources/actions/fists.tres")
@@ -72,10 +73,11 @@ func _run_checks() -> void:
 
 
 func _check_downward_only() -> void:
-	print("-- Every exit leads one floor down; Floor 5 has none")
+	print("-- Every exit leads one floor down; Floor 6 has none")
 	var expected := {
 		SURFACE_PATH: [FLOOR_1_PATH], FLOOR_1_PATH: [FLOOR_2_PATH], FLOOR_2_PATH: [FLOOR_3_PATH],
-		FLOOR_3_PATH: [FLOOR_4_PATH], FLOOR_4_PATH: [FLOOR_5_PATH], FLOOR_5_PATH: [],
+		FLOOR_3_PATH: [FLOOR_4_PATH], FLOOR_4_PATH: [FLOOR_5_PATH], FLOOR_5_PATH: [FLOOR_6_PATH],
+		FLOOR_6_PATH: [],
 	}
 	for level_path: String in expected:
 		var level: Node = (load(level_path) as PackedScene).instantiate()
@@ -136,7 +138,8 @@ func _check_floor_5_arrival() -> bool:
 	check(blobs.size() == 2 and _near_spawn(_pen_blob(), PEN_BLOB_SPAWN) and _blob().global_position == BLOB_SPAWN,
 			"Floor 5 has two Gelatinous Blobs (one in the pen)")
 	check(spitters.size() == 1 and spitters[0].global_position == SPITTER_SPAWN, "and a Spitting Blob")
-	check(_destinations(level).is_empty(), "Floor 5 has no exits: nothing leads back up to Floor 4")
+	check(_destinations(level) == [FLOOR_6_PATH], "Floor 5's only exit (Phase 9) leads down to Floor 6: nothing leads back up to Floor 4",
+			str(_destinations(level)))
 	var entry = game_state().floor_entry
 	check(entry.scene_path == FLOOR_5_PATH and entry.carl_health == ENTRY_CARL_HP and entry.donut_health == ENTRY_DONUT_HP
 			and entry.donut_max_health == 60 and entry.inventory["items"].has(SLINGSHOT.id)

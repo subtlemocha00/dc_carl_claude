@@ -1,0 +1,16 @@
+[gd_scene format=3 uid="uid://c6is1ulwdkpia"]
+
+[ext_resource type="Script" uid="uid://xv8lt2bxk28b" path="res://scripts/combat/melee_attack.gd" id="1_melee"]
+
+[node name="BaseballBat" type="Node2D"]
+script = ExtResource("1_melee")
+damage = 20
+reach = 36.0
+hit_radius = 28.0
+cooldown = 0.75
+target_layers = 32
+blocking_layers = 1
+knockback_distance = 80.0
+knockback_duration = 0.3
+flash_color = Color(0.95, 0.78, 0.5, 0.45)
+flash_duration = 0.12

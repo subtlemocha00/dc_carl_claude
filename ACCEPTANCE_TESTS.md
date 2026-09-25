@@ -296,3 +296,62 @@ Required:
 - [ ] No Donut controls, commands, slots or equipment, permanent Donut death, Donut items or
       potion targeting, bosses, Floor 6, other enemy species, new weapons, ammunition, stair
       locking or other Phase 9+ features were added.
+
+# Phase 9 — Second Reusable Weapon, Knockback, Combat Reactions and Floor 6
+
+The Phase 3–8 rules still apply (arrow keys move Carl; W/A/S/D are Carl's configurable slots
+with Fists on D in a new game; downward-only; GAME OVER waits for Enter; one floor-entry
+checkpoint; Donut is AI-controlled).
+
+Required:
+- [ ] One new reusable weapon, the Baseball Bat (id `baseball_bat`): an ActionDefinition
+      (`consumable` false, with an icon) whose performer is a `MeleeAttack` scene, used through
+      the normal slot dispatch. Carl's script has no Bat code; no code checks item ids.
+- [ ] A new game owns no Bat. Floor 5 has one Bat pickup; walking over it owns the Bat exactly
+      once and the pickup disappears. Donut and enemies cannot collect it; two collectors
+      cannot both get it.
+- [ ] The menu and the HUD show "Baseball Bat", never "Baseball Bat x1". It can only be assigned
+      once owned; it can go on W, A, S or D, is in one slot at a time, and sits next to Fists,
+      the Slingshot and the potion (e.g. `W: Slingshot   A: Potion x1   S: Baseball Bat   D: Fists`).
+- [ ] A swing hits in Carl's facing direction only (a 28 px circle 36 px ahead: 8–64 px in
+      front of him), never behind him, never through a wall, and never Carl or Donut.
+- [ ] Exactly 20 damage per hit (two hits kill a 30 HP blob, which then dies as usual).
+      Cooldown 0.75 s (45 ticks): a short press swings once, holding swings every 45 ticks,
+      taps cannot swing faster, moving the Bat to another key keeps its cooldown.
+- [ ] Knockback: an enemy hit and not killed is pushed 80 px away from Carl, in the swing's
+      direction, over 0.3 s (18 ticks), visibly from the first tick. Walls stop it: it ends
+      against the wall, never overlapping or beyond it (thin walls too). It always ends.
+- [ ] Knockback is reusable: an attack passes a `Knockback` (direction, distance, duration) with
+      its damage to `Hurtbox.take_hit()`; a `KnockbackReceiver` on the actor moves its body with
+      `move_and_slide()`. Enemies have one; Carl and Donut do not (they are never pushed).
+- [ ] While pushed, an enemy neither moves by itself nor attacks (`Enemy.update_knockback()`):
+      a chasing blob is still pushed the full 80 px. Afterwards a Gelatinous Blob navigates back
+      to Carl and touches him; a Spitting Blob moves to its preferred distance and spits again.
+- [ ] The Spitting Blob spits nothing during a push, and its next glob comes exactly one
+      cooldown (90 ticks) after the one before: no burst, no extra glob, no reset.
+- [ ] A killing hit does not push; an enemy killed during a push stops at once and never moves
+      or attacks again.
+- [ ] Unchanged: Fists (10, 24 px reach, 0.4 s), Slingshot stones (10, 480 px/s, 320 px, 0.6 s),
+      Donut's Scratch (10, 1.0 s) and spit globs (10) — none of them knocks back; enemy touches
+      never push Carl.
+- [ ] The menu blocks swings, freezes a push in progress (which then completes the same 80 px),
+      and closing it with a key held gives no free swing. GAME OVER (the tree pause) freezes a
+      push; a retry reloads the floor with its enemies as authored and no push left over.
+- [ ] Floor 5 has stairs down to Floor 6 (`floor_06`, in FloorRegistry): walls, safe arrival for
+      Carl and Donut, "Floor 6 - Batting Cage" sign, HUD, menu, two Gelatinous Blobs (one just
+      in front of a tall wall) and a Spitting Blob, a checkpoint on entry, Continue straight into
+      it. Floor 6 has no exits; nothing leads up from any floor.
+- [ ] A Bat found on Floor 5 is not in the Floor 5 checkpoint: dying there (or quitting and
+      continuing) takes it back (not owned, pickup back, its slot empty); repeated retries never
+      duplicate it. Entering Floor 6 with it puts it and its slot in the Floor 6 checkpoint; a
+      Floor 6 retry and Continue keep it, and it swings and knocks back right away.
+- [ ] The save stays `save_version: 3` with the same fields: the Bat is one more `owned_items`
+      id. A real Phase 8 save (version 3, no Bat) loads unchanged; version 1 and 2 saves still
+      migrate and never own the Bat. A Bat with a quantity, listed twice, or an unknown owned id
+      is rejected; a Bat slot without owning the Bat is emptied. `floor_07` is unknown.
+- [ ] New Game clears the Bat: no items, W/A/S empty, D = Fists, the Surface.
+- [ ] The Bat pickup, its label, the HUD with the Bat, the menu, Floor 6's signs and a
+      knocked-back blob are on screen at 1280×720, 640×360 and 1024×768.
+- [ ] Tests can never touch the player's save (the Phase 8 guard); no test save is tracked.
+- [ ] No other weapons, upgrades, durability, ammunition, equipment slots, critical hits, status
+      effects, new enemies, Floor 7, stair locking, timers or other Phase 10+ features were added.

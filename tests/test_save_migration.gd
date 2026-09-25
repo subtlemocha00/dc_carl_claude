@@ -1,5 +1,5 @@
 extends "res://tests/support/game_test.gd"
-## Phase 6-8: loading saves from earlier phases, on this test's own save file.
+## Phase 6-9: loading saves from earlier phases, on this test's own save file.
 ## The two fixtures in tests/fixtures/ were written by the Phase 5 game itself (commit fd1d5e7,
 ## SaveManager.save_checkpoint()), so they are real version 1 files:
 ##   phase5_save_v1_floor_01.json: Floor 1, 80/100 HP, no items, W = Fists, D empty;
@@ -25,6 +25,11 @@ extends "res://tests/support/game_test.gd"
 ##   file might hold under "donut"; the game writes the same values back as version 3 plus
 ##   Donut. Through the real title screen, Continue on the Phase 7 Floor 4 save opens Floor 4
 ##   with its state and Donut at 60 / 60, and the save becomes version 3.
+## - Phase 9 (the Baseball Bat is one more owned_items id, so the format stays version 3): a real
+##   version 3 save written by the Phase 8 game (commit 3351ceb) on entering Floor 5,
+##   phase8_save_v3_floor_05.json (Carl 80/100, Donut 40/60, Slingshot on W, 1 potion on A), loads
+##   unchanged, with no Bat, and is written back identically. Every migrated version 1 and 2 save
+##   owns no Bat either.
 ##
 ## Run from the project folder:
 ##     godot --headless --path . -s res://tests/test_save_migration.gd
@@ -36,6 +41,8 @@ const FIXTURE_FLOOR_2 := "res://tests/fixtures/phase5_save_v1_floor_02.json"
 const PHASE_6_FIXTURE_FLOOR_2 := "res://tests/fixtures/phase6_save_v2_floor_02.json"
 const PHASE_6_FIXTURE_FLOOR_3 := "res://tests/fixtures/phase6_save_v2_floor_03.json"
 const PHASE_7_FIXTURE_FLOOR_4 := "res://tests/fixtures/phase7_save_v2_floor_04.json"
+const PHASE_8_FIXTURE_FLOOR_5 := "res://tests/fixtures/phase8_save_v3_floor_05.json"
+const FLOOR_5_PATH := "res://scenes/levels/floor_05.tscn"
 const FLOOR_3_PATH := "res://scenes/levels/floor_03.tscn"
 const FLOOR_4_PATH := "res://scenes/levels/floor_04.tscn"
 const FLOOR_1_PATH := "res://scenes/levels/floor_01.tscn"
@@ -43,6 +50,7 @@ const FLOOR_2_PATH := "res://scenes/levels/floor_02.tscn"
 const FISTS: ActionDefinition = preload("res://resources/actions/fists.tres")
 const POTION: ActionDefinition = preload("res://resources/actions/small_health_potion.tres")
 const SLINGSHOT: ActionDefinition = preload("res://resources/actions/slingshot.tres")
+const BAT: ActionDefinition = preload("res://resources/actions/baseball_bat.tres")
 
 
 func _initialize() -> void:
@@ -58,6 +66,7 @@ func _run_checks() -> void:
 	_check_malformed_version_1_rejected()
 	_check_other_versions()
 	_check_version_2_saves()
+	_check_phase_8_save_and_no_bat()
 	await _check_continue_from_version_1()
 	await _check_continue_from_phase_7_floor_4()
 	finish()
@@ -207,6 +216,35 @@ func _check_version_2_saves() -> void:
 		migrated["donut"] = {"health": 60, "max_health": 60}
 		check(JSON.parse_string(JSON.stringify(save_manager().encode(loaded))) == JSON.parse_string(JSON.stringify(migrated)),
 				"%s: Phase 8 writes the same values back, as version 3 with Donut at 60 / 60" % fixture.get_file())
+
+
+func _check_phase_8_save_and_no_bat() -> void:
+	print("-- Phase 9: a real Phase 8 save (version 3) still loads; no older save owns the Bat")
+	var text := _write_fixture(PHASE_8_FIXTURE_FLOOR_5)
+	check(JSON.parse_string(text).get("save_version") == 3.0, "phase8_save_v3_floor_05.json is a save_version 3 file")
+	var loaded: FloorEntry = save_manager().load_checkpoint()
+	check(loaded != null and save_manager().last_error == "", "it loads", save_manager().last_error)
+	if loaded != null:
+		var inventory := _inventory_of(loaded)
+		check(loaded.scene_path == FLOOR_5_PATH and loaded.carl_health == 80 and loaded.donut_health == 40 and loaded.donut_max_health == 60,
+				"its floor (Floor 5), Carl's 80 HP and Donut's 40 / 60")
+		check(inventory.get_quantity(POTION) == 1 and inventory.has(SLINGSHOT) and not inventory.has(BAT)
+				and loaded.action_slots == {ActionSlots.SLOT_W: SLINGSHOT, ActionSlots.SLOT_A: POTION, ActionSlots.SLOT_D: FISTS},
+				"its potion, Slingshot and slots, and no Bat")
+		check(_save_text() == text, "loading did not change the file")
+		check(JSON.parse_string(JSON.stringify(save_manager().encode(loaded))) == JSON.parse_string(text),
+				"Phase 9 writes exactly the same data back: still version 3, no new field")
+	for fixture: String in [FIXTURE_FLOOR_1, FIXTURE_FLOOR_2, PHASE_6_FIXTURE_FLOOR_2, PHASE_6_FIXTURE_FLOOR_3, PHASE_7_FIXTURE_FLOOR_4]:
+		_write_fixture(fixture)
+		var migrated: FloorEntry = save_manager().load_checkpoint()
+		check(migrated != null and not _inventory_of(migrated).has(BAT) and not migrated.action_slots.values().has(BAT),
+				"%s (migrated) owns no Bat, and no slot holds it" % fixture.get_file())
+	var data := _fixture_data(FIXTURE_FLOOR_2)
+	data["owned_items"] = ["baseball_bat"]
+	data["action_slots"]["action_w"] = "baseball_bat"
+	var from_version_1 := _load_data(data)
+	check(from_version_1 != null and not _inventory_of(from_version_1).has(BAT) and not from_version_1.action_slots.has(ActionSlots.SLOT_W),
+			"a version 1 file naming the Bat in owned_items and on W still owns no Bat: W is emptied")
 
 
 func _check_continue_from_version_1() -> void:

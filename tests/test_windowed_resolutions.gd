@@ -9,8 +9,12 @@ extends "res://tests/support/game_test.gd"
 ## two enemies and the two projectiles look different). Phase 8 adds, at each size: Donut's HP
 ## on the HUD, in its longest form ("Donut HP: 0 / 60 - DOWNED"), fully on screen and clear of
 ## Carl's HP and the slot bar; Floor 5's three signs clear of the HUD; a downed Donut's DOWNED
-## label drawn on screen; and Donut's colour unlike both enemies'.
-## Then the title screen at each size, with a Floor 5 save: Continue and New Game, the "could not
+## label drawn on screen; and Donut's colour unlike both enemies'. Phase 9 adds: the longest slot
+## bar, with the Baseball Bat on S ("W: Slingshot   A: Potion x2   S: Baseball Bat   D: Fists"),
+## fully on screen with its text fitting; the menu listing the Bat; Floor 5's new hint and its
+## Bat pickup (icon and label) on screen from the spawn point; Floor 6's three signs clear of the
+## HUD; and a blob knocked back by the Bat, drawn on screen while it is pushed.
+## Then the title screen at each size, with a Floor 6 save: Continue and New Game, the "could not
 ## be loaded" message, and the New Game confirmation.
 ##
 ## Run from the project folder (NOT headless; a game window opens briefly):
@@ -24,8 +28,10 @@ const FLOOR_2_PATH := "res://scenes/levels/floor_02.tscn"
 const FLOOR_3_PATH := "res://scenes/levels/floor_03.tscn"
 const FLOOR_4_PATH := "res://scenes/levels/floor_04.tscn"
 const FLOOR_5_PATH := "res://scenes/levels/floor_05.tscn"
+const FLOOR_6_PATH := "res://scenes/levels/floor_06.tscn"
 const POTION: ActionDefinition = preload("res://resources/actions/small_health_potion.tres")
 const SLINGSHOT: ActionDefinition = preload("res://resources/actions/slingshot.tres")
+const BAT: ActionDefinition = preload("res://resources/actions/baseball_bat.tres")
 const WINDOW_SIZES: Array[Vector2i] = [Vector2i(1280, 720), Vector2i(640, 360), Vector2i(1024, 768)]
 ## The project's base size (Project Settings > Display > Window).
 const BASE_SIZE := Vector2(1280, 720)
@@ -55,8 +61,10 @@ func _run_checks() -> void:
 	game_state().action_slots.assign(POTION, ActionSlots.SLOT_A)
 	game_state().inventory.add(SLINGSHOT, 1)
 	game_state().action_slots.assign(SLINGSHOT, ActionSlots.SLOT_W)
-	check((action_slots_label as Label).text == "W: Slingshot   A: Potion x2   S: —   D: Fists",
-			"the HUD shows the Slingshot on W and the potion on A", (action_slots_label as Label).text)
+	game_state().inventory.add(BAT, 1)
+	game_state().action_slots.assign(BAT, ActionSlots.SLOT_S)
+	check((action_slots_label as Label).text == "W: Slingshot   A: Potion x2   S: Baseball Bat   D: Fists",
+			"the HUD shows the Slingshot on W, the potion on A and the Bat on S", (action_slots_label as Label).text)
 	# Donut downed: her HUD label shows its longest text.
 	current_scene.get_node("Actors/Donut/Hurtbox").take_hit(60)
 	check(donut_label.text == "Donut HP: 0 / 60  -  DOWNED", "the HUD shows Donut downed", donut_label.text)
@@ -72,7 +80,8 @@ func _run_checks() -> void:
 		var expected_size := Vector2(window_size) / scale
 		check(visible_rect.size.distance_to(expected_size) < 1.0, label + ": visible area", "%s (expected %s)" % [visible_rect.size, expected_size])
 		check(visible_rect.encloses(health_label.get_global_rect()), label + ": HP label is fully on screen")
-		check(visible_rect.encloses(action_slots_label.get_global_rect()), label + ": action slot bar is fully on screen")
+		check(visible_rect.encloses(action_slots_label.get_global_rect()) and action_slots_label.get_minimum_size().x <= action_slots_label.size.x,
+				label + ": action slot bar, with the Bat, is fully on screen and its text fits", str(action_slots_label.get_global_rect()))
 		check(not action_slots_label.get_global_rect().intersects(health_label.get_global_rect()), label + ": slot bar and HP label do not overlap")
 		check(visible_rect.encloses(donut_label.get_global_rect()) and donut_label.get_minimum_size().x <= donut_label.size.x,
 				label + ": Donut's HP label, DOWNED, is fully on screen and its text fits", str(donut_label.get_global_rect()))
@@ -91,6 +100,10 @@ func _run_checks() -> void:
 		var panel_rect := menu_panel.get_global_rect()
 		check(visible_rect.encloses(panel_rect) and panel_rect.get_center().distance_to(visible_rect.get_center()) < 2.0,
 				label + ": action menu is on screen and centred", str(panel_rect))
+		var bat_rows := action_menu.get_node("%ActionList").get_children().filter(
+				func(row: Label) -> bool: return row.text.contains("Baseball Bat   (on S)"))
+		check(bat_rows.size() == 1 and visible_rect.encloses((bat_rows[0] as Label).get_global_rect()),
+				label + ": the menu lists the Baseball Bat on S, on screen")
 		action_menu.close()
 		var carl_on_screen := carl.get_global_transform_with_canvas().origin
 		check(carl_on_screen.distance_to(visible_rect.get_center()) < 1.5, label + ": camera is centred on Carl",
@@ -114,6 +127,7 @@ func _run_checks() -> void:
 	await _check_floor_3()
 	await _check_floor_4()
 	await _check_floor_5()
+	await _check_floor_6()
 	await _check_title_screen()
 	finish()
 
@@ -248,7 +262,7 @@ func _check_floor_5() -> void:
 		await wait_physics_frames(10)
 		var label := "%dx%d" % [window_size.x, window_size.y]
 		var visible_rect := root.get_visible_rect()
-		for sign_path: String in ["Signs/FloorTitle", "Signs/PrototypeNote", "Signs/CompanionHint"]:
+		for sign_path: String in ["Signs/FloorTitle", "Signs/Hint", "Signs/CompanionHint"]:
 			var sign_rect := _on_screen(level.get_node(sign_path))
 			check(visible_rect.encloses(sign_rect) and hud_rects.all(func(r: Rect2) -> bool: return not r.intersects(sign_rect)),
 					"%s: Floor 5's %s is on screen and clear of the HUD" % [label, sign_path.get_file()], str(sign_rect))
@@ -256,7 +270,65 @@ func _check_floor_5() -> void:
 		check(donut.is_downed() and donut.downed_label.is_visible_in_tree() and visible_rect.encloses(downed_rect)
 				and hud_rects.all(func(r: Rect2) -> bool: return not r.intersects(downed_rect)),
 				label + ": the downed Donut's DOWNED label is drawn on screen, clear of the HUD", str(downed_rect))
+		var pickup: Node2D = level.get_node("Pickups/BaseballBat")
+		var icon: Sprite2D = pickup.get_node("Marker/Icon")
+		var icon_rect := icon.get_global_transform_with_canvas() * icon.get_rect()
+		var pickup_label: Label = pickup.get_node("Label")
+		var pickup_label_rect := _on_screen(pickup_label)
+		check(icon.is_visible_in_tree() and icon.texture == BAT.icon and visible_rect.encloses(icon_rect)
+				and visible_rect.encloses(pickup_label_rect) and pickup_label.text == "Baseball Bat"
+				and hud_rects.all(func(r: Rect2) -> bool: return not r.intersects(pickup_label_rect)),
+				label + ": the Baseball Bat pickup and its label are on screen from the spawn point, clear of the HUD", str(icon_rect))
 	check(FloorRegistry.get_floor_id(game_state().floor_entry.scene_path) == &"floor_05", "the save now holds the Floor 5 checkpoint")
+
+
+## Floor 6: its signs are on screen and clear of the HUD from the spawn point, and a blob knocked
+## back by the Bat is drawn on screen while it is pushed.
+func _check_floor_6() -> void:
+	game_state().start_new_run()
+	game_state().inventory.add(BAT, 1)
+	game_state().action_slots.assign(BAT, ActionSlots.SLOT_S)
+	change_scene_to_file(FLOOR_6_PATH)
+	await wait_for_scene(FLOOR_6_PATH)
+	var level := current_scene
+	var hud := level.get_node("HUD")
+	var hud_rects: Array[Rect2] = []
+	for node_path: String in ["%HealthLabel", "%DonutHealthLabel", "%ActionSlotsLabel", "MenuHint"]:
+		hud_rects.append((hud.get_node(node_path) as Control).get_global_rect())
+	for window_size in WINDOW_SIZES:
+		DisplayServer.window_set_size(window_size)
+		await wait_physics_frames(10)
+		var visible_rect := root.get_visible_rect()
+		for sign_path: String in ["Signs/FloorTitle", "Signs/Hint", "Signs/PrototypeNote"]:
+			var sign_rect := _on_screen(level.get_node(sign_path))
+			check(visible_rect.encloses(sign_rect) and hud_rects.all(func(r: Rect2) -> bool: return not r.intersects(sign_rect)),
+					"%dx%d: Floor 6's %s is on screen and clear of the HUD" % [window_size.x, window_size.y, sign_path.get_file()],
+					str(sign_rect))
+
+	var blob: Enemy = level.get_node("Actors/BackstopBlob")
+	var spawn := blob.global_position
+	blob.detection_range = 0.0
+	blob.chase_range = 0.0
+	var carl: CharacterBody2D = level.get_node("Actors/Carl")
+	for window_size in WINDOW_SIZES:
+		DisplayServer.window_set_size(window_size)
+		blob.global_position = spawn + Vector2(-60, 0)
+		blob.reset_physics_interpolation()
+		blob.health.set_health(30, 30)
+		carl.teleport_to(spawn + Vector2(-110, 0))
+		carl.facing_direction = Vector2.RIGHT
+		await wait_seconds(0.8)
+		var start := blob.global_position
+		await tap_key(KEY_S)
+		await wait_physics_frames(4)
+		var label := "%dx%d" % [window_size.x, window_size.y]
+		var visible_rect := root.get_visible_rect()
+		check(blob.is_knocked_back() and blob.global_position.x - start.x > 20.0 and blob.is_visible_in_tree()
+				and visible_rect.has_point(blob.get_global_transform_with_canvas().origin),
+				label + ": a blob hit by the Bat is drawn on screen while it is knocked back",
+				"pushed %.1f px" % (blob.global_position.x - start.x))
+		await wait_seconds(0.5)
+	check(FloorRegistry.get_floor_id(game_state().floor_entry.scene_path) == &"floor_06", "the save now holds the Floor 6 checkpoint")
 
 
 ## A world-space Control's rectangle on screen (after the camera).
@@ -264,8 +336,8 @@ func _on_screen(control: Control) -> Rect2:
 	return control.get_global_transform_with_canvas() * Rect2(Vector2.ZERO, control.size)
 
 
-## The title menu fits at every size. Floor 5 above saved the last checkpoint, so Continue is
-## available and names Floor 5; a broken save file then shows the error message.
+## The title menu fits at every size. Floor 6 above saved the last checkpoint, so Continue is
+## available and names Floor 6; a broken save file then shows the error message.
 func _check_title_screen() -> void:
 	var title_path: String = ProjectSettings.get_setting("application/run/main_scene")
 	for broken_save in [false, true]:
@@ -279,7 +351,7 @@ func _check_title_screen() -> void:
 		check(title.is_continue_available() != broken_save, "title: Continue is %s" % ("unavailable with a broken save" if broken_save else "available"))
 		if not broken_save:
 			var info: String = title.get_node("%SaveInfoLabel").text
-			check(info.begins_with("Saved at the start of Floor 5"), "title: the save is at the start of Floor 5", info)
+			check(info.begins_with("Saved at the start of Floor 6"), "title: the save is at the start of Floor 6", info)
 		for window_size in WINDOW_SIZES:
 			DisplayServer.window_set_size(window_size)
 			await wait_physics_frames(10)
