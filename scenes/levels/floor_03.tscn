@@ -8,6 +8,7 @@
 [ext_resource type="PackedScene" uid="uid://b3qj7webupb5k" path="res://scenes/ui/hud.tscn" id="7_hud"]
 [ext_resource type="PackedScene" uid="uid://cgljnpejjrnny" path="res://scenes/enemies/gelatinous_blob.tscn" id="8_blob"]
 [ext_resource type="PackedScene" uid="uid://ct41gcr0xgp3i" path="res://scenes/ui/action_menu.tscn" id="9_menu"]
+[ext_resource type="PackedScene" uid="uid://b1uxff71rwat4" path="res://scenes/props/stairs.tscn" id="10_stairs"]
 
 [sub_resource type="NavigationPolygon" id="NavigationPolygon_level"]
 outlines = Array[PackedVector2Array]([PackedVector2Array(0, 0, 1024, 0, 1024, 640, 0, 640)])
@@ -43,7 +44,7 @@ theme_override_font_sizes/font_size = 20
 text = "Floor 3 - Processing Level"
 horizontal_alignment = 1
 
-[node name="PrototypeNote" type="Label" parent="Signs"]
+[node name="Hint" type="Label" parent="Signs"]
 offset_left = 48.0
 offset_top = 192.0
 offset_right = 528.0
@@ -51,8 +52,23 @@ offset_bottom = 214.0
 theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_constants/outline_size = 4
 theme_override_font_sizes/font_size = 12
-text = "Prototype: the way further down is not built yet."
+text = "The stairs down to Floor 4 are in the far south-east corner."
 horizontal_alignment = 1
+
+[node name="StairsSign" type="Label" parent="Signs"]
+offset_left = 868.0
+offset_top = 488.0
+offset_right = 988.0
+offset_bottom = 508.0
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 4
+theme_override_font_sizes/font_size = 12
+text = "Down to Floor 4"
+horizontal_alignment = 1
+
+[node name="Stairs" parent="." instance=ExtResource("10_stairs")]
+position = Vector2(928, 544)
+destination_scene_path = "res://scenes/levels/floor_04.tscn"
 
 [node name="Actors" type="Node2D" parent="."]
 y_sort_enabled = true

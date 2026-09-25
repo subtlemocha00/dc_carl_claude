@@ -3,9 +3,12 @@ extends "res://tests/support/game_test.gd"
 ## a real window. Carl carries potions and the Slingshot, both assigned to slots, so the HUD and
 ## the menu show their longest texts ("W: Slingshot   A: Potion x2 ..."). Phase 6 adds, at each
 ## size: Floor 2's Slingshot pickup (icon and label) on screen from the spawn point, and on
-## Floor 3 the floor signs clear of the HUD and a flying stone on screen and drawn.
-## Then the title screen at each size: Continue and New Game with a save, the "could not be
-## loaded" message, and the New Game confirmation.
+## Floor 3 the floor signs clear of the HUD and a flying stone on screen and drawn. Phase 7 adds,
+## at each size: Floor 4's three signs clear of the HUD, and the Gelatinous Blob, the Spitting
+## Blob, one of its globs and one of Carl's stones all on screen and drawn at the same time (the
+## two enemies and the two projectiles look different).
+## Then the title screen at each size, with a Floor 4 save: Continue and New Game, the "could not
+## be loaded" message, and the New Game confirmation.
 ##
 ## Run from the project folder (NOT headless; a game window opens briefly):
 ##     godot --path . -s res://tests/test_windowed_resolutions.gd
@@ -16,6 +19,7 @@ extends "res://tests/support/game_test.gd"
 const FLOOR_1_PATH := "res://scenes/levels/floor_01.tscn"
 const FLOOR_2_PATH := "res://scenes/levels/floor_02.tscn"
 const FLOOR_3_PATH := "res://scenes/levels/floor_03.tscn"
+const FLOOR_4_PATH := "res://scenes/levels/floor_04.tscn"
 const POTION: ActionDefinition = preload("res://resources/actions/small_health_potion.tres")
 const SLINGSHOT: ActionDefinition = preload("res://resources/actions/slingshot.tres")
 const WINDOW_SIZES: Array[Vector2i] = [Vector2i(1280, 720), Vector2i(640, 360), Vector2i(1024, 768)]
@@ -95,6 +99,7 @@ func _run_checks() -> void:
 	check(final_offset < 0.5, "the camera re-centres on Carl after he stops", "%.2f px off" % final_offset)
 	await _check_slingshot_pickup()
 	await _check_floor_3()
+	await _check_floor_4()
 	await _check_title_screen()
 	finish()
 
@@ -133,7 +138,7 @@ func _check_floor_3() -> void:
 		await wait_physics_frames(10)
 		var label := "%dx%d" % [window_size.x, window_size.y]
 		var visible_rect := root.get_visible_rect()
-		for sign_path: String in ["Signs/FloorTitle", "Signs/PrototypeNote"]:
+		for sign_path: String in ["Signs/FloorTitle", "Signs/Hint"]:
 			var sign_rect := _on_screen(current_scene.get_node(sign_path))
 			check(visible_rect.encloses(sign_rect) and hud_rects.all(func(r: Rect2) -> bool: return not r.intersects(sign_rect)),
 					"%s: Floor 3's %s is on screen and clear of the HUD" % [label, sign_path.get_file()], str(sign_rect))
@@ -149,13 +154,70 @@ func _check_floor_3() -> void:
 		await wait_seconds(0.8)
 
 
+## Floor 4: its signs are on screen and clear of the HUD from the spawn point. Then, with Carl
+## between the two enemies, both enemies, a glob and a stone are drawn on screen together.
+func _check_floor_4() -> void:
+	change_scene_to_file(FLOOR_4_PATH)
+	await wait_for_scene(FLOOR_4_PATH)
+	var level := current_scene
+	var hud := level.get_node("HUD")
+	var hud_rects: Array[Rect2] = []
+	for node_path: String in ["%HealthLabel", "%ActionSlotsLabel", "MenuHint"]:
+		hud_rects.append((hud.get_node(node_path) as Control).get_global_rect())
+	for window_size in WINDOW_SIZES:
+		DisplayServer.window_set_size(window_size)
+		await wait_physics_frames(10)
+		var visible_rect := root.get_visible_rect()
+		for sign_path: String in ["Signs/FloorTitle", "Signs/PrototypeNote", "Signs/CoverHint"]:
+			var sign_rect := _on_screen(level.get_node(sign_path))
+			check(visible_rect.encloses(sign_rect) and hud_rects.all(func(r: Rect2) -> bool: return not r.intersects(sign_rect)),
+					"%dx%d: Floor 4's %s is on screen and clear of the HUD" % [window_size.x, window_size.y, sign_path.get_file()],
+					str(sign_rect))
+
+	var blob: Node2D = level.get_node("Actors/GelatinousBlob")
+	var spitter: Node2D = level.get_node("Actors/SpittingBlob")
+	var body_hue := func(enemy: Node2D) -> float: return (enemy.get_node("Body") as Polygon2D).color.h
+	check(absf(body_hue.call(blob) - body_hue.call(spitter)) > 0.25 and spitter.get_node_or_null("Spikes") != null
+			and spitter.get_node_or_null("Mouth") != null,
+			"the Spitting Blob looks different from the Gelatinous Blob: another colour, spikes and a spout")
+	blob.detection_range = 0.0
+	var carl: CharacterBody2D = level.get_node("Actors/Carl")
+	carl.teleport_to(Vector2(640, 150))
+	spitter.global_position = Vector2(880, 150)
+	spitter.reset_physics_interpolation()
+	var launcher: ProjectileLauncher = carl.get_action_performer(SLINGSHOT)
+	for window_size in WINDOW_SIZES:
+		DisplayServer.window_set_size(window_size)
+		var globs := []
+		spitter.spit_launcher.fired.connect(func(glob: Projectile) -> void: globs.append(glob), CONNECT_ONE_SHOT)
+		await wait_until(func() -> bool: return globs.size() == 1, "a glob", 120)
+		var stones := []
+		launcher.fired.connect(func(fired_stone: Projectile) -> void: stones.append(fired_stone), CONNECT_ONE_SHOT)
+		await tap_key(KEY_RIGHT)
+		await tap_key(KEY_W)
+		await wait_physics_frames(6)
+		var label := "%dx%d" % [window_size.x, window_size.y]
+		var visible_rect := root.get_visible_rect()
+		for item: Array in [["the Gelatinous Blob", blob], ["the Spitting Blob", spitter],
+				["a glob", globs[0] if globs.size() == 1 else null], ["a stone", stones[0] if stones.size() == 1 else null]]:
+			var node: Node2D = item[1]
+			check(node != null and is_instance_valid(node) and node.is_visible_in_tree()
+					and visible_rect.has_point(node.get_global_transform_with_canvas().origin),
+					"%s: %s is drawn on screen" % [label, item[0]])
+		# Carl steps back to where he was, and his HP is topped up for the next size.
+		carl.teleport_to(Vector2(640, 150))
+		carl.health.set_health(100, 100)
+		await wait_seconds(1.6)
+	check(FloorRegistry.get_floor_id(game_state().floor_entry.scene_path) == &"floor_04", "the save now holds the Floor 4 checkpoint")
+
+
 ## A world-space Control's rectangle on screen (after the camera).
 func _on_screen(control: Control) -> Rect2:
 	return control.get_global_transform_with_canvas() * Rect2(Vector2.ZERO, control.size)
 
 
-## The title menu fits at every size. Floor 1 above already saved a checkpoint, so Continue is
-## available; a broken save file then shows the error message.
+## The title menu fits at every size. Floor 4 above saved the last checkpoint, so Continue is
+## available and names Floor 4; a broken save file then shows the error message.
 func _check_title_screen() -> void:
 	var title_path: String = ProjectSettings.get_setting("application/run/main_scene")
 	for broken_save in [false, true]:
@@ -167,6 +229,9 @@ func _check_title_screen() -> void:
 		await wait_for_scene(title_path)
 		var title := current_scene
 		check(title.is_continue_available() != broken_save, "title: Continue is %s" % ("unavailable with a broken save" if broken_save else "available"))
+		if not broken_save:
+			var info: String = title.get_node("%SaveInfoLabel").text
+			check(info.begins_with("Saved at the start of Floor 4"), "title: the save is at the start of Floor 4", info)
 		for window_size in WINDOW_SIZES:
 			DisplayServer.window_set_size(window_size)
 			await wait_physics_frames(10)

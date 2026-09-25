@@ -1,10 +1,11 @@
-[gd_scene format=3 uid="uid://cgljnpejjrnny"]
+[gd_scene format=3 uid="uid://du63mbmcqj2b3"]
 
-[ext_resource type="Script" uid="uid://dyloc0wgpoy3t" path="res://scripts/enemies/gelatinous_blob.gd" id="1_blob"]
-[ext_resource type="Script" uid="uid://xv8lt2bxk28b" path="res://scripts/combat/melee_attack.gd" id="2_melee"]
+[ext_resource type="Script" uid="uid://od1wmgssob3y" path="res://scripts/enemies/spitting_blob.gd" id="1_spitter"]
+[ext_resource type="Script" uid="uid://cr44fhhfv1mw7" path="res://scripts/combat/projectile_launcher.gd" id="2_launcher"]
 [ext_resource type="Script" uid="uid://bmdgbdnl4rbos" path="res://scripts/combat/health.gd" id="3_health"]
 [ext_resource type="Script" uid="uid://c1jybnwpqscpb" path="res://scripts/combat/hurtbox.gd" id="4_hurtbox"]
 [ext_resource type="Script" uid="uid://bq3lls4jl15v1" path="res://scripts/enemies/enemy_navigation.gd" id="5_navigation"]
+[ext_resource type="PackedScene" uid="uid://cvjk5r0mnflce" path="res://scenes/projectiles/spit_glob.tscn" id="6_glob"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_body"]
 radius = 13.0
@@ -12,37 +13,51 @@ radius = 13.0
 [sub_resource type="CircleShape2D" id="CircleShape2D_hurtbox"]
 radius = 14.0
 
-[node name="GelatinousBlob" type="CharacterBody2D"]
+[node name="SpittingBlob" type="CharacterBody2D"]
 collision_layer = 8
 collision_mask = 11
 motion_mode = 1
-script = ExtResource("1_blob")
+script = ExtResource("1_spitter")
+move_speed = 60.0
+detection_range = 360.0
+chase_range = 480.0
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
 shape = SubResource("CircleShape2D_body")
 
-[node name="Outline" type="Polygon2D" parent="."]
-color = Color(0.12, 0.4, 0.18, 1)
-polygon = PackedVector2Array(16.5, 0, 15.24, 5.17, 11.67, 9.55, 6.31, 12.47, 0, 13.5, -6.31, 12.47, -11.67, 9.55, -15.24, 5.17, -16.5, 0, -15.24, -5.17, -11.67, -9.55, -6.31, -12.47, 0, -13.5, 6.31, -12.47, 11.67, -9.55, 15.24, -5.17)
+[node name="Spikes" type="Polygon2D" parent="."]
+color = Color(0.3, 0.12, 0.42, 1)
+polygon = PackedVector2Array(18, 0, 12.01, 4.97, 12.73, 12.73, 4.97, 12.01, 0, 18, -4.97, 12.01, -12.73, 12.73, -12.01, 4.97, -18, 0, -12.01, -4.97, -12.73, -12.73, -4.97, -12.01, 0, -18, 4.97, -12.01, 12.73, -12.73, 12.01, -4.97)
 
 [node name="Body" type="Polygon2D" parent="."]
-color = Color(0.36, 0.8, 0.38, 1)
-polygon = PackedVector2Array(15, 0, 13.86, 4.59, 10.61, 8.49, 5.74, 11.09, 0, 12, -5.74, 11.09, -10.61, 8.49, -13.86, 4.59, -15, 0, -13.86, -4.59, -10.61, -8.49, -5.74, -11.09, 0, -12, 5.74, -11.09, 10.61, -8.49, 13.86, -4.59)
+color = Color(0.66, 0.4, 0.9, 1)
+polygon = PackedVector2Array(12, 0, 11.09, 4.59, 8.49, 8.49, 4.59, 11.09, 0, 12, -4.59, 11.09, -8.49, 8.49, -11.09, 4.59, -12, 0, -11.09, -4.59, -8.49, -8.49, -4.59, -11.09, 0, -12, 4.59, -11.09, 8.49, -8.49, 11.09, -4.59)
+
+[node name="Mouth" type="Node2D" parent="."]
+unique_name_in_owner = true
+
+[node name="Spout" type="Polygon2D" parent="Mouth"]
+color = Color(0.3, 0.12, 0.42, 1)
+polygon = PackedVector2Array(8, -4.5, 19, -6.5, 19, 6.5, 8, 4.5)
+
+[node name="SpoutHole" type="Polygon2D" parent="Mouth"]
+color = Color(0.95, 0.72, 1, 1)
+polygon = PackedVector2Array(15.5, -4, 17.5, -4.5, 17.5, 4.5, 15.5, 4)
 
 [node name="Shine" type="Polygon2D" parent="."]
-color = Color(0.78, 0.96, 0.78, 0.8)
+color = Color(0.93, 0.84, 1, 0.8)
 polygon = PackedVector2Array(-2, -5, -3.17, -3.23, -6, -2.5, -8.83, -3.23, -10, -5, -8.83, -6.77, -6, -7.5, -3.17, -6.77)
 
 [node name="LeftEye" type="Polygon2D" parent="."]
-color = Color(0.06, 0.14, 0.06, 1)
-polygon = PackedVector2Array(-5.5, -1.5, -2.5, -1.5, -2.5, 2.5, -5.5, 2.5)
+color = Color(0.12, 0.03, 0.18, 1)
+polygon = PackedVector2Array(-5.5, -2, -2, 0, -2, 2.5, -5.5, 2.5)
 
 [node name="RightEye" type="Polygon2D" parent="."]
-color = Color(0.06, 0.14, 0.06, 1)
-polygon = PackedVector2Array(2.5, -1.5, 5.5, -1.5, 5.5, 2.5, 2.5, 2.5)
+color = Color(0.12, 0.03, 0.18, 1)
+polygon = PackedVector2Array(2, 0, 5.5, -2, 5.5, 2.5, 2, 2.5)
 
 [node name="HealthBar" type="Node2D" parent="."]
-position = Vector2(-14, -22)
+position = Vector2(-14, -27)
 
 [node name="Background" type="Polygon2D" parent="HealthBar"]
 color = Color(0.08, 0.08, 0.08, 0.85)
@@ -53,13 +68,10 @@ unique_name_in_owner = true
 color = Color(0.9, 0.22, 0.2, 1)
 polygon = PackedVector2Array(0, 0, 28, 0, 28, 4, 0, 4)
 
-[node name="ContactAttack" type="Node2D" parent="."]
-script = ExtResource("2_melee")
-reach = 0.0
-hit_radius = 19.0
-cooldown = 0.8
-target_layers = 16
-show_flash = false
+[node name="SpitLauncher" type="Node2D" parent="."]
+script = ExtResource("2_launcher")
+projectile_scene = ExtResource("6_glob")
+cooldown = 1.5
 
 [node name="Health" type="Node" parent="."]
 script = ExtResource("3_health")

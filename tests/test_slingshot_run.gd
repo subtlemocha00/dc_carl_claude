@@ -9,7 +9,8 @@ extends "res://tests/support/game_test.gd"
 ## - Dying on Floor 2 takes it back: not owned, the pickup is back, W is empty. Twice.
 ## - Quitting before Floor 3 and continuing: Floor 2 without the Slingshot, pickup back.
 ## - Collected again and put on W, three stones kill the Floor 2 blob (10 damage each).
-## - Floor 2 -> Floor 3: Carl, Donut and the camera arrive, with no transition loop and no exits.
+## - Floor 2 -> Floor 3: Carl, Donut and the camera arrive, with no transition loop. Floor 3's
+##   only exit leads down to Floor 4 (Phase 7): nothing leads back up.
 ##   The Slingshot, W = Slingshot and A = potion x1 are kept, recorded in the floor-entry state,
 ##   and saved (save_version 2, owned_items ["slingshot"]).
 ## - On Floor 3 a stone shot from the spawn point stops at the wall, and the blob behind it is unhurt.
@@ -27,6 +28,7 @@ const SURFACE_PATH := "res://scenes/levels/surface.tscn"
 const FLOOR_1_PATH := "res://scenes/levels/floor_01.tscn"
 const FLOOR_2_PATH := "res://scenes/levels/floor_02.tscn"
 const FLOOR_3_PATH := "res://scenes/levels/floor_03.tscn"
+const FLOOR_4_PATH := "res://scenes/levels/floor_04.tscn"
 const FISTS: ActionDefinition = preload("res://resources/actions/fists.tres")
 const POTION: ActionDefinition = preload("res://resources/actions/small_health_potion.tres")
 const SLINGSHOT: ActionDefinition = preload("res://resources/actions/slingshot.tres")
@@ -219,7 +221,7 @@ func _floor_2_to_floor_3() -> bool:
 			and save.get("inventory") == {"small_health_potion": 1.0} and save["carl"]["health"] == float(_entry_health)
 			and save.get("action_slots") == {"action_w": "slingshot", "action_a": "small_health_potion", "action_s": null, "action_d": "fists"},
 			"the Floor 3 checkpoint on disk owns the Slingshot, with W = Slingshot", _save_text().replace("\n", " ").replace("\t", ""))
-	check(_destinations().is_empty(), "Floor 3 has no exits: nothing leads back up", str(_destinations()))
+	check(_destinations() == [FLOOR_4_PATH], "Floor 3's only exit leads down to Floor 4, nothing back up", str(_destinations()))
 	await wait_seconds(1.5)
 	check(current_scene == level, "Carl stays on Floor 3 (no transition loop)")
 	return true

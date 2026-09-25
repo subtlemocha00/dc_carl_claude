@@ -133,6 +133,86 @@ func navigation_route(from: Vector2, to: Vector2) -> PackedVector2Array:
 	return PackedVector2Array()
 
 
+## Waits, one physics tick at a time, until `condition` returns true. Returns false (and records
+## a failure naming `what`) if that takes more than `max_ticks` ticks.
+func wait_until(condition: Callable, what: String, max_ticks: int = 180) -> bool:
+	for i in max_ticks:
+		if condition.call():
+			return true
+		await physics_frame
+	if condition.call():
+		return true
+	_failures.append("Timed out after %d ticks waiting for %s." % [max_ticks, what])
+	return false
+
+
+## The length of a navigation route, in pixels.
+func route_length(route: PackedVector2Array) -> float:
+	var length := 0.0
+	for i in range(1, route.size()):
+		length += route[i - 1].distance_to(route[i])
+	return length
+
+
+## Builds an arena under root with a navigation mesh like a level's (see level_navigation.gd):
+## the mesh covers the rectangle from the origin to `size` and keeps 14 px from walls, and each
+## rectangle in `walls` is a solid block on the "world" layer, cut out of the mesh. Returns the
+## arena, or null (with a failure recorded) if the navigation map never picked it up.
+## Navigation maps are rebuilt a few ticks after a change, and until then path queries still
+## answer with the old mesh. So this first waits until any earlier arena's mesh is gone, then
+## until a route across the first wall bends around it: only this arena's mesh can do that.
+func build_navigation_arena(size: Vector2, walls: Array[Rect2]) -> Node2D:
+	var map := root.world_2d.navigation_map
+	var corner := Vector2(20, 20)
+	var map_is_empty := func() -> bool:
+		return NavigationServer2D.map_get_regions(map).is_empty() \
+				and NavigationServer2D.map_get_path(map, corner, size - corner, true).is_empty()
+	if not await wait_until(map_is_empty, "the previous navigation mesh to leave the map"):
+		return null
+	var arena := Node2D.new()
+	var region := NavigationRegion2D.new()
+	var mesh := NavigationPolygon.new()
+	mesh.add_outline(PackedVector2Array([Vector2.ZERO, Vector2(size.x, 0), size, Vector2(0, size.y)]))
+	mesh.agent_radius = 14.0
+	mesh.parsed_geometry_type = NavigationPolygon.PARSED_GEOMETRY_STATIC_COLLIDERS
+	mesh.parsed_collision_mask = 1
+	region.navigation_polygon = mesh
+	for rect in walls:
+		region.add_child(new_wall(rect))
+	arena.add_child(region)
+	root.add_child(arena)
+	region.bake_navigation_polygon(false)
+	var ready_check := func() -> bool:
+		return not NavigationServer2D.map_get_path(map, corner, size - corner, true).is_empty()
+	if not walls.is_empty():
+		# A route from just west of the first wall to just east of it must go around one of its ends.
+		var wall := walls[0]
+		var west := Vector2(wall.position.x - 30, wall.get_center().y)
+		var east := Vector2(wall.end.x + 30, wall.get_center().y)
+		var goes_around_wall := func(point: Vector2) -> bool:
+			return point.x > wall.position.x - 30 and point.x < wall.end.x + 30 \
+					and (point.y < wall.position.y or point.y > wall.end.y)
+		ready_check = func() -> bool:
+			var route := NavigationServer2D.map_get_path(map, west, east, true)
+			return route.size() >= 3 and Array(route.slice(1, -1)).all(goes_around_wall)
+	if not await wait_until(ready_check, "the navigation map to include the new arena"):
+		return null
+	return arena
+
+
+## A solid block covering `rect`, on the "world" layer like the wall tiles.
+func new_wall(rect: Rect2) -> StaticBody2D:
+	var wall := StaticBody2D.new()
+	wall.collision_layer = 1
+	var shape := CollisionShape2D.new()
+	var box := RectangleShape2D.new()
+	box.size = rect.size
+	shape.shape = box
+	wall.add_child(shape)
+	wall.position = rect.get_center()
+	return wall
+
+
 ## Steers Carl ("Actors/Carl") along the navigation route to `target`, like a player holding
 ## the arrow keys. Stops early if the level changes (for example on stairs). Returns false
 ## (and records a failure) if there is no route or Carl gets stuck.

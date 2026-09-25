@@ -97,6 +97,10 @@ At 0 HP:
 
 Exact combat values may be tuned later.
 
+Current state (Phase 7): Donut's combat, damage and stun are not built yet. Until they are, she
+cannot be hurt: enemies never target her, and neither enemy attacks (touch, spit) nor Carl's
+attacks affect her.
+
 ## 7. Combat and action slots
 
 W/A/S/D are four hot-action slots.
@@ -206,6 +210,10 @@ All three prototype dungeon floors should be manually authored scenes/layouts.
 General progression:
 Surface -> Floor 1 -> Floor 2 -> Floor 3 -> Prototype Complete screen.
 
+Playable progression since Phase 7: Surface -> Floor 1 -> Floor 2 -> Floor 3 -> Floor 4. Floor 3
+has stairs down to Floor 4, a manually authored combat-test floor (section 14a) with no exit yet.
+The Floor 3 Guardian and the Prototype Complete screen are still to come.
+
 Progression is downward only. Once Carl descends, he can never return to the Surface or to a
 shallower floor. Levels have no stairs, exits or triggers that lead back up. This is a design
 rule, not a missing feature. Tests and development tools may still load any level scene
@@ -297,6 +305,39 @@ Defeating the Guardian unlocks the final exit.
 
 Final exit leads to a prototype-complete screen that communicates that Carl and Donut survived the first three floors and that additional floors remain outside the prototype.
 
+## 14a. Enemy behaviour and Floor 4 (canonical since Phase 7)
+
+All enemies:
+- notice Carl by distance (their detection range), not through the whole floor, and give up
+  when he is farther away than their chase range;
+- move along the level's navigation mesh, so they walk around walls to reach him instead of
+  getting stuck behind them. They never pass through walls;
+- ignore Donut: they never target her, and nothing they do can hurt her;
+- freeze while the game is paused (the inventory menu, GAME OVER).
+
+Gelatinous Blob: 30 HP, 55 px/s, notices Carl within 220 px, gives up beyond 320 px. Its touch
+takes 10 HP, at most every 0.8 s.
+
+**Spitting Blob** (stable id `spitting_blob`), the prototype's first ranged enemy (the Spitter
+of section 13, placed on Floor 4 for now):
+- 30 HP (three Slingshot stones), 60 px/s. No touch attack: its threat is its spit;
+- notices Carl within 360 px and gives up beyond 480 px;
+- spits only when Carl is within 320 px and in plain sight: a wall between them blocks its view.
+  A hidden Carl makes it walk around the wall until it sees him again. It never spits at a wall;
+- keeps 180-280 px away: it closes in when he is farther and backs off when he is closer;
+- spits at most once every 1.5 s, straight at where Carl is at that moment (no leading).
+
+Spit glob (the Spitting Blob's projectile, the same kind of projectile as the Slingshot stone):
+- 10 damage to Carl, once, then it disappears; 240 px/s; gone after 384 px;
+- stopped by walls, so Carl can take cover;
+- never hurts Donut, the Spitting Blob that spat it or any other enemy; never collects pickups
+  or triggers stairs.
+
+Floor 4 — Filtration Level: a walled room with one Gelatinous Blob and one Spitting Blob. A wall
+between Carl's arrival point and the Blob makes it walk around; a second wall hides the
+Spitting Blob at first, so it has to move before it can spit, and pillars give cover. Floor 4
+has no stairs yet, and no way back up.
+
 ## 15. Saving/checkpoints
 
 Initial save design:
@@ -335,7 +376,8 @@ Persistent save (canonical since Phase 5):
 - The save format has a version number. A save from an older version the game still
   supports is upgraded when it is loaded, and keeps its progress. (Since Phase 6, saves are
   version 2. Version 1 saves from Phase 5 load with the same floor, HP, potions and slots, and
-  no Slingshot.)
+  no Slingshot.) The version only changes when the saved data changes: adding a floor, such as
+  Floor 4 in Phase 7, keeps version 2.
 - No mid-floor saving, multiple save slots or cloud saves in the prototype.
 
 Current-run state (what survives level changes during one playthrough, held in memory) is
@@ -394,6 +436,6 @@ Do not implement unless the user later expands scope:
 - randomized item affixes
 - advanced lighting/rendering
 - voice acting
-- floors 4–20
+- floors 5–20 (Floor 4 was added in Phase 7 as a combat-test floor)
 - achievements
 - mod support

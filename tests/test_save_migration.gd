@@ -1,5 +1,5 @@
 extends "res://tests/support/game_test.gd"
-## Phase 6: loading Phase 5 saves (save_version 1), on this test's own save file.
+## Phase 6-7: loading saves from earlier phases, on this test's own save file.
 ## The two fixtures in tests/fixtures/ were written by the Phase 5 game itself (commit fd1d5e7,
 ## SaveManager.save_checkpoint()), so they are real version 1 files:
 ##   phase5_save_v1_floor_01.json: Floor 1, 80/100 HP, no items, W = Fists, D empty;
@@ -14,6 +14,11 @@ extends "res://tests/support/game_test.gd"
 ## - Through the real title screen: Continue on the version 1 Floor 2 save opens Floor 2 with its
 ##   state. Entering the floor rewrites the save as version 2 with the same values. The game
 ##   then plays on: Carl walks, punches, drinks a potion from S and picks up the Slingshot.
+## - Phase 7: two real Phase 6 saves (save_version 2, written by the Phase 6 game at commit
+##   08564ea on entering the floor): phase6_save_v2_floor_02.json (Floor 2, 90/100 HP, 1 potion
+##   on A) and phase6_save_v2_floor_03.json (Floor 3, 70/100 HP, Slingshot on W, 2 potions on S).
+##   Both load unchanged, and the Phase 7 game writes byte-identical files for the same
+##   checkpoints: adding Floor 4 did not change the save format, so it is still version 2.
 ##
 ## Run from the project folder:
 ##     godot --headless --path . -s res://tests/test_save_migration.gd
@@ -22,6 +27,9 @@ extends "res://tests/support/game_test.gd"
 
 const FIXTURE_FLOOR_1 := "res://tests/fixtures/phase5_save_v1_floor_01.json"
 const FIXTURE_FLOOR_2 := "res://tests/fixtures/phase5_save_v1_floor_02.json"
+const PHASE_6_FIXTURE_FLOOR_2 := "res://tests/fixtures/phase6_save_v2_floor_02.json"
+const PHASE_6_FIXTURE_FLOOR_3 := "res://tests/fixtures/phase6_save_v2_floor_03.json"
+const FLOOR_3_PATH := "res://scenes/levels/floor_03.tscn"
 const FLOOR_1_PATH := "res://scenes/levels/floor_01.tscn"
 const FLOOR_2_PATH := "res://scenes/levels/floor_02.tscn"
 const FISTS: ActionDefinition = preload("res://resources/actions/fists.tres")
@@ -41,6 +49,7 @@ func _run_checks() -> void:
 	_check_version_1_never_owns_reusables()
 	_check_malformed_version_1_rejected()
 	_check_other_versions()
+	_check_phase_6_saves()
 	await _check_continue_from_version_1()
 	finish()
 
@@ -136,6 +145,33 @@ func _check_other_versions() -> void:
 		data = _fixture_data(FIXTURE_FLOOR_2)
 		data["save_version"] = version
 		_expect_rejected(JSON.stringify(data), "save_version %d" % version)
+
+
+func _check_phase_6_saves() -> void:
+	print("-- Phase 6 saves (version 2) load unchanged in Phase 7")
+	var expected := {
+		# [floor, HP, potions, owns the Slingshot, slots]
+		PHASE_6_FIXTURE_FLOOR_2: [FLOOR_2_PATH, 90, 1, false, {ActionSlots.SLOT_A: POTION, ActionSlots.SLOT_D: FISTS}],
+		PHASE_6_FIXTURE_FLOOR_3: [FLOOR_3_PATH, 70, 2, true,
+				{ActionSlots.SLOT_W: SLINGSHOT, ActionSlots.SLOT_S: POTION, ActionSlots.SLOT_D: FISTS}],
+	}
+	for fixture: String in expected:
+		var values: Array = expected[fixture]
+		var text := _write_fixture(fixture)
+		check(JSON.parse_string(text).get("save_version") == 2.0, "%s is a save_version 2 file" % fixture.get_file())
+		var loaded: FloorEntry = save_manager().load_checkpoint()
+		check(loaded != null and save_manager().last_error == "", "%s loads" % fixture.get_file(), save_manager().last_error)
+		if loaded == null:
+			continue
+		check(loaded.scene_path == values[0] and loaded.carl_health == values[1] and loaded.carl_max_health == 100,
+				"%s: its floor and HP" % fixture.get_file())
+		var inventory := _inventory_of(loaded)
+		check(inventory.get_quantity(POTION) == values[2] and inventory.has(SLINGSHOT) == values[3]
+				and inventory.get_actions().size() == (3 if values[3] else 2), "%s: its items" % fixture.get_file())
+		check(loaded.action_slots == values[4], "%s: its slots" % fixture.get_file(), str(loaded.action_slots))
+		check(_save_text() == text, "%s: loading did not change the file" % fixture.get_file())
+		check(JSON.stringify(save_manager().encode(loaded), "	") == text,
+				"%s: Phase 7 writes exactly the same file for this checkpoint" % fixture.get_file())
 
 
 func _check_continue_from_version_1() -> void:

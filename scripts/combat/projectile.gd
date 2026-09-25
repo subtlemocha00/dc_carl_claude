@@ -1,9 +1,10 @@
 class_name Projectile
 extends Node2D
-## Something fired that flies in a straight line, such as a slingshot stone
-## (scenes/projectiles/slingshot_stone.tscn). A ProjectileLauncher creates it and calls launch().
-## From then on the projectile moves by itself. Each physics tick it checks the stretch it is
-## about to fly along with a ray, and stops at the first thing on it:
+## Something fired that flies in a straight line: Carl's slingshot stone
+## (scenes/projectiles/slingshot_stone.tscn) or a Spitting Blob's spit glob
+## (scenes/projectiles/spit_glob.tscn). A ProjectileLauncher creates it, records its `source`
+## and calls launch(). From then on the projectile moves by itself. Each physics tick it checks
+## the stretch it is about to fly along with a ray, and stops at the first thing on it:
 ## - a solid body on one of `blocking_layers`, such as a wall: the projectile stops there;
 ## - a Hurtbox on one of `target_layers` that can be hit: it deals `damage` once, then stops;
 ## - after flying `max_distance` pixels it stops by itself.
@@ -11,10 +12,15 @@ extends Node2D
 ## through a wall, hit something behind a wall, or hit more than one target. A target that
 ## moves onto the projectile between two ticks is hit too.
 ##
-## Who it can hurt is decided by `target_layers`, like MeleeAttack. Carl's slingshot stones
-## look for enemy_hurtbox only, so they never hurt Carl (player_hurtbox) or Donut (who has no
-## Hurtbox). The projectile is not a physics body, so pickups and stairs, which only detect
-## Carl's body, never notice it. Like every gameplay node it stops while the game is paused.
+## Who it can hurt is decided by `target_layers`, like MeleeAttack. The Hurtbox layers are the
+## two sides:
+## - Carl's stones look for enemy_hurtbox only, so they never hurt Carl (player_hurtbox);
+## - a Spitting Blob's globs look for player_hurtbox only, so they never hurt the blob that
+##   spat them or any other enemy.
+## Donut has no Hurtbox, so neither kind can hurt her. On top of that, a projectile never hurts
+## its own `source`, whatever its layers. The projectile is not a physics body, so pickups and
+## stairs, which only detect Carl's body, never notice it. Like every gameplay node it stops
+## while the game is paused (the action menu, GAME OVER).
 
 ## Emitted once, when the projectile stops: with the Hurtbox or body it hit, or with null when
 ## it flew its full distance.
@@ -35,6 +41,9 @@ const MAX_AREAS_PASSED_PER_TICK := 8
 
 ## The unit direction it flies in. Set by launch().
 var direction := Vector2.ZERO
+## Who fired it (Carl, or the Spitting Blob that spat it). Set by the ProjectileLauncher. The
+## projectile never hurts a Hurtbox that belongs to its source.
+var source: Node
 
 var _distance_flown := 0.0
 var _is_flying := false
@@ -76,8 +85,8 @@ func _physics_process(delta: float) -> void:
 
 
 ## The first thing between `from` and `to` that stops the projectile, as returned by
-## intersect_ray() ({} if there is none). Hurtboxes that cannot be hit (a dying enemy) and any
-## other areas are flown through.
+## intersect_ray() ({} if there is none). Hurtboxes that cannot be hit (a dying enemy, its own
+## source) and any other areas are flown through.
 func _find_first_hit(from: Vector2, to: Vector2) -> Dictionary:
 	var query := PhysicsRayQueryParameters2D.create(from, to, target_layers | blocking_layers)
 	query.collide_with_areas = true
@@ -93,13 +102,20 @@ func _find_first_hit(from: Vector2, to: Vector2) -> Dictionary:
 		if result.is_empty() or not result["collider"] is Area2D:
 			return result
 		var hurtbox := result["collider"] as Hurtbox
-		if hurtbox != null and hurtbox.can_be_hit() and (hurtbox.collision_layer & target_layers) != 0:
+		if hurtbox != null and hurtbox.can_be_hit() and (hurtbox.collision_layer & target_layers) != 0 \
+				and not _belongs_to_source(hurtbox):
 			return result
 		# Look again past this area.
 		var exclude := query.exclude
 		exclude.append(result["rid"])
 		query.exclude = exclude
 	return {}
+
+
+## True if `hurtbox` is part of whoever fired the projectile. The source may already be gone
+## (an enemy that died while its glob was in flight).
+func _belongs_to_source(hurtbox: Hurtbox) -> bool:
+	return is_instance_valid(source) and source.is_ancestor_of(hurtbox)
 
 
 func _stop(collider: Object) -> void:

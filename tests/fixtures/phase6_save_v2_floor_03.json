@@ -1,0 +1,20 @@
+{
+	"action_slots": {
+		"action_a": null,
+		"action_d": "fists",
+		"action_s": "small_health_potion",
+		"action_w": "slingshot"
+	},
+	"carl": {
+		"health": 70,
+		"max_health": 100
+	},
+	"floor_id": "floor_03",
+	"inventory": {
+		"small_health_potion": 2
+	},
+	"owned_items": [
+		"slingshot"
+	],
+	"save_version": 2
+}

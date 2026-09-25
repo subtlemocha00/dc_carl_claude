@@ -1,0 +1,26 @@
+[gd_scene format=3 uid="uid://cvjk5r0mnflce"]
+
+[ext_resource type="Script" uid="uid://b0yye8uq0qi2y" path="res://scripts/combat/projectile.gd" id="1_projectile"]
+
+[node name="SpitGlob" type="Node2D"]
+z_index = 1
+script = ExtResource("1_projectile")
+speed = 240.0
+max_distance = 384.0
+target_layers = 16
+
+[node name="Trail" type="Polygon2D" parent="."]
+color = Color(0.82, 0.42, 1, 0.55)
+polygon = PackedVector2Array(-3, -5, -3, 5, -26, 0)
+
+[node name="Outline" type="Polygon2D" parent="."]
+color = Color(0.2, 0.05, 0.28, 1)
+polygon = PackedVector2Array(8, 0, 6.93, 4, 4, 6.93, 0, 8, -4.5, 6.5, -11, 0, -4.5, -6.5, 0, -8, 4, -6.93, 6.93, -4)
+
+[node name="Glob" type="Polygon2D" parent="."]
+color = Color(0.8, 0.34, 0.96, 1)
+polygon = PackedVector2Array(6.5, 0, 5.63, 3.25, 3.25, 5.63, 0, 6.5, -3.7, 5.2, -8.5, 0, -3.7, -5.2, 0, -6.5, 3.25, -5.63, 5.63, -3.25)
+
+[node name="Highlight" type="Polygon2D" parent="."]
+color = Color(0.98, 0.84, 1, 0.9)
+polygon = PackedVector2Array(4, -2, 3.4, -0.6, 2, 0, 0.6, -0.6, 0, -2, 0.6, -3.4, 2, -4, 3.4, -3.4)

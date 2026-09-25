@@ -194,3 +194,56 @@ Required:
       and 1024×768.
 - [ ] No ammunition, other weapons, equipment stats, Floor 4, new enemy species, Donut combat or
       enemy-AI rewrite were added.
+
+# Phase 7 — Enemy Navigation, Ranged Enemy Combat and Floor 4
+
+The Phase 3–6 rules still apply (arrow keys move; W/A/S/D are configurable slots with Fists on
+D in a new game; downward-only; GAME OVER waits for Enter; one floor-entry checkpoint; Donut
+cannot be hurt).
+
+Required:
+- [ ] Enemies share one navigation component (`EnemyNavigation`, a NavigationAgent2D on the
+      level's baked navigation mesh) and one small base (`Enemy`). No level script chooses
+      behaviour by enemy type.
+- [ ] The Gelatinous Blob still waits until Carl is within 220 px and gives up beyond 320 px.
+      With a wall between them and a way around, it walks around the wall and reaches him; it
+      never overlaps a wall, never stalls on the way, and its touch still takes 10 HP every
+      0.8 s. With no way around, it stops next to the wall without jittering.
+- [ ] One new enemy, the Spitting Blob (id `spitting_blob`): 30 HP, visibly different from the
+      Gelatinous Blob (purple, spiky, with a spout). It notices Carl within 360 px, gives up
+      beyond 480 px, keeps 180–280 px away, and has no touch attack.
+- [ ] It spits only at a Carl within 320 px with no wall between them (a ray on the `world`
+      layer). Hidden behind a wall, it spits nothing (no glob wasted on the wall) and walks around
+      the wall until it sees him; then it spits again at once.
+- [ ] Its glob reuses the Phase 6 projectile: a `Projectile` fired by a `ProjectileLauncher`.
+      10 damage to Carl, exactly once, then gone; 240 px/s; gone after 384 px; stopped by walls
+      (Carl behind a wall is safe). It never hurts Donut, the blob that spat it, or any other
+      enemy, never collects pickups and never triggers stairs.
+- [ ] One glob per shot, exactly 1.5 s apart while Carl stays in sight; coming back into sight
+      after hiding gives one glob, not a burst.
+- [ ] Carl's weapons still work: each Slingshot stone takes exactly 10 HP (three kill a
+      Spitting Blob or a Gelatinous Blob); Fists hit either enemy only in Carl's facing
+      direction; stones stop at walls and never hurt Carl or Donut.
+- [ ] While the action menu is open, both enemies stand still, nothing is spat, and globs and
+      stones in flight freeze. Closing it resumes them, with no free glob, no burst of saved-up
+      cooldown and no free stone.
+- [ ] Globs can take Carl to 0 HP. GAME OVER then freezes the enemies and any glob in flight,
+      nothing more is spat, and it waits for Enter. The retry brings back Floor 4's entry state
+      and its enemies as authored, with no globs left.
+- [ ] Floor 3 has stairs down to Floor 4. Floor 4 (`floor_04`) is a walled level with a "Floor 4"
+      sign, the HUD, the menu, one Gelatinous Blob and one Spitting Blob, and walls that make
+      navigation and line of sight matter. Carl and Donut arrive together without a transition
+      loop. Floor 4 has no exits.
+- [ ] Nothing leads up: not Floor 1 → Surface, Floor 2 → Floor 1, Floor 3 → Floor 2 or
+      Floor 4 → Floor 3.
+- [ ] Entering Floor 4 records and saves its checkpoint (HP, potions, Slingshot, slots).
+      Continue opens Floor 4 directly with exactly that state and its enemies as authored.
+      Enemy HP and positions, globs, cooldowns and navigation are never saved.
+- [ ] `floor_04` is in `FloorRegistry`; unknown floors (such as `floor_05`) are rejected. The
+      save stays `save_version: 2` (Floor 4 adds no new kind of saved data). Phase 6 version 2
+      saves and Phase 5 version 1 saves still load; other versions are rejected.
+- [ ] New Game still starts clean on the Surface (100 HP, no items, D = Fists), after asking.
+- [ ] The Spitting Blob, its globs, Carl's stones, the Floor 4 signs, the HUD, the menu, GAME
+      OVER and the title fit and are visible at 1280×720, 640×360 and 1024×768.
+- [ ] No Donut combat or HP, bosses, Floor 5, other new enemies, ammunition, new weapons,
+      procedural spawning or save-slot changes were added.
