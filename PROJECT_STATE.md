@@ -7,8 +7,10 @@ Godot 4.7.2 stable (Standard build, not .NET)
 GDScript
 
 ## Current phase
-Phase 11 — Project Data Isolation, Windows ANGLE Stability and Title-Screen Quit: **complete,
-awaiting human review**.
+Phase 12 — Enemy Loot Drops, Blast Bombs, Area Damage and Floor 7: **complete, awaiting human
+review**.
+- Phase 11 — Project Data Isolation, Windows ANGLE Stability and Title-Screen Quit: complete
+  (commit `41c57f2`).
 - Phase 10 — Pause Menu, Return to Title, Clean Quit and Runtime Stability: complete (commit
   `8dff143`).
 - Phase 9 — Second Reusable Weapon (Baseball Bat), Knockback, Combat Reactions and Floor 6:
@@ -25,7 +27,7 @@ awaiting human review**.
 - Phase 1 — First Traversal Slice: complete (commit `3cb8854`).
 - Phase 0 — Project Foundation: complete (commit `37b2c87`).
 
-There are no `PHASE_02_*.md` to `PHASE_11_*.md` files. Phases 2–11 came from the owner's
+There are no `PHASE_02_*.md` to `PHASE_12_*.md` files. Phases 2–12 came from the owner's
 prompts. Their acceptance criteria are recorded in `ACCEPTANCE_TESTS.md`.
 
 ## Canonical design decisions (do not reintroduce the old behaviour)
@@ -240,6 +242,71 @@ Phase 11 decisions (also written into `GAME_SPEC.md` §4, §15 and §15b):
   - the folder name is exactly `DC CARL` (with the space), which Godot 4.7.2 accepts as is:
     `OS.get_user_data_dir()` is `C:/Users/Owner/AppData/Roaming/DC CARL` on this machine.
 
+Phase 12 decisions (also written into `GAME_SPEC.md` §8, §9, §10, §14c, §14d, §15 and §18):
+- **The Blast Bomb** (id `blast_bomb`, "Blast Bomb") is the first area-damage item and the second
+  consumable: counted in the one inventory like the potion ("Blast Bomb x2"), one spent per
+  successful throw, gone (and its slot emptied) at 0, assignable again after collecting more. It is
+  neither owned like the Slingshot/Bat nor innate like Fists. **Carl's script is unchanged**: the
+  generic dispatch (slot → definition → performer → spend one if consumable) throws it.
+- **Throw:** its performer is an ordinary `ProjectileLauncher` (**1.0 s** cooldown = 60 ticks)
+  throwing `scenes/projectiles/blast_bomb.tscn`, an ordinary `Projectile`: **220 px/s**, at most
+  **240 px** (66 ticks, 1.1 s), `target_layers` enemy_hurtbox (so an enemy stops it), stopped by
+  `world`, **damage 0** (the impact itself hurts nobody). Facing as for every action (the last
+  movement direction, diagonals included); no mouse aiming, no arc.
+- **Detonation:** a child `DetonateOnStop` listens to the projectile's `stopped` signal, which a
+  `Projectile` emits exactly once (enemy hit, wall hit, or range used up), and puts **one**
+  explosion where it stopped (2 px back out of a wall's face, so the centre is never on or in the
+  wall). The projectile then frees itself as always. So a bomb can never explode twice.
+- **Area damage** is a new reusable component, `AreaDamage` (`scripts/combat/area_damage.gd`,
+  the explosion scene's root): on `detonate()` (once only) it damages every Hurtbox on its
+  `target_layers` overlapping a circle of `radius` around it, **once each**, through
+  `Hurtbox.take_hit(damage)` (so Health, hit flashes and deaths work as for every attack), skips
+  Hurtboxes that cannot be hit (dying), that belong to its `source`, or that are **shielded**: a ray
+  from its centre to the Hurtbox's centre on `blocking_layers` (`world`, the layer Spitting Blob
+  sight and projectiles already use) hits a wall. It passes **no Knockback**. Then it draws a
+  fading orange disc and ring the size of the area for 0.35 s (21 ticks, pausing with the game) and
+  frees itself. It knows nothing about bombs or enemy types.
+- **The Blast Bomb's explosion:** **20 damage**, **72 px** radius (a blob's 14 px Hurtbox is reached
+  when its centre is up to 86 px away), `enemy_hurtbox` only, walls shield. **Carl and Donut are on
+  `player_hurtbox`, so no explosion of Carl's can hurt them**, even at its centre; and none pushes
+  anyone (the Bat stays the only knockback).
+- **Deterministic enemy drops:** `LootDrop` (`scripts/enemies/loot_drop.gd`), a child node of an
+  enemy placed in a level, with `item` and `quantity`. When the enemy's Health dies it creates an
+  ordinary `item_pickup.tscn` (class `ItemPickup` since this phase) where the enemy died, added next
+  to it in the level (deferred to the end of the physics step: the pickup is an Area2D). The death
+  alone gives nothing; the pickup's own rules apply (only Carl's body, once). No chances, rarity or
+  loot tables. Enemy scenes are unchanged; any enemy with a `Health` child can carry one.
+- **Floor 6** gains the drop (its south-west Gelatinous Blob, `Actors/GelatinousBlob`, carries
+  Blast Bomb x2, marked by the sign "This blob carries Blast Bombs."), stairs down to Floor 7 in the
+  far south-east corner, and its note `Signs/PrototypeNote` became `Signs/StairsHint`.
+- **Checkpoints:** unchanged rules. Bombs dropped on Floor 6 are not in the Floor 6 checkpoint (made
+  on entry), so a retry, Return to Title or quitting takes them back (their slot empties, then
+  refills from the checkpoint layout), the blob is authored alive and no drop exists; Floor 7's
+  checkpoint holds the bombs carried in, with their slot. Nothing saves on death, pickup or throw.
+- **Floor 7** (`floor_07`, "Floor 7 - Blast Range", 36 × 20 tiles) is an area-damage test floor:
+  a pair of Gelatinous Blobs one blast can reach together, a Gelatinous Blob shielded by a thin
+  wall, a Spitting Blob with a pillar. No exits. Progression: Surface → … → Floor 7, downward only.
+- **The save stays version 3.** Its `inventory` already stores any consumable's quantity by stable
+  id (validated through `ActionRegistry`: known, not innate, not reusable, a whole number 0–999) and
+  `floor_id` any registered floor. The two registry lines were all the save needed. No drop, bomb in
+  flight or explosion is ever saved.
+- **Phase 12 choices the prompt left open** (the narrowest fit with the existing code):
+  - the prompt's recommended numbers were kept: 220 px/s, 240 px, 72 px (at 32 px tiles 72 px is
+    2¼ tiles: a pair of blobs 32 px apart is easily caught, a whole room is not);
+  - "within the radius" means the Hurtbox overlaps the circle, the same rule every melee attack
+    uses; "behind a wall" means a wall on the line between the two centres, the Bat's rule;
+  - the thrown bomb stops on the first enemy Hurtbox in its path (a direct hit) and explodes there;
+    the impact itself deals nothing, so the enemy it hit takes exactly the blast's 20 once;
+  - a dying enemy's Hurtbox cannot be hit, so it neither stops a bomb nor takes blast damage (as
+    for stones);
+  - the drop appears exactly where the enemy's centre was when it died, and belongs to the level
+    (next to the enemy, which fades out), not to the enemy;
+  - the loot blob is the south-west one (in the open, reachable, away from the Backstop and the
+    Spitting Blob), and keeps its node name `GelatinousBlob`, which Phase 9's tests use;
+  - Floor 7's loot and stairs: none (the prompt asked for no exit and no Floor 8);
+  - the drop reuses the pink pickup label colour; the bomb has its own 32 × 32 icon, used by the
+    pickup (the menu and HUD show names only, as for every item).
+
 ## Implemented
 - **Title screen** (main scene):
   - **Continue** (available only when the save loads) resumes the saved floor checkpoint;
@@ -260,8 +327,8 @@ Phase 11 decisions (also written into `GAME_SPEC.md` §4, §15 and §15b):
   "Return to title? / Quit game?" + "Progress since entering this floor will be lost." with No
   and Yes (an orange-bordered panel like the title's New Game question). Every level adds one in
   `Level._ready()`. See Architecture > Pause menu and the game session.
-- **Carl** (`scenes/actors/carl.tscn`): **unchanged in Phases 6–9** (Phase 8 only puts his scene in
-  the `party` group; Phase 9 added the Bat without touching his script).
+- **Carl** (`scenes/actors/carl.tscn`): **unchanged in Phases 6–12** (Phase 8 only puts his scene in
+  the `party` group; Phase 9 added the Bat and Phase 12 the Blast Bomb without touching his script).
   - Arrow-key movement at 180 px/s, wall collision, facing arrow, smoothed camera.
   - **Action slots:** holding W/A/S/D uses the slot's action toward his facing direction.
     An empty slot does nothing.
@@ -285,9 +352,21 @@ Phase 11 decisions (also written into `GAME_SPEC.md` §4, §15 and §15b):
   a dark grip, lying diagonally) + `scenes/actions/baseball_bat.tscn` (a `MeleeAttack`: 20 damage,
   reach 36 px, radius 28 px, 0.75 s cooldown, targets `enemy_hurtbox`, blocked by `world`, 80 px
   knockback over 0.3 s, a brief tan swing circle). See Architecture > Knockback.
-- **Item pickup:** `scenes/props/item_pickup.tscn`, a reusable Area2D. It bobs gently and
-  shows its item's icon (the Slingshot, the Bat) or, without an icon, a pink diamond (the potion),
-  and a label from `ActionDefinition.get_label()`: "Potion x2", "Slingshot", "Baseball Bat".
+- **Blast Bomb (Phase 12):** `resources/actions/blast_bomb.tres` (consumable, with an original 32×32
+  placeholder icon `assets/items/blast_bomb.png`: a dark round bomb with a lit fuse) +
+  `scenes/actions/blast_bomb.tscn` (a `ProjectileLauncher`, 1.0 s) throwing
+  `scenes/projectiles/blast_bomb.tscn` (a `Projectile`: 0 impact damage, 220 px/s, 240 px, stopped by
+  enemies and walls; a charcoal bomb with a grey trail and an orange fuse spark) whose
+  `DetonateOnStop` makes one `scenes/effects/blast_explosion.tscn` (an `AreaDamage`: 20 damage,
+  72 px, `enemy_hurtbox`, walls shield; a fading orange disc and ring the size of the blast). See
+  Architecture > Area damage.
+- **Item pickup:** `scenes/props/item_pickup.tscn` (`ItemPickup` since Phase 12), a reusable Area2D.
+  It bobs gently and shows its item's icon (the Slingshot, the Bat, the Blast Bomb) or, without an
+  icon, a pink diamond (the potion), and a label from `ActionDefinition.get_label()`: "Potion x2",
+  "Slingshot", "Baseball Bat", "Blast Bomb x2". **Phase 12:** it can also be created while the game
+  runs (by a `LootDrop`); it then works exactly like a placed one.
+- **Enemy loot drops (Phase 12):** `LootDrop` (`scripts/enemies/loot_drop.gd`), a child of an
+  enemy placed in a level. See Architecture > Enemy loot drops.
 - **Donut** (`scenes/actors/donut.tscn`, **Phase 8**): she follows Carl on the navigation mesh as
   before, never collects pickups or uses the inventory, and freezes while the game is paused.
   New: 60 HP (`Health`), a `Hurtbox` on `player_hurtbox`, her automatic **Scratch** (a
@@ -305,6 +384,8 @@ Phase 11 decisions (also written into `GAME_SPEC.md` §4, §15 and §15b):
   violet teardrop glob with a trail) through its `SpitLauncher`, a `ProjectileLauncher` (1.5 s).
   Phase 8: its target may be Donut; its globs hurt her too. Phase 9: a `KnockbackReceiver`, like the
   Gelatinous Blob. See Architecture > Enemies.
+- **Phase 12:** both blobs take the Blast Bomb's 20 through their existing Hurtbox; neither scene
+  changed.
 - **Surface:** stairs down to Floor 1, the HUD and the action menu.
 - **Floor 1:** stone room with four pillars, two Gelatinous Blobs, a Small Health Potion
   pickup (x2) at (128, 320), and stairs down to Floor 2. No stairs back up.
@@ -371,7 +452,24 @@ Phase 11 decisions (also written into `GAME_SPEC.md` §4, §15 and §15b):
   - the signs "Floor 6 - Batting Cage", `Signs/Hint` "The Baseball Bat knocks enemies back. Walls
     stop them." and `Signs/PrototypeNote` "Prototype: the way further down is not built yet.",
     HUD and menu;
-  - **no exits**: no way up, and Floor 7 is out of scope.
+  - **Phase 12:** the south-west `GelatinousBlob` carries a `LootDrop` (Blast Bomb x2),
+    marked by `Signs/LootSign` "This blob carries Blast Bombs." at (200–440, 418–438) above it;
+    `Signs/PrototypeNote` became `Signs/StairsHint` "The stairs down to Floor 7 are in the far
+    south-east corner."; **stairs down to Floor 7** at (1072, 560), labelled "Down to Floor 7"
+    (`Signs/StairsSign`). No stairs back up.
+- **Floor 7 (Phase 12,** `scenes/levels/floor_07.tscn`**, "Blast Range", 36×20 tiles, 1152×640 px):**
+  - Carl arrives at (176, 176), Donut at (176, 232), as on Floors 5 and 6;
+  - the **pair**, `PairBlobNorth` (560, 164) and `PairBlobSouth` (560, 196), two Gelatinous Blobs
+    32 px apart: a bomb thrown east from (330, 176) (227 px away, so they are still idle) hits the
+    north one's Hurtbox and the blast (72 px) reaches both;
+  - the **blast wall**, 1 × 4 tiles (x 704–736, y 384–512), and the **`ShieldedBlob`** (a Gelatinous
+    Blob) behind it at (768, 448): a bomb thrown east from (500, 448) (268 px away, idle) explodes at
+    the wall's west face, 66 px from the blob's centre (inside 72 px), and the wall shields it;
+  - a 2×2 pillar (x 832–896, y 256–320) and the **Spitting Blob** at (992, 192) in the east;
+  - the signs "Floor 7 - Blast Range", `Signs/Hint` "A Blast Bomb hurts every enemy in its blast.
+    Walls block the blast." and `Signs/PrototypeNote` "Prototype: the way further down is not built
+    yet.", HUD and menu;
+  - **no exits**: no way up, and Floor 8 is out of scope.
 - **Stairs** (`scenes/props/stairs.tscn`): stairs **down**. They load `destination_scene_path`
   and ignore Carl for the first 2 physics frames of a level (no transition loops). **Phase 10:**
   they never change level once the game is frozen (Carl killed in the tick he reached them).
@@ -379,11 +477,13 @@ Phase 11 decisions (also written into `GAME_SPEC.md` §4, §15 and §15b):
   in orange, or "Donut HP: 0 / 60  -  DOWNED" in red; the slot bar, for example
   `W: Slingshot   A: Potion x1   S: Baseball Bat   D: Fists` (no quantity for the Slingshot or the
   Bat); a "Space: action menu     Esc: pause" hint (Phase 10; it said "Space: action menu"); the
-  centred GAME OVER panel. Unchanged in Phase 9: the longest
-  slot bar still fits (checked at every window size).
+  centred GAME OVER panel. Unchanged in Phases 9 and 12: the longest
+  slot bar still fits (checked at every window size; since Phase 12 with
+  `W: Baseball Bat   A: Potion x2   S: Blast Bomb x12   D: Slingshot`).
 - **Action menu** (`scenes/ui/action_menu.tscn`): lists the four slots and Carl's inventory,
   for example "Fists (on D)", "Small Health Potion x1 (on A)", "Slingshot (on W)", "Baseball Bat
-  (on S)", with a description or confirmation line. Unchanged since Phase 5.
+  (on S)", "Blast Bomb x2 (no slot)", with a description or confirmation line. Unchanged since
+  Phase 5.
 - **GameState autoload:** Carl's and Donut's HP, inventory, slots and the floor-entry state (see
   Architecture).
 - **SaveManager autoload:** the persistent checkpoint in `user://savegame.json`, format
@@ -392,7 +492,8 @@ Phase 11 decisions (also written into `GAME_SPEC.md` §4, §15 and §15b):
 Not implemented (later phases): Donut controls, commands, slots or equipment, Donut items or
 healing, a revive key, permanent Donut death, ammunition, more weapons, weapon upgrades or
 durability, equipment slots or stats, critical hits, status effects, knockback on anything but
-the Bat, Floor 7, other enemy types (Dungeon Rat, Crawler, Dungeon Brute), bosses (Floor Guardian), the
+the Bat (explosions included), random loot tables, drop chances, rarity, currency, crafting,
+destructible walls, Floor 8, other enemy types (Dungeon Rat, Crawler, Dungeon Brute), bosses (Floor Guardian), the
 prototype-complete screen, stairs that open only after goals or events, countdown timers,
 shops/economy, multiple save slots, mid-floor or cloud saving, save-anywhere, key rebinding,
 settings or options in the pause menu.
@@ -420,9 +521,11 @@ Title screen: **Up/Down** choose Continue, New Game or Quit Game (going round; C
 save loads), **Enter** confirms. Quit Game closes the game at once (Phase 11). In the New Game
 confirmation, Up/Down (or Left/Right) choose No or Yes, Enter confirms, and **Escape** means No.
 
-Whatever slot holds the Slingshot fires it; whatever slot holds the Baseball Bat swings it.
+Whatever slot holds the Slingshot fires it; whatever slot holds the Baseball Bat swings it;
+whatever slot holds the Blast Bomb throws one (Phase 12).
 Holding a slot key repeats its action as fast as the action's cooldown allows: Fists every
-0.4 s, the Slingshot every 0.6 s, the Bat every 0.75 s, a potion every 1 s while it can heal. Pickups need no key. No input actions were added in Phases 3–10 (the pause menu uses the existing `pause_back`, `ui_confirm_game` and `move_up`/`move_down`): Donut
+0.4 s, the Slingshot every 0.6 s, the Bat every 0.75 s, a potion every 1 s while it can heal, a
+Blast Bomb every 1 s while any are left. Pickups need no key. No input actions were added in Phases 3–10 (the pause menu uses the existing `pause_back`, `ui_confirm_game` and `move_up`/`move_down`): Donut
 has no keys (her Scratch is automatic), and W/A/S/D never move or command her.
 
 ## Scene structure
@@ -431,17 +534,22 @@ project.godot                                   Settings, InputMap, physics laye
 assets/tiles/placeholder_world_tiles.png        Original 4-tile placeholder atlas
 assets/items/slingshot.png                      Original 32×32 placeholder Slingshot icon (Phase 6)
 assets/items/baseball_bat.png                   Original 32×32 placeholder Baseball Bat icon (Phase 9)
+assets/items/blast_bomb.png                     Original 32×32 placeholder Blast Bomb icon (Phase 12)
 resources/tile_sets/placeholder_world_tiles.tres  Shared TileSet (wall tiles collide)
 resources/actions/fists.tres                    ActionDefinition: Fists (innate)
 resources/actions/small_health_potion.tres      ActionDefinition: Small Health Potion (consumable)
 resources/actions/slingshot.tres                ActionDefinition: Slingshot (reusable, with icon; Phase 6)
 resources/actions/baseball_bat.tres             ActionDefinition: Baseball Bat (reusable, with icon; Phase 9)
+resources/actions/blast_bomb.tres               ActionDefinition: Blast Bomb (consumable, with icon; Phase 12)
 scenes/actions/fists.tscn                       Fists' performer: a MeleeAttack
 scenes/actions/small_health_potion.tscn         The potion's performer: a HealAction (30 HP)
 scenes/actions/slingshot.tscn                   The Slingshot's performer: a ProjectileLauncher (Phase 6)
 scenes/actions/baseball_bat.tscn                The Bat's performer: a MeleeAttack with walls blocking and knockback (Phase 9)
+scenes/actions/blast_bomb.tscn                  The Blast Bomb's performer: a ProjectileLauncher, 1.0 s (Phase 12)
 scenes/projectiles/slingshot_stone.tscn         The Slingshot's Projectile (Phase 6)
 scenes/projectiles/spit_glob.tscn               The Spitting Blob's Projectile (Phase 7)
+scenes/projectiles/blast_bomb.tscn              The thrown Blast Bomb: a Projectile (no impact damage) + DetonateOnStop (Phase 12)
+scenes/effects/blast_explosion.tscn             The Blast Bomb's explosion: an AreaDamage, 20 damage, 72 px (Phase 12)
 scenes/ui/title_screen.tscn                     Main scene: Continue / New Game / Quit Game menu (Quit Game: Phase 11), overwrite confirmation
 scenes/ui/hud.tscn                              Carl's and Donut's HP, slot bar, menu hint, GAME OVER panel (CanvasLayer)
 scenes/ui/action_menu.tscn                      The action/inventory menu (CanvasLayer 10)
@@ -452,7 +560,7 @@ scenes/enemies/gelatinous_blob.tscn             Blob: Health, Hurtbox, ContactAt
 scenes/enemies/spitting_blob.tscn               Spitting Blob (Phase 7): Health, Hurtbox, SpitLauncher (ProjectileLauncher), KnockbackReceiver (Phase 9), NavigationAgent2D
 scenes/props/stairs.tscn                        Reusable stairs down
 scenes/props/item_pickup.tscn                   Reusable world pickup (item + quantity; icon or default gem)
-scenes/levels/surface.tscn, floor_01.tscn … floor_06.tscn   The seven levels (floor_04: Phase 7; floor_05: Phase 8; floor_06: Phase 9)
+scenes/levels/surface.tscn, floor_01.tscn … floor_07.tscn   The eight levels (floor_04: Phase 7; floor_05: Phase 8; floor_06: Phase 9; floor_07: Phase 12)
 scripts/autoload/game_state.gd                  GameState: the current run's state
 scripts/autoload/save_manager.gd                SaveManager: the one save file (encode, validate, migrate, safe write, load, delete)
 scripts/state/floor_entry.gd                    class FloorEntry: a floor checkpoint (Carl's and Donut's HP, inventory snapshot, slot layout)
@@ -469,7 +577,10 @@ scripts/combat/melee_attack.gd                  class MeleeAttack (an ActionPerf
 scripts/combat/knockback.gd                     class Knockback: the push that comes with a hit: direction, distance, duration (Phase 9)
 scripts/combat/knockback_receiver.gd            class KnockbackReceiver: moves its body through a Knockback with move_and_slide() (Phase 9)
 scripts/combat/projectile_launcher.gd           class ProjectileLauncher (an ActionPerformer): fires a Projectile (Phase 6)
-scripts/combat/projectile.gd                    class Projectile: flies, stops at walls, hits one target (Phase 6; source rule Phase 7)
+scripts/combat/projectile.gd                    class Projectile: flies, stops at walls, hits one target (Phase 6; source rule Phase 7; damage 0 = no impact damage, Phase 12)
+scripts/combat/area_damage.gd                   class AreaDamage: once, damages every target in a circle that no wall shields (Phase 12)
+scripts/combat/detonate_on_stop.gd              class DetonateOnStop: makes its Projectile explode (an AreaDamage) where it stops (Phase 12)
+scripts/enemies/loot_drop.gd                    class LootDrop: a fixed item + quantity an enemy drops as a pickup when it dies (Phase 12)
 scripts/enemies/enemy.gd                        class Enemy: what every enemy shares (target choice, navigation, sight, hit flash, death) (Phase 7; party targets Phase 8; update_knockback() Phase 9)
 scripts/enemies/enemy_navigation.gd             class EnemyNavigation (a NavigationAgent2D): which way to move to reach a goal (Phase 7)
 scripts/enemies/gelatinous_blob.gd              The Gelatinous Blob (an Enemy): chase and touch
@@ -478,10 +589,10 @@ scripts/actors/donut.gd                         Donut: follow, Scratch, downed a
 scripts/levels/level.gd                         class Level: run-state wiring (Carl and Donut), GAME OVER, retry; adds the pause menu, Return to Title, Quit Game (Phase 10)
 scripts/ui/pause_menu.gd                        The pause menu: Resume / Return to Title / Quit Game, the questions (Phase 10)
 scripts/levels/level_navigation.gd              Bakes a level's navigation mesh on load
-scripts/props/item_pickup.gd                    Walk-over pickup: gives its item to Carl once
+scripts/props/item_pickup.gd                    class ItemPickup (Phase 12 name): walk-over pickup, gives its item to Carl once; placed or dropped
 scripts/<actors|enemies|props|ui>/*.gd          One script per scene that needs one
 tests/                                          Test scripts (not part of the game), see Tests
-tests/fixtures/                                 Real save files from earlier phases: two save_version 1 (Phase 5), two save_version 2 (Phase 6), one save_version 2 (Phase 7, Floor 4) and one save_version 3 (Phase 8, Floor 5)
+tests/fixtures/                                 Real save files from earlier phases: two save_version 1 (Phase 5), two save_version 2 (Phase 6), one save_version 2 (Phase 7, Floor 4), one save_version 3 (Phase 8, Floor 5) and one save_version 3 (Phase 11, Floor 6; Phase 12)
 ```
 
 Every level scene uses this layout:
@@ -495,20 +606,22 @@ Every level scene uses this layout:
 ├── Actors               Node2D with Y-sort on
 │   ├── Carl             placed at the level's entry point (also where a retry starts)
 │   ├── Donut            follow_target = ../Carl
-│   ├── enemies          e.g. GelatinousBlob, SpittingBlob (they find Carl and Donut themselves)
-│   └── (projectiles)    Stones and globs are added here while they fly
+│   ├── enemies          e.g. GelatinousBlob, SpittingBlob (they find Carl and Donut themselves);
+│   │   └── (LootDrop)   optional child of a placed enemy: what it drops (Phase 12)
+│   └── (run-time nodes) Stones, globs and bombs while they fly, explosions while they show,
+│                        and dropped pickups (Phase 12)
 ├── HUD                  hud.tscn instance
 ├── ActionMenu           action_menu.tscn instance
 └── (PauseMenu)          pause_menu.tscn, added by Level._ready() (Phase 10; not in the scene file)
 ```
-**To add a floor:** duplicate `floor_06.tscn` (or another floor), then:
+**To add a floor:** duplicate `floor_07.tscn` (or another floor), then:
 1. Repaint Terrain and resize the NavigationPolygon outline.
 2. Place Carl (the entry point), Donut (with `follow_target` = Carl) and the enemies, and set the
    root's `carl` and `donut` (enemies need no wiring: they hunt the `party` group).
 3. Add pickups and stairs down, if any.
 4. Point the previous floor's stairs down at the new file. Never add stairs back up.
-5. Add one line to `FloorRegistry`, so the floor can be saved and continued. (Floors 4, 5 and 6
-   needed nothing else: no level or title code, and no save version change.)
+5. Add one line to `FloorRegistry`, so the floor can be saved and continued. (Floors 4, 5, 6 and
+   7 needed nothing else: no level or title code, and no save version change.)
 
 **To add an enemy:** make a scene whose root script `extends Enemy` (scripts/enemies/enemy.gd),
 with the children Enemy expects (Health, Hurtbox on `enemy_hurtbox`, CollisionShape2D on
@@ -530,9 +643,37 @@ enemy that must never be pushed.)
 3. Add one line to `ActionRegistry`, so saves can name it.
 4. Place `item_pickup.tscn` instances with `item` and `quantity` set.
 
-Carl's script does not change (it did not change in Phases 6–9). A reusable item needs no save
+Carl's script does not change (it did not change in Phases 6–12). A new item needs no save
 version change either: `owned_items` already stores any reusable item's id (Phase 9 added the
-Bat this way).
+Bat this way) and `inventory` any consumable's quantity (Phase 12 added the Blast Bomb this way).
+
+**To make an enemy drop something** (Phase 12; deterministic: always that item and quantity):
+1. In the level scene, add a `Node` child named `LootDrop` to the placed enemy (right-click the
+   enemy instance > Add Child Node > Node), and give it the script `scripts/enemies/loot_drop.gd`.
+2. Set its `item` (any ActionDefinition `.tres`: a potion, a Blast Bomb, even the Slingshot) and
+   `quantity` (for example 2).
+That is all: when that enemy dies, an ordinary pickup for that item appears where it died, Carl
+collects it by walking over it, and the floor's checkpoint rules apply (a retry takes it back and
+brings the enemy back). No enemy scene, Carl, HUD, menu or save change. (Chances, rarities or loot
+tables would be a later extension of `LootDrop`, not built yet.)
+
+**To add another area-damage item** (for example a bigger bomb or a firework), following the Blast
+Bomb:
+1. Copy `scenes/effects/blast_explosion.tscn` and set the `AreaDamage` numbers: `damage`, `radius`,
+   `target_layers` (keep `enemy_hurtbox` = 32 for a player item), `blocking_layers` (1 = walls
+   shield; 0 = nothing shields), the flash colours and `flash_duration`.
+2. Copy `scenes/projectiles/blast_bomb.tscn` and point its `DetonateOnStop.explosion_scene` at the
+   new explosion; set the `Projectile` numbers (`speed`, `max_distance`; keep `damage = 0` so only
+   the blast hurts) and its look.
+3. Copy `scenes/actions/blast_bomb.tscn` (a `ProjectileLauncher`) and point its `projectile_scene` at
+   the new projectile; set its `cooldown`.
+4. Copy `resources/actions/blast_bomb.tres` with a new `id`, names, description and icon
+   (`consumable = true` for a counted item) and point `performer_scene` at the new launcher. Then
+   steps 3–4 of "To add an item" (or give an enemy a `LootDrop` for it).
+A spell or enemy area attack reuses `AreaDamage` the same way: create the explosion scene where it
+happens, set `source` (the attacker, which it never hurts), add it to the level and call
+`detonate()`; an enemy's blast would target `player_hurtbox` (16). An explosion that should push
+would pass a `Knockback` to `take_hit()` in its own copy of `AreaDamage.detonate()` (none does now).
 
 **To add a weapon with its own knockback** (for example a heavy hammer that pushes 150 px, or a
 pipe that pushes 40 px), following the Bat:
@@ -563,7 +704,7 @@ way (not done in Phase 9: stones must not push).
   |------|---------|------------|----------|---------|----------|
   | innate action | Fists | `GameState.INNATE_ACTIONS` | none | never | not saved (every run has it) |
   | reusable item | Slingshot, Baseball Bat | `consumable = false`, not innate | none | never | `owned_items: ["slingshot", "baseball_bat"]` |
-  | consumable | Small Health Potion | `consumable = true` | 0–999 | one per use | `inventory: {"small_health_potion": 1}` |
+  | consumable | Small Health Potion, Blast Bomb (Phase 12) | `consumable = true` | 0–999 | one per use | `inventory: {"small_health_potion": 1, "blast_bomb": 2}` |
 
   No script checks item ids to tell them apart.
 - **`ActionPerformer`** (Node2D base): the root of a `performer_scene`. It has
@@ -589,7 +730,7 @@ way (not done in Phase 9: stones must not push).
     | Donut's Scratch | 10 | 0, 28 px | 1.0 s | 1, `enemy_hurtbox` | no | none |
   - **`HealAction`**: the potion. It returns false (so no potion is spent) when nothing was
     healed or it is cooling down.
-  - **`ProjectileLauncher`** (Phase 6): the Slingshot. `perform()` creates its
+  - **`ProjectileLauncher`** (Phase 6): the Slingshot and (Phase 12) the Blast Bomb. `perform()` creates its
     `projectile_scene`, adds it to the user's parent (the level's Actors node, so the stone
     flies on independently of Carl), calls `launch(user position, direction)`, starts its
     cooldown and emits `fired(projectile)`. It returns false while cooling down.
@@ -601,7 +742,65 @@ way (not done in Phase 9: stones must not push).
 
   So: `W → Slingshot definition → ProjectileLauncher.perform() → Projectile`, and
   `S → Baseball Bat definition → MeleeAttack.perform() → Hurtbox.take_hit(20, Knockback) →
-  Health + KnockbackReceiver`. Carl knows nothing about projectiles or knockback.
+  Health + KnockbackReceiver`, and (Phase 12) `A → Blast Bomb definition →
+  ProjectileLauncher.perform() → Projectile (the bomb) → stopped → DetonateOnStop → AreaDamage.detonate()
+  → Hurtbox.take_hit(20) for each enemy in the blast → Health`, then `inventory.remove(bomb, 1)`
+  because the launcher returned true and the bomb is consumable. Carl knows nothing about
+  projectiles, knockback or explosions.
+
+### Area damage (Phase 12, `scripts/combat/area_damage.gd`, `detonate_on_stop.gd`)
+The first attack that hurts several targets at once on purpose from one point, kept separate from
+knockback and from the projectile that carries it.
+- **`AreaDamage`** (Node2D, the root of an explosion scene): exports `damage`, `radius`,
+  `target_layers` (the side it hurts), `blocking_layers` (what shields: `world`), the flash colours
+  and `flash_duration`; `source` is set by whoever makes it. `detonate()`:
+  1. only the first call does anything (`has_detonated()`), so one explosion never hits twice;
+  2. `find_targets()`: a circle shape query (`radius`) on `target_layers`, areas only. Each
+     `Hurtbox` found is kept once if it `can_be_hit()` (a dying enemy cannot), does not belong to
+     `source` (`source.is_ancestor_of()`, the projectiles' rule), and is not shielded;
+  3. `is_shielded()`: a ray from the explosion's centre to the Hurtbox's centre on
+     `blocking_layers`; any hit means a wall is in between. The same test as the Bat's
+     `blocking_layers` and the Spitting Blob's line of sight, on the same `world` layer;
+  4. `take_hit(damage)` on each target: no Knockback, so nothing is pushed;
+  5. emits `detonated(targets)`, then draws a fading orange disc and ring of `radius` and a
+     shrinking bright core for `flash_duration` (0.35 s = 21 physics ticks, so it freezes while the
+     game is paused) and frees itself.
+- **`DetonateOnStop`** (Node, a child of a `Projectile`): connects to the projectile's `stopped`
+  signal. `Projectile` emits it exactly once (it stops flying and frees itself right after), for
+  an enemy hit (the collider is a `Hurtbox`), a wall hit (a body) or the range used up (null). It
+  instantiates `explosion_scene`, gives it the projectile's `source`, adds it to the projectile's
+  parent (the level's Actors, so it outlives the bomb), places it where the bomb stopped (2 px back
+  along the flight direction after a wall hit, `WALL_CLEARANCE`, so the centre is in front of the
+  wall's face and the wall shields what is behind it), calls `detonate()` and emits
+  `exploded(explosion, targets)`.
+- **The Blast Bomb** is only data around these: the bomb `Projectile` has `damage = 0`
+  (`Projectile` now skips `take_hit()` when its damage is 0, so the enemy it lands on takes exactly
+  the blast's 20, once), `target_layers` enemy_hurtbox (so an enemy stops it) and `blocking_layers`
+  world; the explosion is `AreaDamage` with 20 / 72 px / enemy_hurtbox / world.
+
+  | Explosion | Made by | Damage | Radius | Targets | Walls shield | Knockback |
+  |-----------|---------|--------|--------|---------|--------------|-----------|
+  | `blast_explosion.tscn` | the Blast Bomb (DetonateOnStop) | 20 | 72 px (a blob's centre up to 86 px) | every `enemy_hurtbox` in it, once | yes | none |
+
+- **Pause, GAME OVER, retry:** a flying bomb is an ordinary pausable `Projectile`; the flash counts
+  physics ticks. A retry or leaving reloads the level, so no bomb or explosion survives; neither is
+  ever saved.
+
+### Enemy loot drops (Phase 12, `scripts/enemies/loot_drop.gd`)
+- **`LootDrop`** (Node): a child of an enemy placed in a level (not of the enemy scene, so each
+  placed enemy decides), with `item` (ActionDefinition) and `quantity`. In `_ready()` it connects to
+  its parent's `Health.died` (any enemy has one).
+- On death (once: `has_dropped()`), it records the enemy's position and, at the end of that frame
+  (`call_deferred`: deaths happen inside physics steps, and the pickup is an Area2D), instantiates
+  `item_pickup.tscn`, sets `item` and `quantity`, names it after the item (`BlastBombDrop`), adds it
+  to the enemy's parent (the level's Actors) and puts it where the enemy died. It then emits
+  `dropped(pickup)`. If the level was left in that same frame it does nothing.
+- It never touches the inventory or GameState: **only the pickup gives items**, by its usual rules
+  (Area2D mask `player`, `collect_item()` on Carl only, a `_collected` flag, then freed). So Donut,
+  enemies and projectiles cannot take it, it is taken once, and the quantity is exact.
+- **Checkpoints:** nothing records drops. A retry or Continue reloads the level (the enemy is back,
+  with its LootDrop not yet used, and no dropped pickup exists) and restores the floor-entry
+  inventory, so drops follow the same rules as placed pickups and can never be duplicated.
 
 ### Knockback (Phase 9, `scripts/combat/knockback.gd`, `knockback_receiver.gd`)
 The one combat reaction so far. It is deliberately small: damage plus an optional push, no
@@ -649,12 +848,13 @@ status effects, stagger meters or resistances.
   `target_layers` (whom it may hurt) and `blocking_layers` (what stops it), the `direction`
   set by `launch()`, and (Phase 7) its `source`, whoever fired it. Emits `stopped(collider)`
   once (null when it ran out of range).
-- **Two kinds, one class** (Phase 7). Each is just a scene with its own numbers and look:
+- **Three kinds, one class** (Phase 7; the bomb Phase 12). Each is just a scene with its own numbers and look:
 
   | Projectile | Fired by | `target_layers` | Damage | Speed | Range | Look |
   |------------|----------|-----------------|--------|-------|-------|------|
   | `slingshot_stone.tscn` | Carl's Slingshot | `enemy_hurtbox` | 10 | 480 px/s | 320 px (40 ticks) | pale round stone, short trail |
   | `spit_glob.tscn` | a Spitting Blob's SpitLauncher | `player_hurtbox` | 10 | 240 px/s | 384 px (96 ticks) | violet teardrop, longer trail |
+  | `blast_bomb.tscn` (Phase 12) | Carl's Blast Bomb | `enemy_hurtbox` (stops it; the blast does the damage) | 0 | 220 px/s | 240 px (66 ticks) | charcoal bomb, grey trail, orange fuse spark |
 
   Both are fired by a `ProjectileLauncher`, which sets `source = user`, adds the projectile to
   the user's parent (the level's Actors) and launches it from the user's centre.
@@ -878,18 +1078,27 @@ Composition first, with one thin shared base:
   Prototype\savegame.json`, a folder shared with `../codex`; see Architecture > User-data folder
   and renderer.
   `save_path` can be changed; tests always change it (see Test save isolation below).
-- **Format version 3** (`SAVE_VERSION`, Phase 8; unchanged in Phase 9), stable ids only:
+- **Format version 3** (`SAVE_VERSION`, Phase 8; unchanged in Phases 9–12), stable ids only:
   ```
-  {"save_version": 3, "floor_id": "floor_06", "carl": {"health": 80, "max_health": 100},
+  {"save_version": 3, "floor_id": "floor_07", "carl": {"health": 80, "max_health": 100},
    "donut": {"health": 40, "max_health": 60},
-   "inventory": {"small_health_potion": 1},
+   "inventory": {"blast_bomb": 1, "small_health_potion": 1},
    "owned_items": ["slingshot", "baseball_bat"],
-   "action_slots": {"action_w": "slingshot", "action_a": "small_health_potion", "action_s": "baseball_bat", "action_d": "fists"}}
+   "action_slots": {"action_w": "slingshot", "action_a": "blast_bomb", "action_s": "baseball_bat", "action_d": "fists"}}
   ```
   - `donut`: Donut's HP on entering the floor (Phase 8). 0 = she entered downed;
   - `inventory`: the quantity of each consumable (same meaning as in version 1);
   - `owned_items`: the ids of the reusable items Carl owns (Phase 6);
   - innate actions are never saved.
+- **Why Phase 12 is still version 3:** carrying Blast Bombs is the value `"blast_bomb": 1` in
+  `inventory`, which has held any consumable's quantity by stable id since Phase 5 (validated through
+  `ActionRegistry`: known, not innate, not reusable, a whole number 0–999), and Floor 7 is the value
+  `"floor_07"` of `floor_id`. Adding the two registry lines was all the save needed. A Phase 11
+  save (tested with a real Phase 11 Floor 6 file) loads unchanged, has no bombs, and is written back
+  byte-identical in content; version 1 and 2 saves migrate as before with no bombs. Bombs in the
+  wrong place are rejected like any item (`owned_items: ["blast_bomb"]`: a consumable is not a
+  reusable item; negative, fractional, string or > 999 quantities; look-alike ids such as
+  `Blast_Bomb` are unknown), and a bomb slot with no bombs is emptied.
 - **Why Phase 9 is still version 3:** a version changes when the *shape or meaning* of the saved
   data changes (version 2 added `owned_items`, version 3 added `donut`). Since Phase 6
   `owned_items` holds any reusable item's id, validated through `ActionRegistry` (known, not
@@ -923,7 +1132,8 @@ Composition first, with one thin shared base:
 - **Persisted:** floor id, Carl's HP and max HP, Donut's HP and max HP, consumable quantities,
   owned reusable items and the four slot assignments, all at floor entry.
 - **Not persisted (on purpose):** positions; enemies, their HP and their targets; collected
-  pickups; projectiles; cooldowns (Scratch and the Bat included), knockback in progress (Phase 9),
+  pickups; enemy drops and dropped pickups (Phase 12); projectiles, bombs in flight and explosions;
+  cooldowns (Scratch, the Bat and the bomb included), knockback in progress (Phase 9),
   Donut's recovery countdown, animation and navigation; the live menu state; anything after floor
   entry.
 - **API:** `save_checkpoint(entry) -> bool`; `load_checkpoint() -> FloorEntry` (null, with
@@ -950,9 +1160,9 @@ Composition first, with one thin shared base:
   It **sanitizes** slots instead of rejecting the save: an unknown action id, an action
   Carl would not have (a potion with quantity 0, a Slingshot he does not own), or an action
   named twice leaves that slot empty. `ActionSlots.fill_empty_slots()` decides this.
-- **Registries:** `FloorRegistry` (`surface`, `floor_01` … `floor_06`) and
-  `ActionRegistry` (`fists`, `small_health_potion`, `slingshot`, `baseball_bat`) are the whitelists that turn
-  saved ids back into scenes and resources.
+- **Registries:** `FloorRegistry` (`surface`, `floor_01` … `floor_07`) and
+  `ActionRegistry` (`fists`, `small_health_potion`, `slingshot`, `baseball_bat`, `blast_bomb`) are the
+  whitelists that turn saved ids back into scenes and resources.
 - **Title flow:** Continue calls `load_checkpoint()` again, then `GameState.continue_from()`,
   then loads the saved floor (Floor 3 directly, for a Floor 3 save). New Game calls
   `GameState.start_new_run()` and loads the Surface, whose checkpoint replaces the old save.
@@ -1056,7 +1266,7 @@ Composition first, with one thin shared base:
 ### Earlier decisions still in force
 - Compatibility renderer; 1280×720 base with `canvas_items` stretch and `expand` aspect;
   physical-keycode bindings; Godot's `ui_*` actions untouched.
-- Version in Project Settings, now `0.11.0` (the game's version; the save format is still 3).
+- Version in Project Settings, now `0.12.0` (the game's version; the save format is still 3).
 - `.godot/` ignored, `.uid` files committed, LF line endings.
 - Carl is a floating-mode `CharacterBody2D`; Camera2D inside Carl (zoom 1.5, smoothing);
   physics interpolation on.
@@ -1086,6 +1296,9 @@ Names are set in Project Settings > Layer Names > 2D Physics.
 | —     | (none)           | Donut's Scratch (MeleeAttack, Phase 8)     | shape query: 6 `enemy_hurtbox`           |
 | —     | (none)           | Baseball Bat swing (MeleeAttack, Phase 9)  | shape query: 6 `enemy_hurtbox`; ray: 1 `world` (blocks the hit) |
 | —     | (none)           | Knockback (Phase 9)                        | the enemy body's own mask (1 `world`, 2 `player`, 4 `enemy`) via `move_and_slide()` |
+| —     | (none)           | Thrown Blast Bombs (Node2D, Phase 12)      | ray query: 6 `enemy_hurtbox` (stops it) and 1 `world` (stops it) |
+| —     | (none)           | Blast Bomb explosion (AreaDamage, Phase 12) | shape query: 6 `enemy_hurtbox`; ray: 1 `world` (shields the target) |
+| —     | (none)           | Dropped pickups (ItemPickup, Phase 12)     | 2 `player`, like placed pickups: only Carl collects them |
 
 Consequences:
 - Carl and the blobs block each other.
@@ -1095,9 +1308,28 @@ Consequences:
 - Carl's Fists and stones and Donut's Scratch target layer 6 only; the Blob's touch and the
   globs target layer 5 only. So the player's side (Carl, Donut) never hurts itself, and enemy
   attacks never hurt enemies.
-- Stones and globs are stopped by layer 1 only: they fly over bodies, pickups and stairs.
+- Stones, globs and bombs are stopped by layer 1 only: they fly over bodies, pickups and stairs.
+- The Blast Bomb's explosion targets layer 6 only, so it can never hurt Carl or Donut (layer 5);
+  a wall (layer 1) between its centre and an enemy's shields that enemy.
   Enemies see through everything but walls, exactly where their globs can fly.
 - Navigation baking reads only layer 1.
+
+## Earlier behaviour changed in Phase 12
+1. **Floor 6 has an exit** (stairs down to Floor 7) and a loot-carrying blob; its note
+   `Signs/PrototypeNote` became `Signs/StairsHint`, and it gained `Signs/LootSign` and
+   `Signs/StairsSign`. `test_floor_04_run.gd`, `test_floor_05_run.gd` and `test_floor_06_run.gd` now
+   expect Floor 6's only exit to lead to Floor 7 and Floor 7 to have none;
+   `test_windowed_resolutions.gd` checks `Signs/StairsHint`.
+2. **`floor_07` and `blast_bomb` exist.** `test_save_manager.gd` now lists eight floors and five
+   actions, and rejects `floor_08` (instead of `floor_07`) as unknown.
+3. **`Projectile` with `damage` 0 no longer calls `take_hit()`** on the Hurtbox it stops at (it
+   used to call `take_hit(0)`, which did nothing). Stones and globs deal 10 as before.
+4. **`item_pickup.gd` has a class name, `ItemPickup`**, so a `LootDrop` can create one; nothing
+   else about pickups changed.
+5. **The windowed test visits Floor 7 last**, so its pause-menu and title checks now expect the
+   Floor 7 checkpoint ("Saved at the start of Floor 7"). `test_pause_menu.gd` checks every
+   registered floor, now including Floor 7.
+6. Version in Project Settings: `0.12.0`.
 
 ## Earlier behaviour changed in Phase 11
 1. **Where the save lives:** `%APPDATA%\DC CARL\savegame.json` instead of the shared
@@ -1189,7 +1421,7 @@ code or on any engine ERROR/WARNING in its output, except an error the test prov
 and checked (it prints `EXPECTED ERROR: <text>`, which excuses exactly one `ERROR: <text>` line;
 only `test_save_isolation.gd` does this). A test that ends before reaching `finish()` (for
 example because the game quit its process) fails with exit code 1 (Phase 11). Tests with "windowed" in their name get a real window,
-which opens briefly. The full run takes about 12 minutes (29 test files). Each test file can
+which opens briefly. The full run takes about 13 minutes (31 test files). Each test file can
 also be run on its own; the first lines of each file give the command.
 
 | Test file                               | Covers |
@@ -1203,26 +1435,28 @@ also be run on its own; the first lines of each file give the command.
 | `test_floor_loop.gd` (Phase 2, 3)       | Title → new game; reassignment; HP and slots carried to Floor 1; no transition loop; nothing on Floor 1 leads up; real fight and defeat; GAME OVER waits; retry with entry HP; stairs ignore an arrival on top of them |
 | `test_inventory.gd` (Phase 4)           | Inventory rules, slots follow the inventory, potion use through a slot, one potion per press, menu quantities, pickups (Donut/enemy can't take them, two collectors) |
 | `test_inventory_run.gd` (Phase 4, 5)    | Real potions run through Floor 1 → Floor 2 with retries; Floor 2's only exit leads down (Phase 6) |
-| `test_save_manager.gd` (Phase 5–9)      | Registries (**7 floors, `floor_06` shown as "Floor 6", no `floor_07`; the 4 actions, `baseball_bat` reusable and assignable**); **version 3 JSON with `donut`** (and owned_items); Floor 3, 4 and 5 checkpoints with the Slingshot on W and Donut's HP round-trip; **Donut at 0 (downed) round-trips**; a checkpoint has exactly the 7 fields; **Phase 9: a Floor 6 checkpoint owning the Slingshot and the Bat (on S) is still version 3 with the same 7 fields, `owned_items` ["slingshot", "baseball_bat"], and loads back with S = Baseball Bat; a Bat with a quantity, the Bat listed twice, an unknown owned id next to it are rejected; a Bat slot without the Bat is emptied, kept with it**; 55 kinds of bad data rejected with the file untouched (incl. versions 4/999, `floor_06`, **14 kinds of bad Donut data: missing, null, a number, a list, no health/max, a string, -1, above her maximum, fractional, max 0, max above 1000**, Slingshot with a quantity, bad owned_items); slots sanitized; Donut 0 and exactly 60 accepted; delete; interrupted-save recovery |
+| `test_save_manager.gd` (Phase 5–12)     | Registries (**8 floors, `floor_07` shown as "Floor 7", no `floor_08`; the 5 actions, `baseball_bat` reusable and assignable, `blast_bomb` consumable and assignable, look-alike ids unknown**); **Phase 12: a Floor 7 checkpoint with 1 bomb on A is still version 3 with the same 7 fields, `inventory` {"small_health_potion": 1, "blast_bomb": 1}, and loads back with A = Blast Bomb; the bomb in owned_items, negative/fractional/string/null/above-999 bomb quantities and look-alike ids (`Blast_Bomb`, `blast_bombs`, `blast_bomb `) are rejected; a bomb slot with no bombs (missing or 0) is emptied, kept with 2, one slot only**; **version 3 JSON with `donut`** (and owned_items); Floor 3, 4 and 5 checkpoints with the Slingshot on W and Donut's HP round-trip; **Donut at 0 (downed) round-trips**; a checkpoint has exactly the 7 fields; **Phase 9: a Floor 6 checkpoint owning the Slingshot and the Bat (on S) is still version 3 with the same 7 fields, `owned_items` ["slingshot", "baseball_bat"], and loads back with S = Baseball Bat; a Bat with a quantity, the Bat listed twice, an unknown owned id next to it are rejected; a Bat slot without the Bat is emptied, kept with it**; 55 kinds of bad data rejected with the file untouched (incl. versions 4/999, `floor_06`, **14 kinds of bad Donut data: missing, null, a number, a list, no health/max, a string, -1, above her maximum, fractional, max 0, max above 1000**, Slingshot with a quantity, bad owned_items); slots sanitized; Donut 0 and exactly 60 accepted; delete; interrupted-save recovery |
 | `test_save_game.gd` (Phase 5, 6, 8)     | Real title + levels: checkpoints (save_version 3, Donut 60 / 60), Continue, deaths, New Game confirmation, corrupt/unsupported saves |
-| `test_save_migration.gd` (Phase 6–9)    | The two real Phase 5 fixtures (version 1), the two real Phase 6 fixtures and **the real Phase 7 Floor 4 fixture** (version 2) load with their floor, HP, items and slots and **Donut at 60 / 60**, the files untouched, and are written back with the same values as version 3 plus Donut; a v1 Slingshot slot is emptied, a v1 `owned_items` ignored, a v1 Slingshot quantity rejected; 13 kinds of malformed v1 data rejected; v2 loads (a `donut` in a v2 file is ignored), v2 without owned_items rejected; **v3 loads with its own Donut HP, v3 without `donut` rejected**; versions 0/4/999/-1 rejected; title → Continue on the v1 Floor 2 save and **on the Phase 7 Floor 4 save** open those floors with their state and Donut at 60 / 60, and the files become version 3; the migrated game plays on; **Phase 9: the real Phase 8 Floor 5 save (version 3, no Bat) loads unchanged and is written back identically; no migrated v1/v2 fixture owns the Bat; a v1 file naming the Bat in owned_items and on W owns no Bat and W is emptied** |
+| `test_save_migration.gd` (Phase 6–12)   | The two real Phase 5 fixtures (version 1), the two real Phase 6 fixtures and **the real Phase 7 Floor 4 fixture** (version 2) load with their floor, HP, items and slots and **Donut at 60 / 60**, the files untouched, and are written back with the same values as version 3 plus Donut; a v1 Slingshot slot is emptied, a v1 `owned_items` ignored, a v1 Slingshot quantity rejected; 13 kinds of malformed v1 data rejected; v2 loads (a `donut` in a v2 file is ignored), v2 without owned_items rejected; **v3 loads with its own Donut HP, v3 without `donut` rejected**; versions 0/4/999/-1 rejected; title → Continue on the v1 Floor 2 save and **on the Phase 7 Floor 4 save** open those floors with their state and Donut at 60 / 60, and the files become version 3; the migrated game plays on; **Phase 9: the real Phase 8 Floor 5 save (version 3, no Bat) loads unchanged and is written back identically; no migrated v1/v2 fixture owns the Bat; a v1 file naming the Bat in owned_items and on W owns no Bat and W is emptied**; **Phase 12: the real Phase 11 Floor 6 save (`phase11_save_v3_floor_06.json`: version 3, Carl 80, Donut 40, Slingshot W, potion A, Bat S) loads unchanged with no bombs and is written back identically; no v1, v2 or Phase 8 fixture has bombs** |
 | `test_slingshot.gd` (Phase 6, 8)        | Ownership model (innate/reusable/consumable, owned once, never removed, snapshots, new run clears it); slots; pickup; firing in four directions; exactly 10 damage, 3 hits kill a blob; one target only; flies through a dying blob; hits a blob that steps onto it; stops at a wall face; 320 px / 40 ticks; never hurts Carl, **nor Donut, whose real Hurtbox is in the line of fire (60 / 60, Phase 8)**; no pickup, no stairs; point blank; cooldown; menu; HUD and menu labels |
 | `test_slingshot_run.gd` (Phase 6–8)     | Real run: New Game clears a previous Slingshot; Surface → Floor 1 → Floor 2 → Floor 3, nothing leads up (Floor 3's only exit leads down to Floor 4); Floor 2 entry has no Slingshot (run, entry state, disk: version 3, Donut 60 / 60); collect + W doesn't save; two Floor 2 deaths take it back; quit before Floor 3 → Continue without it; three stones kill the Floor 2 blob; Floor 3 arrival, the Floor 3 checkpoint owns it with W = Slingshot; a stone stops at Floor 3's wall tiles; two Floor 3 deaths keep it; Continue opens Floor 3 and it fires; New Game clears it |
-| `test_windowed_resolutions.gd` (Phase 2–11) | At 1280×720, 640×360, 1024×768: HUD with `W: Slingshot   A: Potion x2` **and "Donut HP: 0 / 60 - DOWNED" fully on screen, its text fitting, clear of Carl's HP and the slot bar**, GAME OVER panel, action menu, camera; Floor 2's Slingshot pickup; Floor 3's signs clear of the HUD; a flying stone; Floor 4's three signs clear of the HUD; the two blobs, a glob and a stone on screen together; **Floor 5's three signs clear of the HUD; a downed Donut's DOWNED label drawn on screen, clear of the HUD; Donut's colour unlike both blobs'**; **Phase 9: the slot bar `W: Slingshot   A: Potion x2   S: Baseball Bat   D: Fists` on screen with its text fitting; "Baseball Bat   (on S)" in the menu; Floor 5's Hint and its Bat pickup (icon and label) on screen and clear of the HUD; Floor 6's three signs clear of the HUD; a blob drawn on screen while the Bat knocks it back**; **Phase 10: the HUD hint "Space: action menu     Esc: pause" on screen and fitting; the pause menu above the HUD and action menu, on screen and centred with its rows fitting; both questions on screen and centred with the warning, No and Yes fitting; the title after Return to Title on screen with the Floor 6 checkpoint**; **Phase 11: the renderer the window really uses (Compatibility; on Windows `opengl3_angle`, printed with the adapter); the title's Quit Game row on screen at each size, the three rows stacked above the save line, and Quit Game selected on screen**; the title screen (with a Floor 6 save, and broken) and its confirmation. Prints SKIP and passes when run headless |
+| `test_windowed_resolutions.gd` (Phase 2–12) | At 1280×720, 640×360, 1024×768: HUD with `W: Slingshot   A: Potion x2` **and "Donut HP: 0 / 60 - DOWNED" fully on screen, its text fitting, clear of Carl's HP and the slot bar**, GAME OVER panel, action menu, camera; Floor 2's Slingshot pickup; Floor 3's signs clear of the HUD; a flying stone; Floor 4's three signs clear of the HUD; the two blobs, a glob and a stone on screen together; **Floor 5's three signs clear of the HUD; a downed Donut's DOWNED label drawn on screen, clear of the HUD; Donut's colour unlike both blobs'**; **Phase 9: the slot bar `W: Slingshot   A: Potion x2   S: Baseball Bat   D: Fists` on screen with its text fitting; "Baseball Bat   (on S)" in the menu; Floor 5's Hint and its Bat pickup (icon and label) on screen and clear of the HUD; Floor 6's three signs clear of the HUD; a blob drawn on screen while the Bat knocks it back**; **Phase 10: the HUD hint "Space: action menu     Esc: pause" on screen and fitting; the pause menu above the HUD and action menu, on screen and centred with its rows fitting; both questions on screen and centred with the warning, No and Yes fitting; the title after Return to Title on screen with the Floor 6 checkpoint**; **Phase 11: the renderer the window really uses (Compatibility; on Windows `opengl3_angle`, printed with the adapter); the title's Quit Game row on screen at each size, the three rows stacked above the save line, and Quit Game selected on screen**; **Phase 12: Floor 6's `Signs/StairsHint` clear of the HUD; the dropped Blast Bomb x2 pickup (icon and label) on screen; Floor 7's three signs on screen, fitting and clear of the HUD; the longest slot bar `W: Baseball Bat   A: Potion x2   S: Blast Bomb x12   D: Slingshot` on screen with its text fitting, and its menu row; a thrown bomb drawn on screen in flight, frozen under the pause menu and still drawn, and its explosion drawn; once, one explosion on the pair: both hit, all on screen; the pause menu and Return to Title now on Floor 7**; the title screen (with a Floor 7 save, and broken) and its confirmation. Prints SKIP and passes when run headless |
 | `test_enemy_navigation.gd` (Phase 7, 8) | Arenas with a real baked navigation mesh, each waiting until the map holds exactly its mesh: the Blob waits beyond 220 px, notices Carl behind a wall, gives up beyond 320 px; it follows a route around a wall to Carl (its own path bends round the wall's end), never overlaps the wall, never stalls, reaches him and hurts him every 0.8 s; with no way around it stops beside the wall without jittering; the Spitting Blob with Carl hidden walks around the wall and spits only once it sees him; **Phase 8: with Carl far away, a blob picks Donut behind the wall, walks around it without overlapping it, reaches her and hurts her 10 every 0.8 s (60 → 30)** |
 | `test_spitting_blob.gd` (Phase 7, 8)    | Arenas (Carl the only party member): its numbers; waits beyond 360 px, closes in and spits at 320 px, holds at 280 px, backs off to 180 px, gives up beyond 480 px; touching it never hurts; a wall stops it spitting, stepping into sight or removing the wall makes it spit at once; a glob takes exactly 10 HP once; walls stop globs; a glob flies past stairs, a pickup, another Spitting Blob and a Gelatinous Blob and hits Carl, hurting none of them nor its own blob, even when made to target enemies; 384 px / 96 ticks; 5 globs exactly 90 ticks apart, no burst; three stones kill it; Fists by facing; the menu freezes everything, no free glob, stone or burst |
 | `test_donut.gd` (Phase 8)               | Arenas: a new run (also after one where she was downed) gives Donut 60 / 60; Health 60, Hurtbox on `player_hurtbox`, the `party` group, Scratch's numbers; an enemy's touch takes 10 every 0.8 s; HP never below 0; Carl's point-blank punch and a stone through her never hurt her; Scratch never hurts Carl or Donut and never fires with no enemy near; exactly 10 per scratch, exactly 60 ticks apart, three kill a blob, none on a dead one; an enemy 38 px away is scratched, 46 px is not; the nearest of two only; she stays by Carl and follows him, never toward an enemy; downed at 0: HUD "0 / 60 - DOWNED" in another colour, grey, on her side, DOWNED label, cannot be hit; no following, no scratching, a touch finds nothing, nothing paused; she gets up on her 360th downed tick (not at 359) with exactly 30 / 60, looks normal, catches up with Carl, scratches again; 5 s of menu do not count toward the 6 s; GAME OVER (the tree pause) and a downed Carl hold her countdown |
 | `test_party_targeting.gd` (Phase 8)     | Arenas: an enemy picks Carl or Donut, whoever is nearest within 220 px, nobody beyond; keeps Donut every tick while Carl alternates 1 px nearer and farther for 2 s, and even with Carl much nearer; drops her beyond its chase range and picks Carl; drops a downed Donut on the next tick (picks Carl, or goes idle) and never goes back; picks her again when she gets up; the Blob chases Donut at its speed and its touch takes exactly 10 every 0.8 s; touching both, each touch hurts only the nearer; the Spitting Blob picks Donut, never spits at her through a wall (3 s), spits at once when the wall goes, the glob takes exactly 10, the next exactly 1.5 s later, a wall stops a glob flying at her, it drops her when she is downed and spits no more; it still spits at Carl; it keeps 280 px / backs off to 180 px from Donut; a glob hits only the first of Carl and Donut in its way (either order), once, flies past a Gelatinous Blob, and flies past a downed Donut to Carl |
-| `test_floor_05_run.gd` (Phase 8, 9)     | Real run: every level's exits lead one floor down, Floor 6 has none; Continue on a version 3 Floor 4 save (Carl 80, Donut 40) → Floor 4 with both HPs; its stairs → Floor 5: spawn, Donut, camera, sign, HUD (Carl 80, Donut 40), two blobs and a Spitting Blob, only the stairs down to Floor 6 (Phase 9), no loop, entry state and checkpoint (version 3, Donut 40); the penned blob picks Donut over Carl, walks around the pen wall, three scratches kill it while its three touches take her 40 → 10; Carl untouched; the entry state and save unchanged; Carl down → GAME OVER waits, Donut frozen; retry → Carl 80, Donut 40, enemies as authored; Donut downed by the penned blob: no GAME OVER, HUD and label DOWNED, the blob turns on Carl, Carl punches it dead, she never moved or scratched; the menu freezes her countdown and the enemies; she gets up after 6 s of play with 30 / 60 and follows Carl; GAME OVER while she is downed holds her countdown 7 s; retry → Donut 40; quit and Continue opens Floor 5 directly with everything, the penned blob going for Donut; a Floor 4 save with Donut at 0: she starts downed, Carl takes the stairs anyway, she arrives downed, the checkpoint says 0, enemies ignore her, she gets up after a fresh 6 s (359 ticks) on Floor 5 and can be picked again; New Game: Carl 100, Donut 60 / 60, save version 3 |
+| `test_floor_05_run.gd` (Phase 8, 9, 12) | Real run: every level's exits lead one floor down, Floor 7 has none (Phase 12; Floor 6 until then); Continue on a version 3 Floor 4 save (Carl 80, Donut 40) → Floor 4 with both HPs; its stairs → Floor 5: spawn, Donut, camera, sign, HUD (Carl 80, Donut 40), two blobs and a Spitting Blob, only the stairs down to Floor 6 (Phase 9), no loop, entry state and checkpoint (version 3, Donut 40); the penned blob picks Donut over Carl, walks around the pen wall, three scratches kill it while its three touches take her 40 → 10; Carl untouched; the entry state and save unchanged; Carl down → GAME OVER waits, Donut frozen; retry → Carl 80, Donut 40, enemies as authored; Donut downed by the penned blob: no GAME OVER, HUD and label DOWNED, the blob turns on Carl, Carl punches it dead, she never moved or scratched; the menu freezes her countdown and the enemies; she gets up after 6 s of play with 30 / 60 and follows Carl; GAME OVER while she is downed holds her countdown 7 s; retry → Donut 40; quit and Continue opens Floor 5 directly with everything, the penned blob going for Donut; a Floor 4 save with Donut at 0: she starts downed, Carl takes the stairs anyway, she arrives downed, the checkpoint says 0, enemies ignore her, she gets up after a fresh 6 s (359 ticks) on Floor 5 and can be picked again; New Game: Carl 100, Donut 60 / 60, save version 3 |
 | `test_baseball_bat.gd` (Phase 9)        | Arenas: a new run owns no Bat; its data (id, reusable, own icon; MeleeAttack 20 damage, 0.75 s, 36 px + 28 px = 64 px reach, `enemy_hurtbox`, blocked by `world`, 80 px / 0.3 s knockback); owned once, never removed, "Baseball Bat" with no quantity, snapshots, a new run clears it; not assignable before owned, then on W/A/S/D one at a time, next to Fists/Slingshot/potion, emptied when taken back; the pickup (label, icon; Donut and both enemies standing on it don't take it; Carl does, once; two collectors: one); swings right/up/left/down hit the enemy in front for 20, not the ones behind or beside; empty slots nothing; 20 then 10 (its last HP) kill a blob, which dies normally and is not pushed; one swing per tap and per 10-tick press, every 45 ticks while held, taps no faster, moving it to W keeps the cooldown; a swing through Donut hurts neither her nor Carl and pushes neither (no KnockbackReceiver); a thin wall within reach blocks the hit; knockback in four directions: visible at once, exactly 80 px, then no drift; exactly 18 ticks and the full 80 px for a blob chasing Carl, which then comes back; against a thick and a thin wall: stops against it, never overlaps or crosses, no sideways deflection; killed mid-push: stops at once, never moves or touches Carl; on a real navigation mesh: pushed into a wall it stops, then navigates back (fresh path ending at Carl) and touches him for 10; the Spitting Blob: no glob during the 18 push ticks, exactly 80 px, backs off again afterwards, next globs exactly 90 ticks after the one before; on a mesh it returns to 180 px and spits again; Fists (10, no push), stones (10, no push), Scratch (10 every 60 ticks, no push) and globs unchanged; a touch never pushes Carl; the menu: S selects nothing, freezes a push, completes it after, no free swing with S held, the blob chases again; a tree pause (GAME OVER) freezes a push, which then finishes its 80 px; HUD "S: Baseball Bat" and menu rows, unchanged by swinging |
-| `test_floor_06_run.gd` (Phase 9)        | Real run from a real Phase 8 save (`phase8_save_v3_floor_05.json`): every exit leads one floor down, Floor 5's to Floor 6, Floor 6 none, `floor_06` registered; Continue → Floor 5 without the Bat, its pickup there; collect it, menu "Baseball Bat   (no slot)", assign S through the menu, HUD, save unchanged; two Floor 5 deaths take it back (pickup back, S empty, entry HP, nothing duplicated); quit before Floor 6 → Continue without it; the Bat hits a Floor 5 blob for 20 and pushes it 80 px, a second hit kills it where it stands; Floor 5 → Floor 6: spawn, Donut, camera, sign, HUD with S: Baseball Bat, two blobs and a Spitting Blob as authored, no exits, entry state and save (version 3, owned_items slingshot + baseball_bat, S = baseball_bat), no loop; the Backstop blob comes for Carl, the Bat pushes it into the Backstop wall where it stops at x 563 without overlapping, then it comes back at Carl; GAME OVER during a push freezes it, nothing about it is saved, the retry has the blobs as authored with no push; two Floor 6 deaths keep the Bat on S with the entry HP; Continue opens Floor 6 with the Bat on S and it swings and knocks back at once; New Game: no Bat, no items, D = Fists, the Surface checkpoint owns nothing |
+| `test_floor_06_run.gd` (Phase 9, 12)    | Real run from a real Phase 8 save (`phase8_save_v3_floor_05.json`): every exit leads one floor down, Floor 5's to Floor 6, Floor 6's to Floor 7 and Floor 7 none (Phase 12), `floor_06` registered; Continue → Floor 5 without the Bat, its pickup there; collect it, menu "Baseball Bat   (no slot)", assign S through the menu, HUD, save unchanged; two Floor 5 deaths take it back (pickup back, S empty, entry HP, nothing duplicated); quit before Floor 6 → Continue without it; the Bat hits a Floor 5 blob for 20 and pushes it 80 px, a second hit kills it where it stands; Floor 5 → Floor 6: spawn, Donut, camera, sign, HUD with S: Baseball Bat, two blobs and a Spitting Blob as authored, only the stairs down to Floor 7 (Phase 12), entry state and save (version 3, owned_items slingshot + baseball_bat, S = baseball_bat), no loop; the Backstop blob comes for Carl, the Bat pushes it into the Backstop wall where it stops at x 563 without overlapping, then it comes back at Carl; GAME OVER during a push freezes it, nothing about it is saved, the retry has the blobs as authored with no push; two Floor 6 deaths keep the Bat on S with the entry HP; Continue opens Floor 6 with the Bat on S and it swings and knocks back at once; New Game: no Bat, no items, D = Fists, the Surface checkpoint owns nothing |
+| `test_blast_bomb.gd` (Phase 12)         | Arenas (122 checks): the bomb's data (consumable, own icon; ProjectileLauncher 1.0 s; Projectile 220 px/s, 240 px, 0 impact damage, stopped by enemies and walls; DetonateOnStop; AreaDamage 20, 72 px, enemy_hurtbox, walls shield; registered); a new run has none (also after one that had 3 on S); not assignable at 0; "Blast Bomb x2"; W/A/S/D one at a time; the slot empties at 0 and it is assignable again after more; snapshots never duplicate; thrown right/up/left/down from Carl's centre, one per tap, each spending exactly one; one per 10-tick press; holding S throws at 0, 60 and 120 ticks; taps no faster; a press half a second after a throw spends nothing; ready again exactly 60 ticks after a throw; none at 0; in the open exactly 240 px in 66 ticks, one explosion where it stopped, never again; a wall stops it at its face and the blob 52 px behind the wall is unhurt; an enemy stops it and loses exactly 20 once; a second `detonate()` does nothing; one explosion: a Gelatinous and a Spitting Blob each lose exactly 20 once, a second kills both, a dying one is not hit, four around it each lose 20; reach: a blob 84 px away is hit, 88 px is not; explosions at Carl's and Donut's centres and a bomb against a wall 50 px away hurt and move neither; no push, nothing moves; wall shielding: 60 px behind a wall nothing, 60 px in the open 20, wall removed 20; the flash shows 0.35 s then goes; a tree pause freezes a bomb in flight (still lands 240 px away) and a flash; the menu: S throws nothing, closing it with S held throws nothing, one throw after, no burst; Carl down + frozen: nothing thrown; HUD `S: Blast Bomb x2` → x1 → `S: —`, menu rows follow; **loot drop**: nothing while the enemy lives, its death gives nothing, one pickup exactly where it died ("Blast Bomb x2", bomb icon, in the blob's parent), it stays after the blob fades, Donut and two enemies on it and a stone and a bomb over it take nothing, Carl walking over it gets exactly 2 once, two collectors get 2 in all, a death announced twice drops once, a Spitting Blob drops too, a bomb kill drops too; the Bat (20, 80 px push) and a stone (10, no push) unchanged |
+| `test_floor_07_run.gd` (Phase 12)       | Real run from the real Phase 11 save (118 checks): every exit leads one floor down, Floor 6's to Floor 7, Floor 7 none, `floor_07` registered as "Floor 7"; Continue → Floor 6 with no bombs, the checkpoint written back identical to the Phase 11 file, the loot blob carrying Blast Bomb x2, no drop lying there; the Bat kills it: no bombs from the death, one "Blast Bomb x2" pickup where it died, walking over it gives exactly 2, the menu lists it, A assigns it, HUD `A: Blast Bomb x2`, the save unchanged; two Floor 6 deaths: no bombs, A back to the potion, nothing duplicated, the blob alive at its spawn with its drop unused, no pickup; pause > Return to Title > Yes, then Continue: no bombs, the blob alive; a bomb at the Backstop blob: exactly 20, x1 left; the stairs → Floor 7: spawn, Donut, camera, sign, HUD `A: Blast Bomb x1`, three Gelatinous Blobs and a Spitting Blob as authored, the pair within one blast, the shielded blob within 72 px of the wall's face with the wall in between, no exits, the checkpoint in memory and on disk (version 3, seven fields, blast_bomb 1, A = blast_bomb) and loaded back, no loop; the last bomb at the pair: both lose exactly 20, unmoved, Carl and Donut unhurt, 0 left, A empty, the menu without it; a Floor 7 death: the bomb back on A, the pair at 30; a bomb against the blast wall explodes at its face within 72 px of the blob behind it, which takes nothing; quit and Continue: Floor 7 with the bomb on A, which hits the pair; New Game: no bombs, only Fists, the Surface checkpoint without bombs |
 | `test_save_isolation.gd` (Phase 8)      | The save guard: in a test run the player's save path, look-alike paths (`user://test_saves/../savegame.json`, `user://test_saves_old/...`), the `.tmp` beside it and other files are refused, test-folder paths allowed; a stray file outside the folder is neither written, loaded nor deleted, each refusal reported; then, pointed at the player's save, SaveManager finds and loads nothing and refuses to write, and a level starting in that state cannot save its checkpoint; the player's save (if any) keeps its modification time; the test's own file still works |
 | `test_pause_menu.gd` (Phase 10)         | Real levels, keys through the input pipeline: every level (Surface, Floors 1–6) has exactly one pause menu, Escape opens it (Resume selected, rows, no focus), gameplay ticks stop, Escape and Enter on Resume resume, the save untouched; Up/Down wrap, Resume selected on reopening; paused Carl cannot move, turn, punch, fire, swing, drink or reassign; a key held while resuming gives no free action, then D/W/S/A work; Donut stops mid-stride; a blob touching Carl while Donut scratches it: nothing happens for 180 paused ticks, then the next scratch is exactly 60 and the next touch exactly 48 ticks of play after the last; the Spitting Blob's glob freezes in flight, nothing is spat for 180 ticks, globs exactly 90 ticks of play apart; a stone freezes then flies on, no extra stone; a Bat push freezes unfinished, then completes exactly 80 px; Donut gets up after exactly 360 ticks of play with or without a 180-tick pause (her countdown holds); Space/Escape between the two menus (echo included, same-frame key pairs): never both open, paused exactly when one is open; GAME OVER: Escape/Space open nothing, everything frozen, Enter retries, the pause menu works after; stairs and a pickup do nothing while paused and work after; **the lifecycle fix: stairs + death in one tick keep GAME OVER on the floor with a loadable checkpoint, then retry and stairs work** |
 | `test_return_to_title.gd` (Phase 10)    | Real title and Floor 6 from a seeded checkpoint (Carl 80, Donut 40, potion on A, Slingshot W, Bat S): the question's text, No selected, Escape and No go back to the paused menu, Down/Up toggle Yes/No, the live floor untouched (Carl 60, Donut 10, no potion, stone flying on); Yes: the title in the same process, unpaused, the level freed, no Carl/Donut/enemy/projectile left, the save byte-identical and not rewritten, the title says HP 80 (not 60), GameState holds no run; Continue restores everything (HP, items, slots, the killed blob back, 30 HP each, no projectiles); **Continue reads the disk: a different checkpoint written while the title is up and a stale run planted in GameState → Continue opens the disk's Carl 55 / Donut 25**; 5 Continue → play → Return cycles with identical node and connection counts (one Carl, Donut, HUD, action menu, pause menu, 3 enemies); New Game after returning asks (No keeps the save), Yes gives the canonical Surface run and checkpoint; the save is version 3 with its seven fields; a Phase 5 v1 and a Phase 6 v2 save load after returning, Continue twice each, the file becomes version 3 |
 | `test_quit_game.gd` (Phase 10)          | Real process exits: a seeded Floor 6 checkpoint, then `tests/support/quit_game_child.gd` in its own Godot process: Continue, live changes (Carl 60, Donut 10, no potion, a kill, a stone), pause > Quit Game (the warning, No selected, Escape and No cancel, Yes quits): exit code 0, no engine error or crash marker, the save byte-identical and last written on floor entry; the same with the window's close request; after each, this process's title and Continue restore the checkpoint; the helper refuses (exit 2, nothing run) the player's save path, a `test_saves/../` path and no path, and the player's save keeps its modification time |
-| `test_project_setup.gd` (Phase 11)      | Project settings in a real process: Use Custom User Dir on, Custom User Dir Name `DC CARL`; `OS.get_user_data_dir()` = app-data folder + `DC CARL` (printed), not `Godot/app_userdata/...`; `user://savegame.json` resolves inside it; no game script names an absolute or per-user path; the test guard refuses the player's save (also through `test_saves/../`), this test's own file is in `test_saves/` inside the new folder; the Compatibility renderer, `driver.windows` = `opengl3_angle`, the other platforms' drivers and both fallbacks at Godot's defaults, `project.godot`'s only driver line; version 0.11.0; save format 3 |
+| `test_project_setup.gd` (Phase 11, 12)  | Project settings in a real process: Use Custom User Dir on, Custom User Dir Name `DC CARL`; `OS.get_user_data_dir()` = app-data folder + `DC CARL` (printed), not `Godot/app_userdata/...`; `user://savegame.json` resolves inside it; no game script names an absolute or per-user path; the test guard refuses the player's save (also through `test_saves/../`), this test's own file is in `test_saves/` inside the new folder; the Compatibility renderer, `driver.windows` = `opengl3_angle`, the other platforms' drivers and both fallbacks at Godot's defaults, `project.godot`'s only driver line; version 0.12.0 (Phase 12); save format 3 |
 | `test_title_quit.gd` (Phase 11)         | Real title screen, keys through the input pipeline: no save → Continue greyed, New Game selected, Quit Game offered, Up/Down go round New Game and Quit Game only; a Floor 6 save → Continue selected, Up/Down round all three; New Game's question (No selected, its Up/Down leave the menu alone, Escape back, save untouched); an unloadable save → New Game selected, Quit Game offered, New Game still asks; Floor 6 > Return to Title → Quit Game selectable, then Continue restores the checkpoint. Real process exits (`quit_game_child.gd`): Quit Game on the title with no save (exit 0, no file created), with the save (exit 0, byte-identical, not rewritten), and after Return to Title (exit 0, the checkpoint, last written on floor entry); each pressed with Quit Game selected and GameState the title's cleared run |
-| `test_floor_04_run.gd` (Phase 7–9)      | Real run from a real Phase 6 Floor 3 save: title → Continue → Floor 3 (the same checkpoint saved again as version 3 with Donut 60 / 60); every level's exits lead one floor down, **Floor 4's only exit to Floor 5**, Floor 5's to Floor 6 (Phase 9), Floor 6 none; Floor 3 → Floor 4 arrival and checkpoint (version 3); the Blob walks around wall A and three punches kill it; the Spitting Blob walks around wall B, spits only in sight, the menu freezes it and its glob; globs take Carl to 0 HP, GAME OVER waits; retry restores everything; GAME OVER with a glob in flight freezes it; three stones kill the Spitting Blob; quit and Continue on Floor 4; New Game starts clean (Donut 60 / 60). Donut is present and fights along throughout |
+| `test_floor_04_run.gd` (Phase 7–9, 12)  | Real run from a real Phase 6 Floor 3 save: title → Continue → Floor 3 (the same checkpoint saved again as version 3 with Donut 60 / 60); every level's exits lead one floor down, **Floor 4's only exit to Floor 5**, Floor 5's to Floor 6 (Phase 9), Floor 6's to Floor 7 and Floor 7 none (Phase 12); Floor 3 → Floor 4 arrival and checkpoint (version 3); the Blob walks around wall A and three punches kill it; the Spitting Blob walks around wall B, spits only in sight, the menu freezes it and its glob; globs take Carl to 0 HP, GAME OVER waits; retry restores everything; GAME OVER with a glob in flight freezes it; three stones kill the Spitting Blob; quit and Continue on Floor 4; New Game starts clean (Donut 60 / 60). Donut is present and fights along throughout |
 
 Every test uses its own save file under `user://test_saves/`, and SaveManager refuses anything
 else in a test run (see Persistent save > Test save isolation). The child process of
@@ -1231,163 +1465,137 @@ it only runs when one of them starts it; Phase 11 added its `title_quit` and `re
 takes its save file on the command line and refuses, before doing anything, a path outside that
 folder or no path; being a `-s` run, SaveManager would refuse the player's save too.
 
-## Validation performed (Phase 11)
-All runs used Godot 4.7.2.stable.official on this machine (Intel UHD Graphics, driver
-31.0.101.4032, 60 Hz). (Phase 10's full validation record is in `PROJECT_STATE.md` at commit
-`8dff143`; its shutdown findings are summarised below.) Anything that could write a real save ran
-either as a guarded test (`-s`, its own file in `user://test_saves/`) or in a scratch copy of the
-project whose only differences were its own `custom_user_dir_name` (and, where keys were driven, a
-scratch-only driver autoload): `dc_carl_p11_baseline`, `dc_carl_p11_nosave`, `dc_carl_p11_stress`,
-`dc_carl_p11_mutation`. The scratch copies kept the project's renderer settings untouched.
-- **Baseline before changes:** HEAD `8dff143` = `origin/main`, clean tree. The Phase 10 suite, in a
-  scratch export of HEAD with its own user-data folder (so the baseline wrote nothing into the old
-  shared folder), passed **27 of 27** (725 s). The normal entry point (title screen, real window, no
-  script) ran 240 frames there: exit 0, no engine errors, "OpenGL API 3.3.0 - Build 31.0.101.4032"
-  (native OpenGL, as Phase 10 was).
-- **Save locations, before and after** (read-only snapshots: every file's size, time and SHA-256,
-  every folder's time):
-  - *old shared folder* `%APPDATA%\Godot\app_userdata\Carl & Donut Dungeon Prototype\`: 46 entries,
-    including `savegame.json` (281 bytes, 13:38:00, SHA-256 `597663e4d90c…`, the codex project's
-    format) and logs from the Phase 10 runs. **At the end of Phase 11 all 46 entries were
-    identical**: nothing in Phase 11 read, wrote, moved or deleted anything there;
-  - *new production folder* `%APPDATA%\DC CARL\`: did not exist at the start. The Phase 11 tests
-    and one normal title launch created it with `logs/`, `shader_cache/` and an empty
-    `test_saves/`. **`savegame.json` does not exist there** (no automated test and no game run
-    created it);
-  - *scratch folders*: only the `dc_carl_p11_*` folders above held saves.
-- **User-data folder at run time:** `OS.get_user_data_dir()` = `C:/Users/Owner/AppData/Roaming/DC
-  CARL` (`test_project_setup.gd`, printed). A normal launch of the real project (title screen, no
-  script) wrote its `logs/godot.log` into `%APPDATA%\DC CARL\logs\`, and nothing into the old
-  folder.
-- **Renderer at run time:** a normal launch of the real project prints
-  "OpenGL API OpenGL ES 3.0 (ANGLE 2.1.1 git hash: aaebda1c5a40) - Compatibility - Using Device:
-  Google Inc. (Intel) - ANGLE (Intel, Intel(R) UHD Graphics (0x000046A3) Direct3D11 vs_5_0 ps_5_0,
-  D3D11-31.0.101.4032)", and `RenderingServer.get_current_rendering_driver_name()` is
-  **`opengl3_angle`** (method `gl_compatibility`) in every windowed run: the resolution test and
-  all 234 stress processes and the 8 other validation runs below. No `--rendering-driver` argument was
-  used for any of them.
-- **Test suite:** `run_all.gd` passed **29 of 29** (729 s) on the final code. New: `test_project_setup.gd`
-  (55 checks), `test_title_quit.gd` (56 checks, three real child processes).
-  Changed: `test_windowed_resolutions.gd` (189 checks, real window, now under ANGLE),
-  `quit_game_child.gd` (two title modes), `game_test.gd` and `test_surface_traversal.gd` (a run that
-  ends before `finish()` fails; see Mutation checks). An earlier full run, before that harness change,
-  also passed 29 of 29 (736 s).
-- **Mutation checks** (a scratch copy with its own `config/name` and user-data folder, so no
-  mutation could reach `DC CARL` or the old folder; each mutation applied, its tests run, the file
-  restored; "caught" = FAIL lines or an exit code the unmutated copy does not have):
-  - custom user dir disabled (`test_project_setup`: "Use Custom User Dir is on", the folder is
-    `Godot/app_userdata/...`);
-  - custom dir name back to the shared name "Carl & Donut Dungeon Prototype" (`test_project_setup`);
-  - Windows driver back to native `opengl3` (`test_project_setup`, and `test_windowed_resolutions`
-    in a real window: "on Windows it runs through ANGLE (opengl3_angle): opengl3");
-  - save format bumped to 4 (`test_project_setup`, `test_save_manager`);
-  - title Quit rewriting the loaded save (`test_title_quit`: the file was rewritten after the floor
-    entry);
-  - title Quit saving a new run when there is no save (`test_title_quit`: a file was created);
-  - Quit Game as the first title selection (`test_title_quit`, `test_save_game`,
-    `test_surface_traversal`). **This one exposed a gap in the test harness:** a test that pressed
-    Enter on the title quit its own process through the game's `get_tree().quit()`, with exit code
-    0, before `finish()` could report its failed checks, so `test_save_game.gd` "passed". Fixed:
-    `game_test.gd` (and `test_surface_traversal.gd`, which has its own harness) now fail with exit
-    code 1 in `_finalize()` when the run ends before `finish()`. The quit child, which the game is
-    meant to end, opts out. After the fix all three tests catch it;
-  - tests allowed to use the production `savegame.json` (the guard always allowing)
-    (`test_save_isolation`, `test_project_setup`);
-  - Return to Title keeping the stale in-memory run (`test_return_to_title`, `test_title_quit`: the
-    child's GameState still held the floor entry when it quit).
-  **All 9 caught.**
-- **ANGLE shutdown stress** (real processes and windows, the project's default renderer with no
-  override, the scratch copies `p11_stress` (a Floor 6 save) and `p11_nosave`; "OS close" = a real
-  `WM_CLOSE` sent with `CloseMainWindow()` to that process only; for every run: exit code, the
-  driver the game reported, engine errors, crash markers, the save hash, and Windows Error
-  Reporting events 1000/1001 for Godot since the batch started):
-
-  | Run | Renderer reported | Processes | Exit 0 | Crashed | WER entries |
-  |-----|-------------------|-----------|--------|---------|-------------|
-  | Title screen, OS close | `opengl3_angle` | 60 | 60 | 0 | 0 |
-  | Title screen > Quit Game, with a save | `opengl3_angle` | 40 (+10, see below) | 50 | 0 | 0 |
-  | Title screen > Quit Game, no save | `opengl3_angle` | 20 (+1 smoke run) | 21 | 0 | 0 |
-  | Continue, play (walk, punch, fire, swing), pause > Quit Game > Yes | `opengl3_angle` | 60 | 59 | 0 | 0 |
-  | the same, supplementary batch | `opengl3_angle` | 20 | 20 | 0 | 0 |
-  | Continue, play, OS close mid-play | `opengl3_angle` | 20 | 20 | 0 | 0 |
-  | 10 × (Continue, play, Return to Title > Yes), then title > Quit Game | `opengl3_angle` | 3 (30 cycles) | 3 | 0 | 0 |
-
-  **No ANGLE run crashed** and Windows logged no crash for any Godot process. One pause-Quit run
-  (#12 of 60) did not exit on its own and is **not** counted as clean: its game was still running,
-  responsive and unpaused 90 s later. Its HUD showed the slots reassigned (`W: Fists  A: —  S: —
-  D: Potion x1`), which only the action menu can do, and only Space opens that. The scenario never
-  sends Space, so keyboard input from outside the driver reached the window (each stress window
-  takes focus when it opens), and the scripted Escape/Down/Enter never reached Yes. It was not a
-  shutdown fault: closed with `WM_CLOSE`, it exited at once, with no crash record. (Its exit code
-  could not be read: the shell that closed it had not started it.) The supplementary 20 runs were
-  all clean. The "+10" title-Quit runs were meant as a native-OpenGL diagnostic, but the wrapper
-  dropped the `--rendering-driver` argument, so they ran ANGLE (they report `opengl3_angle`); they
-  are counted here as ANGLE runs. Every run left the save file with the same hash, and every
-  Return to Title cycle came back with the same node counts (2 party members, 3 enemies, 1 HUD,
-  1 pause menu; 0 or 1 stone in flight).
-- **Native OpenGL diagnostic sample (not a stress test):** 10 title > Quit Game runs with
-  `--rendering-driver opengl3` (reported `opengl3`, "OpenGL API 3.3.0 - Build 31.0.101.4032"):
-  10 exited with 0. Too few runs to say anything about a fault seen in about 1 exit in 25; it only
-  shows that the diagnostic override still works.
-- **Phase 10's native OpenGL findings (history, unchanged):**
-
-  | Run (Phase 10) | Renderer | Runs | Crashed (0xC0000005) |
-  |----------------|----------|------|----------------------|
-  | Title screen, OS close | OpenGL (Intel driver) | 60 | 2 |
-  | Continue, play, OS close mid-play | OpenGL | 20 | 0 |
-  | Continue, play, pause > Quit Game > Yes | OpenGL | 60 | 4 |
-  | 10 × Return to Title cycles, then Quit Game | OpenGL | 3 processes | 0 |
-  | Phase 9 code, title screen, OS close | OpenGL | 60 | 1 |
-  | Empty Godot project, OS close | OpenGL | 40 | 0 |
-  | Title / pause Quit / mid-play close | ANGLE (command-line override) | 120 | 0 |
-
-  Every crash was an `APPCRASH` in `igxelpicd64.dll` (Intel's OpenGL driver 31.0.101.4032) at offset
-  `0x1ba457`, after the engine had shut down. Phase 11's change is the mitigation (Windows now
-  defaults to ANGLE), not a fix: the Intel driver was not updated and Godot was not changed.
-- **New-folder persistence** (scratch copy `p11_nosave`: the same settings, only the folder named
-  `dc_carl_p11_nosave`, so the check could not create your real save): the title said "No saved game
-  yet."; **New Game wrote `savegame.json` into that folder** (reported path
-  `C:/Users/Owner/AppData/Roaming/dc_carl_p11_nosave/savegame.json`, version 3, Surface, Carl 100,
-  Donut 60, Fists on D); Carl was hurt to 70; pause > Quit Game > Yes: exit 0, save unchanged. **A
-  new process:** "Saved at the start of The Surface - HP 100 / 100"; Continue gave Carl 100, Donut
-  60 (the checkpoint, not 70); Quit: exit 0. The old shared save kept its hash and time throughout.
-  The real `DC CARL` folder was checked separately (above): it is the folder the real project uses,
-  and it still has no save.
-- **Title Quit, real processes:** no save (`test_title_quit` child, and the 21 runs above): exit 0,
-  no file created. With a save (child, and the 50 runs): exit 0, file byte-identical and not
-  rewritten. After Gameplay > Return to Title (child, and the 3 cycle processes): exit 0, the save
-  still the floor-entry checkpoint. Every run started with Continue (with a save) or New Game (no
-  save) selected, never Quit Game.
-- **Playthrough under ANGLE** (the Phase 10 scripted playthrough, `p11_stress`, real window): the
-  title with the Floor 6 save; Continue; Escape froze everything for 2 s (actors, state unchanged);
-  Escape resumed; Space opened the action menu, Escape closed only it; Escape again opened the pause
-  menu; Enter on Resume; live changes (Carl 20, Donut 10, potion drunk, a blob killed); Return to
-  Title > No kept them; > Yes: the title said HP 80, the level was freed, the save unchanged,
-  GameState cleared; Continue ×4, each with 2 party members, 3 enemies, 1 HUD, 1 pause menu; GAME
-  OVER: Escape and Space opened nothing, Enter retried; Quit Game question (No selected), Escape
-  cancelled, Yes quit: exit 0. Then a combat run: a stone and a Spitting Blob glob in flight at each
-  size, and the Bat hitting a Gelatinous Blob for 20 and pushing it 80 px.
-- **Visual check under ANGLE** (screenshots inspected) at 1280×720, 640×360 and 1024×768: the title
-  with no save (Continue greyed, New Game selected, Quit Game) and with Quit Game selected; the title
-  with the Floor 6 save (Continue selected) and with Quit Game selected; ordinary gameplay with the
-  HUD; a stone and a glob in flight next to Carl and the Spitting Blob; the Bat's swing with the
-  blob pushed; the action menu; the pause menu; the Return to Title and Quit questions; GAME OVER;
-  the title after Return to Title. Everything is drawn as in Phase 10 (colours, text, tiles, the
-  dim layers); nothing is missing or garbled. At 640×360 the text is small but legible, as before.
-  The grey margins are outside the level's edge, and the off-centre view at GAME OVER after a
-  resize is the known paused-camera limitation.
-- **Codex project:** nothing under `../codex` was opened for writing, run or changed; its folder
-  is outside this repository and this phase.
+## Validation performed (Phase 12)
+All runs used Godot 4.7.2.stable.official on a **different machine from Phases 10–11**: Windows 10
+(user `Komputer`), an NVIDIA GeForce GTX 750 Ti (driver 32.0.15.6094), 60 Hz. (Phase 11's full
+validation record, including the ANGLE shutdown stress tables and the Intel native-OpenGL crash
+history, is in `PROJECT_STATE.md` at commit `41c57f2`; Phase 10's at `8dff143`.) Everything that
+could write a save ran either as a guarded test (`-s`, its own file in `user://test_saves/`) or in a
+scratch copy of the project whose only differences were its own `custom_user_dir_name` (and, for
+the played sessions, a scratch-only driver autoload): `dc_carl_p12_play`, `dc_carl_p12_mutation`.
+- **Baseline before changes:** HEAD `41c57f2` = `origin/main`, clean tree. This machine's `.godot`
+  class cache was stale (it predated Phase 9's `Knockback`), so the first suite attempt failed to
+  compile; `godot --headless --import` rebuilt it (no tracked file changed) and the unmodified
+  Phase 11 suite then passed **29 of 29** (763 s). The normal entry point (title screen, real window,
+  no script, 240 frames) exited 0 and reported "OpenGL ES 3.0 (ANGLE 2.1.1) … ANGLE (NVIDIA, NVIDIA
+  GeForce GTX 750 Ti Direct3D11 …)": **`opengl3_angle`**, as intended.
+- **Phase 11 fixture:** `tests/fixtures/phase11_save_v3_floor_06.json` was written by the unmodified
+  Phase 11 code (a scratch `-s` script: GameState set to Carl 80, Donut 40, a potion on A, the
+  Slingshot on W, the Bat on S, then Floor 6 opened, whose `Level._ready()` saved the checkpoint into
+  `user://test_saves/`), before any Phase 12 change; the scratch file was then deleted.
+- **Test suite:** `run_all.gd` passed **31 of 31** (841 s) on the Phase 12 code, and again **31 of 31**
+  (844 s) on the final committed tree (after comment-only and documentation edits). New:
+  `test_blast_bomb.gd` (122 checks), `test_floor_07_run.gd` (118 checks). Changed:
+  `test_save_manager.gd` (164), `test_save_migration.gd` (108), `test_windowed_resolutions.gd` (219,
+  real window, ANGLE), `test_floor_04/05/06_run.gd`, `test_project_setup.gd`, `test_pause_menu.gd`
+  (doc only; it checks every registered floor, now 8).
+- **Measured numbers:** a bomb thrown in the open flies exactly 240 px in **66 ticks**; the launcher
+  is ready again exactly **60 ticks** after a throw; holding the key throws at ticks 0, 60, 120; the
+  explosion flash lasts 21 ticks.
+- **Mutation checks** (`dc_carl_p12_mutation`, its own user-data folder; each mutation applied,
+  its tests run, the files restored; "caught" = FAIL lines or an exit code the unmutated copy does
+  not have; in the copy `test_project_setup.gd` always reports its two folder-name failures, which
+  were subtracted): Bomb does not consume quantity; Bomb consumes two; explosion damages Donut;
+  explosion damages Carl; explosion damages the same enemy twice; explosion passes through walls
+  (`blocking_layers` removed); explosion applies Bat knockback; enemy death adds the loot directly
+  without a pickup; a drop can be collected twice; a Floor 6 retry keeps newly earned bombs; Floor 7
+  loses checkpointed bombs; an unnecessary save-format bump to 4; `floor_07` missing from
+  `FloorRegistry`; upward stairs from Floor 7 to Floor 6; tests falling back to the production save
+  path (the harness pointing at `user://savegame.json` and the guard allowing it).
+  **All 15 caught** (by `test_blast_bomb`, `test_floor_07_run`, `test_floor_06_run`,
+  `test_save_manager`, `test_save_migration`, `test_project_setup` and `test_save_isolation`).
+- **Real gameplay, real processes** (`dc_carl_p12_play`, the normal title screen as main scene,
+  real windows, real key events through Godot's input pipeline and held move actions; no
+  `--rendering-driver` argument: every run reported `opengl3_angle`). Run at **1280×720, 640×360 and
+  1024×768**, each size from a fresh copy of the real Phase 11 Floor 6 save:
+  - *Session 1* (28 checks each size, all passed): the title offers "Saved at the start of Floor 6";
+    Continue; no bombs; the loot blob carries its LootDrop; Carl walks to it and kills it with the
+    Bat; one "Blast Bomb x2" pickup exactly where it died, no bombs yet; walking over it gives 2;
+    the menu lists "Blast Bomb x2 (no slot)", A assigns it, HUD "A: Blast Bomb x2"; a bomb thrown
+    at the west wall right beside Carl (the blast centre 34 px from him, Donut beside him) leaves Carl 70 → 70 and Donut 40 → 40 and moves
+    Carl 0 px; 1 left; a lethal hit through Carl's Hurtbox (the driver's shortcut to GAME OVER):
+    GAME OVER waits, Enter: no bombs, A = potion again, the blob back at its spawn, no drop;
+    bombs earned again, pause > Return to Title > Yes: the title still says Floor 6, the save
+    unchanged; Continue: no bombs, the blob alive; bombs earned again; a bomb at the Backstop blob
+    (which had noticed Carl and was walking at him): Escape while it flies froze it in place, the
+    blast hit the blob for exactly [20], it was not knocked back (0.92 px in the next tick, walking),
+    HUD "A: Blast Bomb x1"; the Bat took its last 10; Carl walked to the stairs past the Spitting
+    Blob; Floor 7: 1 bomb on A, the checkpoint on disk version 3 with `"blast_bomb": 1` and
+    `"action_a": "blast_bomb"`, no stairs. Then pause > Quit Game > Yes: **exit 0**.
+  - *Session 2*, a **new process** on that save (12 checks each size, all passed): the title says
+    "Saved at the start of Floor 7"; Continue: HUD "A: Blast Bomb x1"; the menu lists "Blast Bomb x1
+    (on A)"; from (330, 176) the last bomb hits the pair: both 30 → 10 from one explosion, neither
+    moved, Carl and Donut unhurt, 0 left, "A: —", the menu without it; GAME OVER, Enter: Blast Bomb
+    x1 back on A; a bomb against the blast wall: it exploded 66 px from the blob behind the wall,
+    which kept 30 HP; the pair noticed Carl and came for him: one Slingshot stone [10], the Bat [20,
+    10]; Donut with Carl. Quit Game: **exit 0**; the save file's hash was the same before and after
+    (Continue and the retry re-save the same checkpoint).
+  - *Fists* (a short extra real process on the migrated Floor 2 save): Continue, the Floor 2 blob
+    punched to death with D, [10, 10, 10]; exit 0.
+  - *Version 1 save* (a copy of the Phase 5 Floor 2 fixture): the title offers "Saved at the start of
+    Floor 2"; Continue opens Floor 2; the file became version 3 with no bombs; exit 0.
+  - No engine error, warning or crash marker in any of these logs.
+- **Visual check under ANGLE** (the sessions' screenshots, inspected) at all three sizes: the title
+  (Floor 6 and Floor 7 saves); Floor 6 on arrival with the loot sign; the dropped "Blast Bomb x2"
+  pickup with its bomb icon; the menu with "Blast Bomb x2 (no slot)" and "(on A)"; the HUD with the
+  bomb; a bomb in flight (charcoal, with a fuse spark and trail, unlike the pale stone and violet
+  glob); the pause menu over a frozen bomb; the explosion on the Backstop blob (an orange disc the
+  size of the blast with a bright core); the point-blank blast; the grouped explosion covering both
+  blobs; the shielded explosion at the blast wall; GAME OVER on Floors 6 and 7; the HUD after the
+  last bomb ("A: —"); the menu without the bomb; Floor 7 on arrival. Everything is drawn; nothing is
+  missing or garbled. At 640×360 the text is small but legible, as before, and world signs near the
+  top can slide under the HUD (the known camera-limit issue). The explosion disc is also drawn over
+  the wall it is shielded by (a placeholder simplification, listed below).
+- **Save locations, before and after** (read-only snapshots: every file's SHA-256, size and time):
+  - *production folder* `%APPDATA%\DC CARL\`: **no `savegame.json` at the start and none at the
+    end**. The tests and the one normal title launch only created `logs/`, `shader_cache/`,
+    `objectdb_snapshots/` and `test_saves/` (empty at the end);
+  - *old shared folder* `%APPDATA%\Godot\app_userdata\Carl & Donut Dungeon Prototype\`: 11 files
+    (its `savegame.json`, logs, shader cache): **identical hashes and timestamps at the end**;
+  - *sibling project* `../dc_carl_codex`: `git status` and HEAD (`3e5b9de`) identical before and
+    after; nothing there was opened, run or changed;
+  - scratch saves lived only in the `dc_carl_p12_*` folders.
 - No test file is left in `test_saves/`, and no save file is tracked by Git.
 
 ## Known issues / limitations
+- **Blast Bomb, area damage and drops (Phase 12 placeholders and simplifications):**
+  - the bomb, its fuse spark and the explosion are drawn shapes: no sprite animation, particles,
+    sound, screen shake or throwing arc (it flies straight, top-down). The explosion's disc is drawn
+    as a full circle, also over and beyond walls, although the damage behind a wall is shielded;
+  - the bomb is thrown in Carl's facing direction, which follows the last arrow keys held,
+    diagonals included; there is no separate aiming. It is a point (a ray), so it passes between
+    two enemies whose Hurtboxes do not touch its centre line, and it stops on the **first** enemy
+    in its path even if the player meant one behind it;
+  - thrown at a wall right in front of Carl, it explodes there: harmless to Carl and Donut by
+    design (their Hurtboxes are on the player's side), so the bomb is never a risk to the player;
+  - shielding is decided by one ray between the two centres, as for the Bat: an enemy whose centre
+    is hidden behind a wall corner is shielded even if part of it shows, and one whose centre is
+    visible is hit even if most of it is behind the corner. Only walls (`world`) shield; Donut,
+    other enemies and Carl never do;
+  - a blast does not alert enemies: an idle enemy it hurts stays idle until Carl comes within its
+    detection range (detection is by distance, as since Phase 2);
+  - a dying enemy (fading out) is neither hit by a blast nor stops a bomb, as for stones;
+  - drops are deterministic only: one item and quantity per enemy, no chances, rarity or tables.
+    The drop appears exactly where the enemy's centre was, which is always a spot Carl can reach
+    (enemy bodies keep clear of walls like his);
+  - Floor 6's loot blob is marked by a world sign placed where it waits; once it chases Carl the
+    sign stays behind;
+  - a Blast Bomb pickup on Floor 6 could only be kept by reaching Floor 7 with it; quitting or
+    dying before that takes it back, by design (the floor-entry checkpoint rule);
+  - Floor 7 is a small test room with no exit ("Prototype: the way further down is not built
+    yet."). Walking straight in wakes the pair (they notice Carl within 220 px).
+- **This phase ran on a different machine** from Phases 10–11 (user `Komputer`, an NVIDIA GeForce
+  GTX 750 Ti with driver 32.0.15.6094, and the sibling project at `../dc_carl_codex`). ANGLE started
+  and rendered normally there. The Intel native-OpenGL exit crash (below) was not re-tested: it is a
+  driver issue of the Phase 10–11 machine.
 - **Title screen and project setup (Phase 11 placeholders and simplifications):**
   - Quit Game on the title quits without asking, by design (nothing can be lost there);
   - a save made before Phase 11 is not offered (see "The old shared user-data folder" below);
   - there is no in-game graphics or renderer option, by design; Windows always asks for ANGLE, and
     Godot's default `fallback_to_native` would start native OpenGL only if ANGLE cannot start;
   - the stress windows take the keyboard focus as they open, so typing elsewhere during a stress
-    run can reach a game window (it happened once in Phase 11; see Validation performed);
+    run can reach a game window (it happened once in Phase 11; see its validation record at
+    commit `41c57f2`);
   - in a *broken* test run where the game quits the test process mid-test (only seen with an
     injected regression), the headless process sometimes ends with an access violation
     (`0xC0000005`) instead of exit code 1. Either way the run fails; normal test runs never
@@ -1432,7 +1640,7 @@ scratch-only driver autoload): `dc_carl_p11_baseline`, `dc_carl_p11_nosave`, `dc
   code. That is still a driver/environment issue: neither the Intel driver nor Godot was changed
   or fixed. Since Phase 11 the project runs through ANGLE (Direct3D 11) on Windows by default, so a
   normal launch no longer uses that path; Phase 11's ANGLE stress runs gave **0 crashes in 234 real processes** (see
-  Validation performed (Phase 11)). Native OpenGL is still reachable for diagnosis
+  Phase 11's validation record in `PROJECT_STATE.md` at commit `41c57f2`). Native OpenGL is still reachable for diagnosis
   (`--rendering-driver opengl3`) and would still show the crash. Updating the Intel driver was
   deliberately not done here (machine administration, outside the project). Nothing is lost if it
   happens: the game saves only on entering a floor, never at exit.
@@ -1497,7 +1705,7 @@ scratch-only driver autoload): `dc_carl_p11_baseline`, `dc_carl_p11_nosave`, `dc
     included); there is no separate aiming;
   - a projectile is a point (a ray), not a disc: it hits whatever its centre line touches;
   - projectiles are not saved: quitting mid-flight loses them (like everything mid-floor).
-- **Floors 3, 4, 5 and 6 are small combat-test rooms.** Floor 6 has no exit ("Prototype: the way
+- **Floors 3, 4, 5, 6 and 7 are small combat-test rooms.** Floor 7 has no exit ("Prototype: the way
   further down is not built yet."). The Floor Guardian, Dungeon Brute and prototype-complete
   exit (GAME_SPEC §14) are later work. Floor 5's penned blob goes for Donut as soon as she
   arrives (by design); a player who walks straight on leaves her to fight it alone.
@@ -1508,7 +1716,7 @@ scratch-only driver autoload): `dc_carl_p11_baseline`, `dc_carl_p11_nosave`, `dc
   Floor 2** (only possible by editing the save). Walking over it then changes nothing.
 - **Save system scope (by design):** one slot; saves only on entering a floor or starting a
   new game, so quitting mid-floor loses that floor's progress (including a Slingshot or a
-  Baseball Bat found there); no cloud saves; no save-management UI beyond New Game's confirmation.
+  Baseball Bat found there, or Blast Bombs dropped there); no cloud saves; no save-management UI beyond New Game's confirmation.
 - **Save format:** a version 1 file stays version 1 on disk until the next checkpoint
   (Continue writes one immediately). Adding an item or floor needs a line in
   `ActionRegistry` / `FloorRegistry`.
@@ -1531,32 +1739,36 @@ scratch-only driver autoload): `dc_carl_p11_baseline`, `dc_carl_p11_nosave`, `dc
   the runtime load check. By design, this is not worked around.
 
 ## Manual verification required
-From Phase 11 your save is `%APPDATA%\DC CARL\savegame.json`. At the end of Phase 11 that file
-did not exist yet: nothing in Phase 11 created it (the tests never touch it; every game-mode run
-used a scratch copy with its own folder). The old
-`%APPDATA%\Godot\app_userdata\Carl & Donut Dungeon Prototype\` folder is no longer read or written.
-1. Open the project in Godot 4.7.2 and let it import the changes. The Output panel should show no
-   errors. Its first line about the renderer should mention **ANGLE** and **Direct3D11**
-   ("OpenGL API OpenGL ES 3.0 (ANGLE …) … Direct3D11 …"), not "OpenGL API 3.3.0 - Build …".
-2. Press **F5**. The title says "No saved game yet.", Continue is greyed out, **New Game** is
-   selected and **Quit Game** is below it. (Your old save is not offered: see Known issues.)
-3. **Down**: Quit Game is selected. **Down** again: back to New Game. **Up**: Quit Game. **Enter**:
-   the game closes at once, with no question. `%APPDATA%\DC CARL\` has no `savegame.json`.
-4. **F5**, **Enter** (New Game): the Surface. `%APPDATA%\DC CARL\savegame.json` now exists (and
-   nothing changes in the old folder). Go down a floor or two, then Escape > Quit Game > Yes.
-5. **F5**: the title offers **Continue** (selected), New Game and Quit Game, and says where you
-   saved. **Enter**: the saved floor. Escape > Return to Title > Yes: the title again. **Down,
-   Down, Enter** (Quit Game): the game closes; the save file's date does not change.
-6. The Phase 10 checks still apply: Escape pauses and freezes everything, Space/Escape in the
-   action menu, the Return to Title and Quit questions (No selected), GAME OVER waits for Enter.
-7. Close and relaunch a number of times (title, mid-play window close, pause > Quit Game). No
-   exit should crash. If one does, note how you launched it (a `--rendering-driver opengl3` run is
-   expected to be able to crash; see Known issues).
+Your save is `%APPDATA%\DC CARL\savegame.json` (Phase 11). Nothing in Phase 12 created or changed
+it: the tests never touch it, and every game-mode run used a scratch copy with its own folder.
+1. Open the project in Godot 4.7.2 and let it import the changes (a new icon, three scripts, four
+   scenes). The Output panel should show no errors; the renderer line should still mention
+   **ANGLE** and **Direct3D11**.
+2. Reach Floor 6 (Continue if your save is on Floor 5 or 6, or play down from a New Game). Near the
+   south-west Gelatinous Blob a sign reads "This blob carries Blast Bombs." Kill it (the Bat or the
+   Slingshot): a bomb icon labelled "Blast Bomb x2" appears where it died; nothing is added until you
+   walk over it. Walk over it: the pickup disappears.
+3. **Space**: the menu lists "Blast Bomb x2 (no slot)". Select it and press a slot key (for example
+   A); close the menu: the HUD shows "A: Blast Bomb x2".
+4. Face an enemy and tap **A**: a dark bomb flies straight, explodes on the enemy with an orange
+   circle, the enemy loses 20 (a 30 HP blob keeps a third of its bar), and the HUD says x1. Hold A:
+   at most one throw per second.
+5. Throw one at a wall right next to Carl and Donut: neither loses HP and nothing is pushed.
+6. Press **Escape** while a bomb is flying: it hangs in the air until you resume.
+7. Before taking the stairs, **Escape > Return to Title > Yes**, then **Continue**: Floor 6 again,
+   without the bombs, and the blob is back. Get them again and take the stairs in the far
+   south-east corner to **Floor 7 - Blast Range** with at least one bomb.
+8. On Floor 7, walk right from the start and throw at the two blobs standing together: both lose
+   20 from one explosion. Throw one at the thin wall in the south with the blob behind it (from its
+   west side): the blob behind the wall is unhurt.
+9. Quit (Escape > Quit Game > Yes) and relaunch: Continue opens Floor 7 with the bombs you entered
+   it with, on the same key.
+10. There are no stairs on Floor 7; nothing leads back up.
 
 ## Next phase
-Phase 12 is **not specified** here. Provide its prompt, with acceptance criteria, after
-Phase 11 is reviewed. (Stairs that open only after goals or events, and countdown timers,
-discussed as possible future designs, were deliberately not started.)
+Phase 13 is **not specified** here. Provide its prompt, with acceptance criteria, after Phase 12 is
+reviewed. (Random loot tables, explosion knockback and Floor 8, possible next steps, were
+deliberately not started.)
 
 Groundwork for later phases:
 - **Donut:** her numbers are exports on `donut.tscn` (`Health.max_health`, `down_time`,
@@ -1576,7 +1788,12 @@ Groundwork for later phases:
 - **More reactions:** `Knockback` + `KnockbackReceiver` are the pattern. Carl or Donut could be
   made pushable by giving them a receiver (and making their scripts respect it); an enemy attack
   could push by setting its own knockback numbers. Neither is done yet.
-- **More floors:** a new scene, stairs down from the previous floor (Floor 6 has none yet),
+- **More floors:** a new scene, stairs down from the previous floor (Floor 7 has none yet),
   and a line in `FloorRegistry`.
+- **More drops:** a `LootDrop` child on any placed enemy (see "To make an enemy drop something").
+  Random or weighted drops would extend `LootDrop` (for example a list of item/quantity/weight
+  entries and one roll on death); the pickup, checkpoint and save sides would not change.
+- **More area damage:** `AreaDamage` is reusable as it is (see "To add another area-damage item"):
+  another explosive, a spell, or an enemy's blast on `player_hurtbox`.
 - **Save format changes:** bump `SaveManager.SAVE_VERSION` to 4, add `_migrate_version_3()`,
   and chain the migrations in `decode()`.

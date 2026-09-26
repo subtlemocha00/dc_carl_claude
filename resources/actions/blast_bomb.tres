@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="ActionDefinition" format=3 uid="uid://dbxer5l7jc6b5"]
+
+[ext_resource type="Script" uid="uid://5sgq82s8oqjb" path="res://scripts/actions/action_definition.gd" id="1_definition"]
+[ext_resource type="Texture2D" uid="uid://bsnq1kvxdxtcf" path="res://assets/items/blast_bomb.png" id="2_icon"]
+[ext_resource type="PackedScene" uid="uid://dlvtsfpbo5sqv" path="res://scenes/actions/blast_bomb.tscn" id="3_performer"]
+
+[resource]
+script = ExtResource("1_definition")
+id = &"blast_bomb"
+display_name = "Blast Bomb"
+description = "Thrown the way Carl faces. It explodes on the first enemy or wall it hits, or when it lands, for 20 damage to every enemy in the blast. Walls block the blast; it never hurts Carl or Donut. Each throw uses one."
+icon = ExtResource("2_icon")
+consumable = true
+performer_scene = ExtResource("3_performer")

@@ -1,0 +1,9 @@
+[gd_scene format=3 uid="uid://ce25ia4xq0u4c"]
+
+[ext_resource type="Script" uid="uid://36tub4t8cd66" path="res://scripts/combat/area_damage.gd" id="1_area"]
+
+[node name="BlastExplosion" type="Node2D"]
+z_index = 1
+script = ExtResource("1_area")
+target_layers = 32
+blocking_layers = 1

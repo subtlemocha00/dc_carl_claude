@@ -1,0 +1,45 @@
+[gd_scene format=3 uid="uid://ba776r4vwmwo4"]
+
+[ext_resource type="Script" uid="uid://b0yye8uq0qi2y" path="res://scripts/combat/projectile.gd" id="1_projectile"]
+[ext_resource type="Script" uid="uid://m38c7fnqec38" path="res://scripts/combat/detonate_on_stop.gd" id="2_detonate"]
+[ext_resource type="PackedScene" uid="uid://ce25ia4xq0u4c" path="res://scenes/effects/blast_explosion.tscn" id="3_explosion"]
+
+[node name="BlastBomb" type="Node2D"]
+z_index = 1
+script = ExtResource("1_projectile")
+damage = 0
+speed = 220.0
+max_distance = 240.0
+target_layers = 32
+
+[node name="DetonateOnStop" type="Node" parent="."]
+script = ExtResource("2_detonate")
+explosion_scene = ExtResource("3_explosion")
+
+[node name="Trail" type="Polygon2D" parent="."]
+color = Color(0.55, 0.55, 0.6, 0.4)
+polygon = PackedVector2Array(-6, -4, -6, 4, -20, 0)
+
+[node name="Outline" type="Polygon2D" parent="."]
+color = Color(0.05, 0.05, 0.07, 1)
+polygon = PackedVector2Array(9, 0, 8.31, 3.44, 6.36, 6.36, 3.44, 8.31, 0, 9, -3.44, 8.31, -6.36, 6.36, -8.31, 3.44, -9, 0, -8.31, -3.44, -6.36, -6.36, -3.44, -8.31, -0, -9, 3.44, -8.31, 6.36, -6.36, 8.31, -3.44)
+
+[node name="Body" type="Polygon2D" parent="."]
+color = Color(0.24, 0.24, 0.28, 1)
+polygon = PackedVector2Array(7.5, 0, 6.93, 2.87, 5.3, 5.3, 2.87, 6.93, 0, 7.5, -2.87, 6.93, -5.3, 5.3, -6.93, 2.87, -7.5, 0, -6.93, -2.87, -5.3, -5.3, -2.87, -6.93, -0, -7.5, 2.87, -6.93, 5.3, -5.3, 6.93, -2.87)
+
+[node name="Shine" type="Polygon2D" parent="."]
+color = Color(0.7, 0.7, 0.78, 0.9)
+polygon = PackedVector2Array(4, -3.5, 3.41, -2.09, 2, -1.5, 0.59, -2.09, 0, -3.5, 0.59, -4.91, 2, -5.5, 3.41, -4.91)
+
+[node name="Fuse" type="Polygon2D" parent="."]
+color = Color(0.6, 0.4, 0.2, 1)
+polygon = PackedVector2Array(-8, -1.5, -13, -1.5, -13, 1.5, -8, 1.5)
+
+[node name="Spark" type="Polygon2D" parent="."]
+color = Color(1, 0.62, 0.12, 1)
+polygon = PackedVector2Array(-11, 0, -14, -4, -15, -1, -19, 0, -15, 1, -14, 4)
+
+[node name="SparkCore" type="Polygon2D" parent="."]
+color = Color(1, 0.95, 0.55, 1)
+polygon = PackedVector2Array(-12.4, 0, -12.87, 1.13, -14, 1.6, -15.13, 1.13, -15.6, 0, -15.13, -1.13, -14, -1.6, -12.87, -1.13)

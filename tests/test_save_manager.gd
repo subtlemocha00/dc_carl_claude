@@ -1,8 +1,8 @@
 extends "res://tests/support/game_test.gd"
-## Phase 5-9 SaveManager checks, on this test's own save file (never the player's):
+## Phase 5-12 SaveManager checks, on this test's own save file (never the player's):
 ## - the registries: every floor and action id maps back to itself, the known floors are
-##   exactly surface and floor_01 to floor_06 (Phase 9), and the known actions are Fists, the
-##   potion, the Slingshot and (Phase 9) the Baseball Bat;
+##   exactly surface and floor_01 to floor_07 (Phase 12), and the known actions are Fists, the
+##   potion, the Slingshot, (Phase 9) the Baseball Bat and (Phase 12) the Blast Bomb;
 ## - a checkpoint is written as JSON (save_version 3, Phase 8) with stable ids only, and loads
 ##   back unchanged, Donut's HP included; a Floor 3 checkpoint keeps the owned Slingshot in
 ##   owned_items, with no quantity; Floor 4 and Floor 5 checkpoints are written the same way;
@@ -12,6 +12,10 @@ extends "res://tests/support/game_test.gd"
 ##   save_version 3, with exactly the same fields: the Bat is just one more owned_items id. It
 ##   loads back with both owned and S = Baseball Bat. A Bat with a quantity, listed twice, or on
 ##   a slot without being owned is handled like the Slingshot (rejected / slot emptied);
+## - Phase 12: a Floor 7 checkpoint carrying one Blast Bomb on A is still save_version 3, with
+##   exactly the same fields: the bomb is one more "inventory" quantity. It loads back with 1 bomb
+##   on A. Bad bomb data (in owned_items, negative, fractional, a string, above 999, look-alike
+##   ids) is rejected; a bomb slot with no bombs (0 or missing) is emptied, the rest kept;
 ## - untrusted data is rejected without a crash or an engine error: malformed JSON, wrong
 ##   root type, unsupported or missing version, missing fields, unknown floor (or a scene
 ##   path instead of an id), bad HP, bad Donut data (missing, not an object, negative, above
@@ -35,11 +39,13 @@ const FISTS: ActionDefinition = preload("res://resources/actions/fists.tres")
 const POTION: ActionDefinition = preload("res://resources/actions/small_health_potion.tres")
 const SLINGSHOT: ActionDefinition = preload("res://resources/actions/slingshot.tres")
 const BAT: ActionDefinition = preload("res://resources/actions/baseball_bat.tres")
+const BOMB: ActionDefinition = preload("res://resources/actions/blast_bomb.tres")
 const FLOOR_2_PATH := "res://scenes/levels/floor_02.tscn"
 const FLOOR_3_PATH := "res://scenes/levels/floor_03.tscn"
 const FLOOR_4_PATH := "res://scenes/levels/floor_04.tscn"
 const FLOOR_5_PATH := "res://scenes/levels/floor_05.tscn"
 const FLOOR_6_PATH := "res://scenes/levels/floor_06.tscn"
+const FLOOR_7_PATH := "res://scenes/levels/floor_07.tscn"
 
 
 func _initialize() -> void:
@@ -61,23 +67,30 @@ func _check_registries() -> void:
 	for action_id: StringName in ActionRegistry.ACTIONS:
 		check(ActionRegistry.find(action_id).id == action_id, "action '%s' is registered under its own id" % action_id)
 	check(ActionRegistry.find(&"laser_sword") == null, "an unknown action id finds nothing")
-	check(ActionRegistry.ACTIONS.keys() == [&"fists", &"small_health_potion", &"slingshot", &"baseball_bat"],
-			"the known actions are fists, small_health_potion, slingshot and (Phase 9) baseball_bat", str(ActionRegistry.ACTIONS.keys()))
+	check(ActionRegistry.ACTIONS.keys() == [&"fists", &"small_health_potion", &"slingshot", &"baseball_bat", &"blast_bomb"],
+			"the known actions are fists, small_health_potion, slingshot, (Phase 9) baseball_bat and (Phase 12) blast_bomb",
+			str(ActionRegistry.ACTIONS.keys()))
 	check(ActionRegistry.find(&"baseball_bat") == BAT and not BAT.consumable and BAT.assignable,
 			"baseball_bat is the reusable, assignable Baseball Bat")
+	check(ActionRegistry.find(&"blast_bomb") == BOMB and BOMB.consumable and BOMB.assignable,
+			"blast_bomb is the consumable, assignable Blast Bomb")
+	for look_alike: StringName in [&"Blast_Bomb", &"blast_bombs", &"blast bomb", &"blast_bomb ", &"bomb"]:
+		check(ActionRegistry.find(look_alike) == null, "'%s' is not a known action" % look_alike)
 	for floor_id: StringName in FloorRegistry.FLOORS:
 		var scene_path := FloorRegistry.get_scene_path(floor_id)
 		check(ResourceLoader.exists(scene_path) and FloorRegistry.get_floor_id(scene_path) == floor_id,
 				"floor '%s' maps to an existing scene and back" % floor_id)
 	check(FloorRegistry.get_scene_path(&"floor_99") == "" and not FloorRegistry.has_floor(&"floor_99"), "an unknown floor has no scene")
-	check(FloorRegistry.FLOORS.keys() == [&"surface", &"floor_01", &"floor_02", &"floor_03", &"floor_04", &"floor_05", &"floor_06"],
-			"the known floors are surface and floor_01 to floor_06", str(FloorRegistry.FLOORS.keys()))
+	check(FloorRegistry.FLOORS.keys() == [&"surface", &"floor_01", &"floor_02", &"floor_03", &"floor_04", &"floor_05", &"floor_06", &"floor_07"],
+			"the known floors are surface and floor_01 to floor_07", str(FloorRegistry.FLOORS.keys()))
 	check(FloorRegistry.get_display_name(&"floor_04") == "Floor 4", "floor_04 is shown as 'Floor 4'")
 	check(FloorRegistry.get_display_name(&"floor_05") == "Floor 5" and FloorRegistry.get_scene_path(&"floor_05") == FLOOR_5_PATH,
 			"floor_05 is shown as 'Floor 5' and opens floor_05.tscn")
 	check(FloorRegistry.get_display_name(&"floor_06") == "Floor 6" and FloorRegistry.get_scene_path(&"floor_06") == FLOOR_6_PATH,
 			"floor_06 (Phase 9) is shown as 'Floor 6' and opens floor_06.tscn")
-	check(not FloorRegistry.has_floor(&"floor_07"), "there is no floor_07")
+	check(FloorRegistry.get_display_name(&"floor_07") == "Floor 7" and FloorRegistry.get_scene_path(&"floor_07") == FLOOR_7_PATH,
+			"floor_07 (Phase 12) is shown as 'Floor 7' and opens floor_07.tscn")
+	check(not FloorRegistry.has_floor(&"floor_08"), "there is no floor_08")
 
 
 func _check_round_trip() -> void:
@@ -184,6 +197,25 @@ func _check_round_trip() -> void:
 		check(loaded.action_slots == {ActionSlots.SLOT_W: SLINGSHOT, ActionSlots.SLOT_A: POTION, ActionSlots.SLOT_S: BAT, ActionSlots.SLOT_D: FISTS},
 				"the loaded layout has W = Slingshot, A = potion, S = Baseball Bat, D = Fists", str(loaded.action_slots))
 
+	print("-- A Floor 7 checkpoint with a Blast Bomb (Phase 12: still save_version 3)")
+	var floor_7 := _floor_7_checkpoint()
+	var floor_7_data: Dictionary = saves.encode(floor_7)
+	check(floor_7_data.keys() == floor_3_data.keys() and floor_7_data["save_version"] == 3 and floor_7_data["floor_id"] == "floor_07",
+			"a Floor 7 checkpoint has exactly the same fields and save_version 3: carrying bombs is no new kind of saved data",
+			str(floor_7_data.keys()))
+	check(floor_7_data["inventory"] == {"small_health_potion": 1, "blast_bomb": 1} and floor_7_data["owned_items"] == ["slingshot", "baseball_bat"],
+			"the bomb is stored as one more inventory quantity, never as an owned item",
+			"%s / %s" % [floor_7_data["inventory"], floor_7_data["owned_items"]])
+	check(floor_7_data["action_slots"] == {"action_w": "slingshot", "action_a": "blast_bomb", "action_s": "baseball_bat", "action_d": "fists"},
+			"A = blast_bomb is stored", str(floor_7_data["action_slots"]))
+	check(saves.save_checkpoint(floor_7), "the Floor 7 checkpoint is saved")
+	data = JSON.parse_string(FileAccess.get_file_as_string(saves.save_path))
+	check(data["save_version"] == 3 and data["inventory"]["blast_bomb"] == 1.0, "the file says save_version 3 and blast_bomb 1")
+	loaded = saves.load_checkpoint()
+	check(loaded != null and loaded.scene_path == FLOOR_7_PATH and _quantity(loaded, BOMB) == 1 and _quantity(loaded, POTION) == 1
+			and loaded.action_slots == {ActionSlots.SLOT_W: SLINGSHOT, ActionSlots.SLOT_A: BOMB, ActionSlots.SLOT_S: BAT, ActionSlots.SLOT_D: FISTS},
+			"it loads back as Floor 7 with 1 bomb on A (and the potion, the Slingshot, the Bat)", saves.last_error)
+
 	var surface := _floor_2_checkpoint()
 	surface.scene_path = FloorRegistry.get_scene_path(&"surface")
 	saves.save_checkpoint(surface)
@@ -208,7 +240,7 @@ func _check_rejected_data() -> void:
 		"no save_version": func(d: Dictionary) -> void: d.erase("save_version"),
 		"no floor_id": func(d: Dictionary) -> void: d.erase("floor_id"),
 		"an unknown floor": func(d: Dictionary) -> void: d["floor_id"] = "floor_99",
-		"floor_07, which does not exist": func(d: Dictionary) -> void: d["floor_id"] = "floor_07",
+		"floor_08, which does not exist": func(d: Dictionary) -> void: d["floor_id"] = "floor_08",
 		"a scene path instead of a floor id": func(d: Dictionary) -> void: d["floor_id"] = FLOOR_2_PATH,
 		"no carl": func(d: Dictionary) -> void: d.erase("carl"),
 		"HP as a string": func(d: Dictionary) -> void: d["carl"]["health"] = "90",
@@ -250,6 +282,15 @@ func _check_rejected_data() -> void:
 		"an owned item listed twice": func(d: Dictionary) -> void: d["owned_items"] = ["slingshot", "slingshot"],
 		"the Baseball Bat listed twice": func(d: Dictionary) -> void: d["owned_items"] = ["baseball_bat", "slingshot", "baseball_bat"],
 		"an unknown owned item next to the Bat": func(d: Dictionary) -> void: d["owned_items"] = ["baseball_bat", "golden_bat"],
+		"the consumable Blast Bomb in owned_items": func(d: Dictionary) -> void: d["owned_items"] = ["blast_bomb"],
+		"a negative Blast Bomb quantity": func(d: Dictionary) -> void: d["inventory"]["blast_bomb"] = -1,
+		"a fractional Blast Bomb quantity": func(d: Dictionary) -> void: d["inventory"]["blast_bomb"] = 1.5,
+		"a Blast Bomb quantity as a string": func(d: Dictionary) -> void: d["inventory"]["blast_bomb"] = "2",
+		"a Blast Bomb quantity above 999": func(d: Dictionary) -> void: d["inventory"]["blast_bomb"] = 1000,
+		"a null Blast Bomb quantity": func(d: Dictionary) -> void: d["inventory"]["blast_bomb"] = null,
+		"'Blast_Bomb' (wrong case) as an item": func(d: Dictionary) -> void: d["inventory"]["Blast_Bomb"] = 1,
+		"'blast_bombs' as an item": func(d: Dictionary) -> void: d["inventory"]["blast_bombs"] = 1,
+		"'blast_bomb ' (trailing space) as an item": func(d: Dictionary) -> void: d["inventory"]["blast_bomb "] = 1,
 		"no action_slots": func(d: Dictionary) -> void: d.erase("action_slots"),
 		"action_slots as a list": func(d: Dictionary) -> void: d["action_slots"] = [],
 		"a missing slot": func(d: Dictionary) -> void: d["action_slots"].erase("action_d"),
@@ -309,6 +350,22 @@ func _check_sanitized_slots() -> void:
 	data["owned_items"] = ["baseball_bat"]
 	loaded = _load_data(data)
 	check(loaded != null and loaded.action_slots.get(ActionSlots.SLOT_S) == BAT, "with the Bat owned, S = Baseball Bat is kept")
+	data = _valid_data()
+	data["action_slots"]["action_s"] = "blast_bomb"
+	loaded = _load_data(data)
+	check(loaded != null and not loaded.action_slots.has(ActionSlots.SLOT_S) and loaded.action_slots.get(ActionSlots.SLOT_A) == POTION
+			and _quantity(loaded, BOMB) == 0, "a Blast Bomb slot with no bombs listed is emptied, the rest is kept")
+	data["inventory"]["blast_bomb"] = 0
+	loaded = _load_data(data)
+	check(loaded != null and not loaded.action_slots.has(ActionSlots.SLOT_S) and _quantity(loaded, BOMB) == 0,
+			"blast_bomb 0 is accepted as no bombs, and its slot is emptied")
+	data["inventory"]["blast_bomb"] = 2
+	loaded = _load_data(data)
+	check(loaded != null and loaded.action_slots.get(ActionSlots.SLOT_S) == BOMB and _quantity(loaded, BOMB) == 2,
+			"with 2 bombs, S = Blast Bomb is kept")
+	data["action_slots"]["action_w"] = "blast_bomb"
+	loaded = _load_data(data)
+	check(loaded != null and loaded.action_slots.values().count(BOMB) == 1, "a Blast Bomb named in two slots keeps only one")
 	data = _valid_data()
 	data["carl"]["health"] = 90.0
 	data["donut"]["health"] = 45.0
@@ -392,6 +449,18 @@ func _floor_6_checkpoint() -> FloorEntry:
 	checkpoint.donut_health = 30
 	checkpoint.inventory = inventory.get_snapshot()
 	checkpoint.action_slots[ActionSlots.SLOT_S] = BAT
+	return checkpoint
+
+
+## A Floor 7 checkpoint (Phase 12): Floor 6's, plus one Blast Bomb, on A (the potion keeps no slot).
+func _floor_7_checkpoint() -> FloorEntry:
+	var checkpoint := _floor_6_checkpoint()
+	var inventory := Inventory.new()
+	inventory.restore_snapshot(checkpoint.inventory)
+	inventory.add(BOMB, 1)
+	checkpoint.scene_path = FLOOR_7_PATH
+	checkpoint.inventory = inventory.get_snapshot()
+	checkpoint.action_slots[ActionSlots.SLOT_A] = BOMB
 	return checkpoint
 
 

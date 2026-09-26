@@ -9,6 +9,9 @@
 [ext_resource type="PackedScene" uid="uid://cgljnpejjrnny" path="res://scenes/enemies/gelatinous_blob.tscn" id="8_blob"]
 [ext_resource type="PackedScene" uid="uid://ct41gcr0xgp3i" path="res://scenes/ui/action_menu.tscn" id="9_menu"]
 [ext_resource type="PackedScene" uid="uid://du63mbmcqj2b3" path="res://scenes/enemies/spitting_blob.tscn" id="10_spitter"]
+[ext_resource type="PackedScene" uid="uid://b1uxff71rwat4" path="res://scenes/props/stairs.tscn" id="11_stairs"]
+[ext_resource type="Script" uid="uid://dl6i2rn8b6b5i" path="res://scripts/enemies/loot_drop.gd" id="12_loot"]
+[ext_resource type="Resource" uid="uid://dbxer5l7jc6b5" path="res://resources/actions/blast_bomb.tres" id="13_bomb"]
 
 [sub_resource type="NavigationPolygon" id="NavigationPolygon_level"]
 outlines = Array[PackedVector2Array]([PackedVector2Array(0, 0, 1152, 0, 1152, 640, 0, 640)])
@@ -56,7 +59,7 @@ theme_override_font_sizes/font_size = 12
 text = "The Baseball Bat knocks enemies back. Walls stop them."
 horizontal_alignment = 1
 
-[node name="PrototypeNote" type="Label" parent="Signs"]
+[node name="StairsHint" type="Label" parent="Signs"]
 offset_left = 48.0
 offset_top = 272.0
 offset_right = 528.0
@@ -64,8 +67,35 @@ offset_bottom = 294.0
 theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_constants/outline_size = 4
 theme_override_font_sizes/font_size = 12
-text = "Prototype: the way further down is not built yet."
+text = "The stairs down to Floor 7 are in the far south-east corner."
 horizontal_alignment = 1
+
+[node name="LootSign" type="Label" parent="Signs"]
+offset_left = 200.0
+offset_top = 418.0
+offset_right = 440.0
+offset_bottom = 438.0
+theme_override_colors/font_color = Color(1, 0.86, 0.93, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 4
+theme_override_font_sizes/font_size = 12
+text = "This blob carries Blast Bombs."
+horizontal_alignment = 1
+
+[node name="StairsSign" type="Label" parent="Signs"]
+offset_left = 1012.0
+offset_top = 500.0
+offset_right = 1132.0
+offset_bottom = 520.0
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 4
+theme_override_font_sizes/font_size = 12
+text = "Down to Floor 7"
+horizontal_alignment = 1
+
+[node name="Stairs" parent="." instance=ExtResource("11_stairs")]
+position = Vector2(1072, 560)
+destination_scene_path = "res://scenes/levels/floor_07.tscn"
 
 [node name="Actors" type="Node2D" parent="."]
 y_sort_enabled = true
@@ -82,6 +112,11 @@ position = Vector2(536, 208)
 
 [node name="GelatinousBlob" parent="Actors" instance=ExtResource("8_blob")]
 position = Vector2(320, 480)
+
+[node name="LootDrop" type="Node" parent="Actors/GelatinousBlob"]
+script = ExtResource("12_loot")
+item = ExtResource("13_bomb")
+quantity = 2
 
 [node name="SpittingBlob" parent="Actors" instance=ExtResource("10_spitter")]
 position = Vector2(928, 224)

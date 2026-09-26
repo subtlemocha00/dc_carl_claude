@@ -190,9 +190,15 @@ Inventory contents:
   never used up, and the menu and the HUD show only their name. Finding one Carl already
   owns changes nothing.
 - Consumables have a quantity, shown in the menu and the HUD (for example "x2"). A consumable
-  whose quantity reaches 0 leaves the inventory.
+  whose quantity reaches 0 leaves the inventory. (Consumables so far: the Small Health Potion
+  and, since Phase 12, the Blast Bomb.)
 - Items are found as pickups in levels. Carl collects one by walking over it; there is no
   interaction key. Donut and enemies never collect pickups.
+- Since Phase 12 an enemy can also **drop** an item when it dies. The drop is set per enemy
+  placed in a level (an item and a quantity) and is always the same: no chances, rarities or
+  loot tables. It appears as an ordinary pickup where the enemy died, and Carl still has to walk
+  over it; the enemy's death alone gives him nothing. Floor 6's south-west Gelatinous Blob drops
+  Blast Bomb x2.
 
 HUD must eventually show all four action slots and their assigned items.
 
@@ -252,6 +258,29 @@ Phase 9), a melee weapon that knocks enemies back:
 - a push freezes with everything else while the game is paused (the menu, GAME OVER) and is
   never saved.
 
+The first area-damage item is the **Blast Bomb** (stable id `blast_bomb`, canonical since
+Phase 12), the "Bomb — throwable/AOE" of the pool above:
+- a consumable: counted ("Blast Bomb x2" in the menu and the HUD), one spent per throw, and it
+  leaves the inventory (and its slot empties) when the last one is thrown. With none, nothing is
+  thrown. Collecting more makes it assignable again;
+- it is found as Floor 6's enemy drop (Blast Bomb x2), and can be put on any of W, A, S or D,
+  in one slot at a time;
+- each use throws one bomb in Carl's facing direction (the same facing as every other action;
+  no mouse aiming). Holding the key throws once every 1.0 s (its cooldown); a short press
+  throws once;
+- the bomb flies straight at 220 px/s and explodes, once, when it hits an enemy, when it hits a
+  wall (it never passes through one), or after 240 px (about 1.1 s) if it hits nothing. It never
+  collects pickups, triggers stairs, or is stopped by Donut;
+- the explosion deals **20 damage** to **every enemy** in a circle of **72 px** radius (an enemy
+  counts when its body overlaps the circle), each enemy at most once per explosion. It hurts
+  Gelatinous and Spitting Blobs alike;
+- **walls block the blast**: an enemy with a wall between it and the centre of the explosion
+  takes nothing, even inside the 72 px;
+- it **never hurts Carl or Donut**, even at the centre of the blast, and it **knocks nothing
+  back** (area damage and knockback are separate; only the Bat pushes);
+- a bomb in flight and an explosion freeze with everything else while the game is paused, and
+  are never saved. The explosion shows briefly as an orange circle the size of the blast.
+
 ## 10. Dungeon structure
 
 Do not implement procedural generation for the three-floor prototype.
@@ -261,10 +290,11 @@ All three prototype dungeon floors should be manually authored scenes/layouts.
 General progression:
 Surface -> Floor 1 -> Floor 2 -> Floor 3 -> Prototype Complete screen.
 
-Playable progression since Phase 9: Surface -> Floor 1 -> Floor 2 -> Floor 3 -> Floor 4 -> Floor 5
--> Floor 6. Floor 3 has stairs down to Floor 4, Floor 4 down to Floor 5 and Floor 5 down to Floor 6,
-all manually authored combat-test floors (sections 14a, 14b and 14c); Floor 6 has no exit yet.
-The Floor 3 Guardian and the Prototype Complete screen are still to come.
+Playable progression since Phase 12: Surface -> Floor 1 -> Floor 2 -> Floor 3 -> Floor 4 -> Floor 5
+-> Floor 6 -> Floor 7. Floor 3 has stairs down to Floor 4, Floor 4 down to Floor 5, Floor 5 down to
+Floor 6 and Floor 6 down to Floor 7, all manually authored combat-test floors (sections 14a to
+14d); Floor 7 has no exit yet. The Floor 3 Guardian and the Prototype Complete screen are still to
+come.
 
 Progression is downward only. Once Carl descends, he can never return to the Surface or to a
 shallower floor. Levels have no stairs, exits or triggers that lead back up. This is a design
@@ -419,8 +449,19 @@ A walled weapon/knockback test room (stable id `floor_06`, 36 × 20 tiles) with 
 Blobs and one Spitting Blob. One blob waits just in front of a tall wall (the "backstop"), so
 knocking it back with the Bat pushes it into the wall, where it stops; another waits in the
 open south-west part of the room, where a push travels its full distance; the Spitting Blob is
-east of the backstop, with a pillar for cover. Nothing is scripted. Floor 6 has no exit yet
-(no Floor 7), and nothing leads back up to Floor 5.
+east of the backstop, with a pillar for cover. Nothing is scripted. Nothing leads back up to
+Floor 5.
+Since Phase 12 the south-west blob carries **Blast Bomb x2**, which it drops when it dies (a sign
+beside it says so), and Floor 6's only exit is the stairs down to Floor 7 in the far south-east
+corner.
+
+## 14d. Floor 7 — Blast Range (canonical since Phase 12)
+
+A walled area-damage test room (stable id `floor_07`, 36 × 20 tiles) with four enemies: two
+Gelatinous Blobs standing together (one Blast Bomb reaches both), a third Gelatinous Blob just
+behind a thin wall (inside the blast's reach from the wall's other face, but shielded by it), and
+a Spitting Blob in the east, with a pillar for cover. Nothing is scripted. Floor 7 has no exit yet
+(no Floor 8), and nothing leads back up to Floor 6.
 
 ## 15. Saving/checkpoints
 
@@ -444,6 +485,12 @@ Initial save design:
   The Baseball Bat (Phase 9) works the same way: found after entering Floor 5, it is taken back
   by a Floor 5 retry or by quitting and continuing (pickup back, slot empty); once Carl enters
   Floor 6 with it, the Floor 6 checkpoint owns it, with its slot, for retries and Continue.
+  Enemy drops (Phase 12) follow the same rule. Blast Bombs dropped on Floor 6 after entering it
+  are taken back by a Floor 6 retry, Return to Title or quitting: the bombs are gone, their slot
+  is emptied (and refilled with its floor-entry action), the enemy that dropped them is alive
+  again, and no dropped pickup lies there until it dies again. Bombs Carl carries into Floor 7
+  are part of the Floor 7 checkpoint, with their slot; a Floor 7 retry after throwing them gives
+  them back, as for potions.
 
 Persistent save (canonical since Phase 5):
 - There is one save slot, holding one floor-entry checkpoint: the floor Carl last entered,
@@ -477,6 +524,9 @@ Persistent save (canonical since Phase 5):
   mid-floor.
 - Phase 11 keeps **version 3**: the game's own user-data folder, the Windows renderer and the
   title's Quit Game add nothing to the save.
+- Phase 12 keeps **version 3**: Blast Bombs are one more consumable quantity in the saved
+  inventory (`"blast_bomb": 1`) and Floor 7 one more floor id. Older saves simply have no bombs.
+  Bombs in flight, explosions, enemy drops and dropped pickups are never saved.
 - No mid-floor saving, multiple save slots or cloud saves in the prototype.
 
 Current-run state (what survives level changes during one playthrough, held in memory) is
@@ -578,7 +628,7 @@ Do not implement unless the user later expands scope:
 - randomized item affixes
 - advanced lighting/rendering
 - voice acting
-- floors 7–20 (Floor 4 was added in Phase 7, Floor 5 in Phase 8 and Floor 6 in Phase 9 as
-  combat-test floors)
+- floors 8–20 (Floor 4 was added in Phase 7, Floor 5 in Phase 8, Floor 6 in Phase 9 and Floor 7
+  in Phase 12 as combat-test floors)
 - achievements
 - mod support

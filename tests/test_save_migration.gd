@@ -1,5 +1,5 @@
 extends "res://tests/support/game_test.gd"
-## Phase 6-9: loading saves from earlier phases, on this test's own save file.
+## Phase 6-12: loading saves from earlier phases, on this test's own save file.
 ## The two fixtures in tests/fixtures/ were written by the Phase 5 game itself (commit fd1d5e7,
 ## SaveManager.save_checkpoint()), so they are real version 1 files:
 ##   phase5_save_v1_floor_01.json: Floor 1, 80/100 HP, no items, W = Fists, D empty;
@@ -30,6 +30,11 @@ extends "res://tests/support/game_test.gd"
 ##   phase8_save_v3_floor_05.json (Carl 80/100, Donut 40/60, Slingshot on W, 1 potion on A), loads
 ##   unchanged, with no Bat, and is written back identically. Every migrated version 1 and 2 save
 ##   owns no Bat either.
+## - Phase 12 (the Blast Bomb is one more "inventory" quantity and Floor 7 one more floor_id, so
+##   the format stays version 3): a real version 3 save written by the Phase 11 game (commit
+##   41c57f2) on entering Floor 6, phase11_save_v3_floor_06.json (Carl 80/100, Donut 40/60,
+##   Slingshot on W, 1 potion on A, the Bat on S), loads unchanged, with no bombs, and is written
+##   back identically. The Phase 8 save and every migrated version 1 and 2 save have no bombs.
 ##
 ## Run from the project folder:
 ##     godot --headless --path . -s res://tests/test_save_migration.gd
@@ -42,6 +47,8 @@ const PHASE_6_FIXTURE_FLOOR_2 := "res://tests/fixtures/phase6_save_v2_floor_02.j
 const PHASE_6_FIXTURE_FLOOR_3 := "res://tests/fixtures/phase6_save_v2_floor_03.json"
 const PHASE_7_FIXTURE_FLOOR_4 := "res://tests/fixtures/phase7_save_v2_floor_04.json"
 const PHASE_8_FIXTURE_FLOOR_5 := "res://tests/fixtures/phase8_save_v3_floor_05.json"
+const PHASE_11_FIXTURE_FLOOR_6 := "res://tests/fixtures/phase11_save_v3_floor_06.json"
+const FLOOR_6_PATH := "res://scenes/levels/floor_06.tscn"
 const FLOOR_5_PATH := "res://scenes/levels/floor_05.tscn"
 const FLOOR_3_PATH := "res://scenes/levels/floor_03.tscn"
 const FLOOR_4_PATH := "res://scenes/levels/floor_04.tscn"
@@ -51,6 +58,7 @@ const FISTS: ActionDefinition = preload("res://resources/actions/fists.tres")
 const POTION: ActionDefinition = preload("res://resources/actions/small_health_potion.tres")
 const SLINGSHOT: ActionDefinition = preload("res://resources/actions/slingshot.tres")
 const BAT: ActionDefinition = preload("res://resources/actions/baseball_bat.tres")
+const BOMB: ActionDefinition = preload("res://resources/actions/blast_bomb.tres")
 
 
 func _initialize() -> void:
@@ -67,6 +75,7 @@ func _run_checks() -> void:
 	_check_other_versions()
 	_check_version_2_saves()
 	_check_phase_8_save_and_no_bat()
+	_check_phase_11_save_and_no_bombs()
 	await _check_continue_from_version_1()
 	await _check_continue_from_phase_7_floor_4()
 	finish()
@@ -245,6 +254,32 @@ func _check_phase_8_save_and_no_bat() -> void:
 	var from_version_1 := _load_data(data)
 	check(from_version_1 != null and not _inventory_of(from_version_1).has(BAT) and not from_version_1.action_slots.has(ActionSlots.SLOT_W),
 			"a version 1 file naming the Bat in owned_items and on W still owns no Bat: W is emptied")
+
+
+func _check_phase_11_save_and_no_bombs() -> void:
+	print("-- Phase 12: a real Phase 11 save (version 3) still loads; no older save has bombs")
+	var text := _write_fixture(PHASE_11_FIXTURE_FLOOR_6)
+	check(JSON.parse_string(text).get("save_version") == 3.0 and not text.contains("blast_bomb"),
+			"phase11_save_v3_floor_06.json is a save_version 3 file without bombs")
+	var loaded: FloorEntry = save_manager().load_checkpoint()
+	check(loaded != null and save_manager().last_error == "", "it loads", save_manager().last_error)
+	if loaded != null:
+		var inventory := _inventory_of(loaded)
+		check(loaded.scene_path == FLOOR_6_PATH and loaded.carl_health == 80 and loaded.donut_health == 40 and loaded.donut_max_health == 60,
+				"its floor (Floor 6), Carl's 80 HP and Donut's 40 / 60")
+		check(inventory.get_quantity(POTION) == 1 and inventory.has(SLINGSHOT) and inventory.has(BAT)
+				and inventory.get_quantity(BOMB) == 0 and not inventory.has(BOMB)
+				and loaded.action_slots == {ActionSlots.SLOT_W: SLINGSHOT, ActionSlots.SLOT_A: POTION, ActionSlots.SLOT_S: BAT, ActionSlots.SLOT_D: FISTS},
+				"its potion, Slingshot, Bat and slots, and no bombs")
+		check(_save_text() == text, "loading did not change the file")
+		check(JSON.parse_string(JSON.stringify(save_manager().encode(loaded))) == JSON.parse_string(text),
+				"Phase 12 writes exactly the same data back: still version 3, no new field")
+	for fixture: String in [FIXTURE_FLOOR_1, FIXTURE_FLOOR_2, PHASE_6_FIXTURE_FLOOR_2, PHASE_6_FIXTURE_FLOOR_3, PHASE_7_FIXTURE_FLOOR_4,
+			PHASE_8_FIXTURE_FLOOR_5]:
+		_write_fixture(fixture)
+		var older: FloorEntry = save_manager().load_checkpoint()
+		check(older != null and _inventory_of(older).get_quantity(BOMB) == 0 and not older.action_slots.values().has(BOMB),
+				"%s has no bombs, and no slot holds one" % fixture.get_file())
 
 
 func _check_continue_from_version_1() -> void:

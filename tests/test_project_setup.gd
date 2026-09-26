@@ -13,7 +13,7 @@ extends "res://tests/support/game_test.gd"
 ##   (driver.windows = "opengl3_angle"); every other platform keeps Godot's default driver, and
 ##   the fallbacks stay on. (The driver actually used is checked in a real window by
 ##   test_windowed_resolutions.gd; a headless run has none.)
-## - Version 0.11.0; the save format is still version 3.
+## - Version 0.12.0 (Phase 12); the save format is still version 3.
 ##
 ## Run from the project folder:
 ##     godot --headless --path . -s res://tests/test_project_setup.gd
@@ -103,7 +103,7 @@ func _check_renderer_settings() -> void:
 
 func _check_versions() -> void:
 	print("-- Versions")
-	check(ProjectSettings.get_setting("application/config/version") == "0.11.0", "the game version is 0.11.0",
+	check(ProjectSettings.get_setting("application/config/version") == "0.12.0", "the game version is 0.12.0",
 			str(ProjectSettings.get_setting("application/config/version")))
 	check(save_manager().SAVE_VERSION == 3, "the save format is still version 3", str(save_manager().SAVE_VERSION))
 

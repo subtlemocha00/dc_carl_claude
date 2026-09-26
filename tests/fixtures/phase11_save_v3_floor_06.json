@@ -1,0 +1,25 @@
+{
+	"action_slots": {
+		"action_a": "small_health_potion",
+		"action_d": "fists",
+		"action_s": "baseball_bat",
+		"action_w": "slingshot"
+	},
+	"carl": {
+		"health": 80,
+		"max_health": 100
+	},
+	"donut": {
+		"health": 40,
+		"max_health": 60
+	},
+	"floor_id": "floor_06",
+	"inventory": {
+		"small_health_potion": 1
+	},
+	"owned_items": [
+		"slingshot",
+		"baseball_bat"
+	],
+	"save_version": 3
+}

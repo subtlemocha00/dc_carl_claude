@@ -1,10 +1,12 @@
 class_name Projectile
 extends Node2D
 ## Something fired that flies in a straight line: Carl's slingshot stone
-## (scenes/projectiles/slingshot_stone.tscn) or a Spitting Blob's spit glob
-## (scenes/projectiles/spit_glob.tscn). A ProjectileLauncher creates it, records its `source`
-## and calls launch(). From then on the projectile moves by itself. Each physics tick it checks
-## the stretch it is about to fly along with a ray, and stops at the first thing on it:
+## (scenes/projectiles/slingshot_stone.tscn), a Spitting Blob's spit glob
+## (scenes/projectiles/spit_glob.tscn) or (Phase 12) Carl's thrown Blast Bomb
+## (scenes/projectiles/blast_bomb.tscn, which explodes where it stops: see DetonateOnStop).
+## A ProjectileLauncher creates it, records its `source` and calls launch(). From then on the
+## projectile moves by itself. Each physics tick it checks the stretch it is about to fly along
+## with a ray, and stops at the first thing on it:
 ## - a solid body on one of `blocking_layers`, such as a wall: the projectile stops there;
 ## - a Hurtbox on one of `target_layers` that can be hit: it deals `damage` once, then stops;
 ## - after flying `max_distance` pixels it stops by itself.
@@ -79,7 +81,9 @@ func _physics_process(delta: float) -> void:
 	_distance_flown += global_position.distance_to(hit["position"])
 	global_position = hit["position"]
 	var hurtbox := hit["collider"] as Hurtbox
-	if hurtbox != null:
+	# A projectile with damage 0 hurts nothing by hitting: the Blast Bomb (Phase 12) only explodes
+	# there (its DetonateOnStop), and the explosion does the damage.
+	if hurtbox != null and damage > 0:
 		hurtbox.take_hit(damage)
 	_stop(hit["collider"])
 

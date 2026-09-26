@@ -445,3 +445,57 @@ Required:
       the Phase 10 pause menu, inventory pause and GAME OVER work as before.
 - [ ] The save stays `save_version: 3`; version 1 and 2 saves still migrate.
 - [ ] Version in Project Settings: `0.11.0`.
+
+# Phase 12 — Enemy Loot Drops, Blast Bombs, Area Damage and Floor 7
+
+The Phase 3–11 rules still apply. No random loot tables, drop chances, rarity, currency, shops,
+crafting, new enemy species, bosses, new reusable weapons, ammunition, explosion knockback, status
+effects, destructible walls, Donut commands, timers, stair locks or Floor 8.
+
+Required:
+- [ ] **Blast Bomb** (`blast_bomb`, "Blast Bomb"): a consumable counted in the one inventory
+      ("Blast Bomb x2"), assignable to any one of W/A/S/D, never owned like the Slingshot/Bat
+      nor innate like Fists. A new game has none; it cannot be assigned at 0; it leaves the
+      inventory and its slot empties when the last one is used; collecting more makes it
+      assignable again. Carl's script has no bomb-specific code.
+- [ ] A throw goes through the generic slot → ActionDefinition → performer dispatch: a
+      `ProjectileLauncher` (cooldown 1.0 s) throws a `Projectile` in Carl's facing direction
+      (220 px/s, at most 240 px), from his centre. A short press throws one; each successful
+      throw spends exactly one; none is thrown at 0; holding the key throws once per second.
+- [ ] The bomb explodes exactly once, when it hits an enemy, when it hits a wall (never passing
+      through it), or at its maximum range; it then disappears. It never collects pickups,
+      triggers stairs, or hurts or stops at Carl or Donut.
+- [ ] The explosion is a reusable `AreaDamage`: 20 damage to every enemy Hurtbox overlapping a
+      72 px circle, each at most once per explosion, through Hurtbox → Health (Gelatinous and
+      Spitting Blobs alike); walls shield (a ray from the centre to each target on `world`); it
+      never hurts Carl or Donut (targets `enemy_hurtbox` only, and never its source) and applies
+      no knockback. The Bat's knockback is unchanged. A brief circle shows the blast.
+- [ ] **Loot drops:** a `LootDrop` child on a placed enemy (item + quantity, deterministic) spawns
+      an ordinary `item_pickup.tscn` where the enemy dies. The death alone adds nothing to the
+      inventory; only Carl collects the pickup (not Donut, enemies or projectiles), once, for
+      exactly the configured quantity.
+- [ ] Floor 6's south-west Gelatinous Blob drops **Blast Bomb x2** (a sign marks it). Floor 6's
+      checkpoint is made before it dies: a retry, Return to Title or quitting before Floor 7 takes
+      the bombs back (0, their slot emptied and refilled from the checkpoint layout), the blob is
+      alive again and no dropped pickup lies there; repeated retries never duplicate bombs.
+      Enemy death, pickup and bomb use never save.
+- [ ] **Floor 7** (`floor_07`, "Floor 7 - Blast Range"), reached by stairs from Floor 6's far
+      south-east corner: safe arrival for Carl and Donut, HUD and menus, at least three enemies
+      of both kinds, a pair close enough for one blast to reach both, and a wall that shields an
+      enemy inside the blast's nominal radius. No exit; nothing leads back up.
+- [ ] Bombs carried into Floor 7 are part of its checkpoint with their slot: a retry restores the
+      quantity and slot (also after the last one was thrown), and Continue in a new process
+      restores both.
+- [ ] Bombs in flight and explosions freeze under the action menu, the pause menu and GAME OVER;
+      nothing is thrown while paused or when Carl is down; closing a menu with the key held
+      throws nothing; no burst after a pause. Neither is ever saved.
+- [ ] HUD "S: Blast Bomb x2", then x1, then "S: —"; the menu follows. The longest slot bar with
+      the bomb fits at 1280×720, 640×360 and 1024×768.
+- [ ] The save stays `save_version: 3` with its seven fields: bombs are one more `inventory`
+      quantity, Floor 7 one more `floor_id`. Bad bomb data (in `owned_items`, negative,
+      fractional, a string, above 999, look-alike ids) is rejected; a bomb slot without bombs is
+      emptied. A real Phase 11 save loads unchanged and is written back identically; version 1
+      and 2 saves still migrate; none has bombs.
+- [ ] Phase 11 infrastructure unchanged: the `DC CARL` user-data folder, `opengl3_angle` on
+      Windows, the test save guard, title Quit Game.
+- [ ] Version in Project Settings: `0.12.0`.

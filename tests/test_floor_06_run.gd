@@ -1,7 +1,8 @@
 extends "res://tests/support/game_test.gd"
 ## Phase 9 end-to-end run: the Baseball Bat on Floor 5 and Floor 6, through the real title screen
 ## and levels, on this test's own save file:
-## - Every level's exits lead one floor down (Floor 5's to Floor 6); Floor 6 has none.
+## - Every level's exits lead one floor down (Floor 5's to Floor 6; since Phase 12 Floor 6's to
+##   Floor 7); Floor 7 has none.
 ## - A. Continue on a real Phase 8 save (tests/fixtures/phase8_save_v3_floor_05.json: version 3,
 ##   Floor 5, Carl 80, Donut 40, Slingshot on W, a potion on A, no Bat) opens Floor 5 with that
 ##   state: no Bat, S empty, and the Bat pickup lying there. Floor 5's enemies are kept idle
@@ -13,8 +14,9 @@ extends "res://tests/support/game_test.gd"
 ## - D. Quitting before Floor 6 and continuing also gives Floor 5 without the Bat.
 ## - E. On Floor 5 the Bat hits a Gelatinous Blob for 20 and knocks it back 80 px.
 ## - F. Floor 5 -> Floor 6: Carl and Donut arrive safely, the sign, the HUD with the Bat on S,
-##   two Gelatinous Blobs and a Spitting Blob, no exits, no loop; the Floor 6 checkpoint owns the
-##   Bat with S = Baseball Bat, in memory and on disk (still save_version 3).
+##   two Gelatinous Blobs and a Spitting Blob, only the stairs down to Floor 7 (Phase 12), no
+##   loop; the Floor 6 checkpoint owns the Bat with S = Baseball Bat, in memory and on disk (still
+##   save_version 3).
 ## - G. On Floor 6 the Backstop blob comes for Carl; the Bat knocks it into the wall behind it,
 ##   where it stops without crossing; then it comes back at Carl and touches him.
 ## - H. GAME OVER while a blob is being knocked back freezes the push; two Floor 6 deaths keep
@@ -35,6 +37,7 @@ const FLOOR_3_PATH := "res://scenes/levels/floor_03.tscn"
 const FLOOR_4_PATH := "res://scenes/levels/floor_04.tscn"
 const FLOOR_5_PATH := "res://scenes/levels/floor_05.tscn"
 const FLOOR_6_PATH := "res://scenes/levels/floor_06.tscn"
+const FLOOR_7_PATH := "res://scenes/levels/floor_07.tscn"
 const BLOB_PATH := "res://scenes/enemies/gelatinous_blob.tscn"
 const SPITTER_PATH := "res://scenes/enemies/spitting_blob.tscn"
 const PHASE_8_SAVE := "res://tests/fixtures/phase8_save_v3_floor_05.json"
@@ -71,10 +74,11 @@ func _run_checks() -> void:
 
 
 func _check_downward_only() -> void:
-	print("-- Every exit leads one floor down; Floor 6 has none")
+	print("-- Every exit leads one floor down; Floor 7 has none")
 	var expected := {
 		SURFACE_PATH: [FLOOR_1_PATH], FLOOR_1_PATH: [FLOOR_2_PATH], FLOOR_2_PATH: [FLOOR_3_PATH],
-		FLOOR_3_PATH: [FLOOR_4_PATH], FLOOR_4_PATH: [FLOOR_5_PATH], FLOOR_5_PATH: [FLOOR_6_PATH], FLOOR_6_PATH: [],
+		FLOOR_3_PATH: [FLOOR_4_PATH], FLOOR_4_PATH: [FLOOR_5_PATH], FLOOR_5_PATH: [FLOOR_6_PATH],
+		FLOOR_6_PATH: [FLOOR_7_PATH], FLOOR_7_PATH: [],
 	}
 	for level_path: String in expected:
 		var level: Node = (load(level_path) as PackedScene).instantiate()
@@ -209,7 +213,8 @@ func _check_floor_6_arrival() -> bool:
 	check(blobs.size() == 2 and _backstop_blob().global_position == BACKSTOP_SPAWN
 			and level.get_node("Actors/GelatinousBlob").global_position == FLOOR_6_BLOB_SPAWN, "two Gelatinous Blobs, as authored")
 	check(spitters.size() == 1 and spitters[0].global_position == FLOOR_6_SPITTER_SPAWN, "and a Spitting Blob")
-	check(_destinations(level).is_empty(), "Floor 6 has no exits: nothing leads back up to Floor 5")
+	check(_destinations(level) == [FLOOR_7_PATH], "Floor 6's only exit (Phase 12) leads down to Floor 7: nothing leads back up to Floor 5",
+			str(_destinations(level)))
 	var entry = state.floor_entry
 	check(entry.scene_path == FLOOR_6_PATH and entry.carl_health == ENTRY_CARL_HP and entry.donut_health == ENTRY_DONUT_HP
 			and entry.inventory["items"].has(BAT.id) and entry.inventory["items"].has(SLINGSHOT.id)

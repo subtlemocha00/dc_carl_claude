@@ -20,7 +20,14 @@ extends "res://tests/support/game_test.gd"
 ## Phase 11 adds: the renderer this window really uses (the Compatibility renderer, through ANGLE
 ## on Windows: "opengl3_angle"), and the title's Quit Game row, on screen at each size and when
 ## selected.
-## Then the title screen at each size, with a Floor 6 save: Continue, New Game and Quit Game, the
+## Phase 12 adds, at each size: Floor 6's new stairs hint clear of the HUD and the Blast Bomb x2
+## pickup its loot blob drops (icon and label) on screen; Floor 7's three signs clear of the HUD;
+## the longest slot bar with the bomb ("W: Baseball Bat   A: Potion x2   S: Blast Bomb x12
+## D: Slingshot", a two-digit count) on screen with its text fitting, and its menu row; a
+## thrown bomb and its explosion drawn on screen; a bomb frozen in flight under the pause menu.
+## Once, the explosion on Floor 7's pair: both blobs hit, all three drawn on screen. The pause menu
+## and Return to Title are then checked on Floor 7.
+## Then the title screen at each size, with a Floor 7 save: Continue, New Game and Quit Game, the
 ## "could not be loaded" message, and the New Game confirmation.
 ##
 ## Run from the project folder (NOT headless; a game window opens briefly):
@@ -35,9 +42,11 @@ const FLOOR_3_PATH := "res://scenes/levels/floor_03.tscn"
 const FLOOR_4_PATH := "res://scenes/levels/floor_04.tscn"
 const FLOOR_5_PATH := "res://scenes/levels/floor_05.tscn"
 const FLOOR_6_PATH := "res://scenes/levels/floor_06.tscn"
+const FLOOR_7_PATH := "res://scenes/levels/floor_07.tscn"
 const POTION: ActionDefinition = preload("res://resources/actions/small_health_potion.tres")
 const SLINGSHOT: ActionDefinition = preload("res://resources/actions/slingshot.tres")
 const BAT: ActionDefinition = preload("res://resources/actions/baseball_bat.tres")
+const BOMB: ActionDefinition = preload("res://resources/actions/blast_bomb.tres")
 const WINDOW_SIZES: Array[Vector2i] = [Vector2i(1280, 720), Vector2i(640, 360), Vector2i(1024, 768)]
 ## The project's base size (Project Settings > Display > Window).
 const BASE_SIZE := Vector2(1280, 720)
@@ -145,6 +154,7 @@ func _run_checks() -> void:
 	await _check_floor_4()
 	await _check_floor_5()
 	await _check_floor_6()
+	await _check_floor_7()
 	await _check_pause_menu()
 	await _check_title_screen()
 	finish()
@@ -317,7 +327,7 @@ func _check_floor_6() -> void:
 		DisplayServer.window_set_size(window_size)
 		await wait_physics_frames(10)
 		var visible_rect := root.get_visible_rect()
-		for sign_path: String in ["Signs/FloorTitle", "Signs/Hint", "Signs/PrototypeNote"]:
+		for sign_path: String in ["Signs/FloorTitle", "Signs/Hint", "Signs/StairsHint"]:
 			var sign_rect := _on_screen(level.get_node(sign_path))
 			check(visible_rect.encloses(sign_rect) and hud_rects.all(func(r: Rect2) -> bool: return not r.intersects(sign_rect)),
 					"%dx%d: Floor 6's %s is on screen and clear of the HUD" % [window_size.x, window_size.y, sign_path.get_file()],
@@ -348,11 +358,145 @@ func _check_floor_6() -> void:
 		await wait_seconds(0.5)
 	check(FloorRegistry.get_floor_id(game_state().floor_entry.scene_path) == &"floor_06", "the save now holds the Floor 6 checkpoint")
 
+	# Phase 12: the loot blob's Blast Bomb x2 drop, seen from where Carl killed it.
+	var loot_blob: Enemy = level.get_node("Actors/GelatinousBlob")
+	loot_blob.detection_range = 0.0
+	loot_blob.chase_range = 0.0
+	carl.teleport_to(loot_blob.global_position + Vector2(-110, 0))
+	await wait_physics_frames(3)
+	loot_blob.get_node("Hurtbox").take_hit(30)
+	await wait_physics_frames(3)
+	var drop: Node2D = level.get_node_or_null("Actors/BlastBombDrop")
+	check(drop != null, "the loot blob dropped a Blast Bomb pickup")
+	if drop == null:
+		return
+	var drop_icon: Sprite2D = drop.get_node("Marker/Icon")
+	var drop_label: Label = drop.get_node("Label")
+	for window_size in WINDOW_SIZES:
+		DisplayServer.window_set_size(window_size)
+		await wait_physics_frames(10)
+		var visible_rect := root.get_visible_rect()
+		var icon_rect := drop_icon.get_global_transform_with_canvas() * drop_icon.get_rect()
+		var drop_label_rect := _on_screen(drop_label)
+		check(drop_icon.is_visible_in_tree() and drop_icon.texture == BOMB.icon and visible_rect.encloses(icon_rect)
+				and visible_rect.encloses(drop_label_rect) and drop_label.text == "Blast Bomb x2"
+				and drop_label.get_minimum_size().x <= drop_label.size.x,
+				"%dx%d: the dropped Blast Bomb x2 pickup (icon and label) is on screen" % [window_size.x, window_size.y], str(icon_rect))
 
-## Phase 10: on Floor 6 at each size, the pause menu (its three rows) and both of its questions
-## (Return to Title, Quit Game: the warning text fits) are on screen and centred, drawn over the
-## HUD. Then Return to Title through the menu: the title screen is on screen at each size and
-## describes the Floor 6 checkpoint.
+
+## Phase 12: Floor 7 at each size: its signs clear of the HUD, the longest slot bar with the bomb,
+## the menu row, a thrown bomb and its explosion on screen, and a bomb frozen under the pause menu.
+## Once: an explosion on the pair, with both blobs hit and on screen.
+func _check_floor_7() -> void:
+	var state := game_state()
+	state.start_new_run()
+	for item: ActionDefinition in [SLINGSHOT, BAT]:
+		state.inventory.add(item, 1)
+	state.inventory.add(POTION, 2)
+	state.inventory.add(BOMB, 12)
+	state.action_slots.assign(BAT, ActionSlots.SLOT_W)
+	state.action_slots.assign(POTION, ActionSlots.SLOT_A)
+	state.action_slots.assign(BOMB, ActionSlots.SLOT_S)
+	state.action_slots.assign(SLINGSHOT, ActionSlots.SLOT_D)
+	change_scene_to_file(FLOOR_7_PATH)
+	await wait_for_scene(FLOOR_7_PATH)
+	var level := current_scene
+	for enemy in level.get_node("Actors").get_children():
+		if enemy is Enemy:
+			enemy.detection_range = 0.0
+			enemy.chase_range = 0.0
+	var hud := level.get_node("HUD")
+	var slot_bar: Label = hud.get_node("%ActionSlotsLabel")
+	var carl: CharacterBody2D = level.get_node("Actors/Carl")
+	var action_menu: CanvasLayer = level.get_node("ActionMenu")
+	var pause: CanvasLayer = level.get_node("PauseMenu")
+	var hud_rects: Array[Rect2] = []
+	for node_path: String in ["%HealthLabel", "%DonutHealthLabel", "%ActionSlotsLabel", "MenuHint"]:
+		hud_rects.append((hud.get_node(node_path) as Control).get_global_rect())
+	var launcher := carl.get_action_performer(BOMB) as ProjectileLauncher
+	var bombs := []
+	var explosions := []
+	launcher.fired.connect(func(bomb: Projectile) -> void:
+		bombs.append(bomb)
+		bomb.get_node("DetonateOnStop").exploded.connect(func(explosion: AreaDamage, _targets: Array[Hurtbox]) -> void:
+			explosions.append(explosion)))
+	for window_size in WINDOW_SIZES:
+		DisplayServer.window_set_size(window_size)
+		# The signs are read from the spawn point (the bomb below is thrown from elsewhere).
+		carl.teleport_to(Vector2(176, 176))
+		await wait_physics_frames(10)
+		var label := "%dx%d" % [window_size.x, window_size.y]
+		var visible_rect := root.get_visible_rect()
+		for sign_path: String in ["Signs/FloorTitle", "Signs/Hint", "Signs/PrototypeNote"]:
+			var sign_label: Label = level.get_node(sign_path)
+			var sign_rect := _on_screen(sign_label)
+			check(visible_rect.encloses(sign_rect) and sign_label.get_minimum_size().x <= sign_label.size.x
+					and hud_rects.all(func(r: Rect2) -> bool: return not r.intersects(sign_rect)),
+					"%s: Floor 7's %s is on screen, fits and is clear of the HUD" % [label, sign_path.get_file()], str(sign_rect))
+		var bombs_left: int = state.inventory.get_quantity(BOMB)
+		check(bombs_left >= 10 and slot_bar.text == "W: Baseball Bat   A: Potion x2   S: Blast Bomb x%d   D: Slingshot" % bombs_left
+				and visible_rect.encloses(slot_bar.get_global_rect()) and slot_bar.get_minimum_size().x <= slot_bar.size.x,
+				label + ": the longest slot bar, with the bomb, is on screen and its text fits", slot_bar.text)
+		action_menu.open()
+		await process_frame
+		var bomb_rows := action_menu.get_node("%ActionList").get_children().filter(
+				func(row: Label) -> bool: return row.text.contains("Blast Bomb x%d   (on S)" % bombs_left))
+		check(bomb_rows.size() == 1 and visible_rect.encloses((bomb_rows[0] as Label).get_global_rect())
+				and (bomb_rows[0] as Label).get_minimum_size().x <= (bomb_rows[0] as Label).size.x,
+				label + ": the menu lists 'Blast Bomb x%d   (on S)', on screen" % bombs_left)
+		action_menu.close()
+		await wait_physics_frames(2)
+
+		# A bomb in flight, then its explosion.
+		carl.teleport_to(Vector2(176, 400))
+		carl.facing_direction = Vector2.RIGHT
+		await wait_physics_frames(10)
+		var thrown := bombs.size()
+		await tap_key(KEY_S)
+		await wait_physics_frames(15)
+		var bomb: Projectile = bombs[-1] if bombs.size() == thrown + 1 else null
+		check(bomb != null and is_instance_valid(bomb) and bomb.is_visible_in_tree()
+				and visible_rect.has_point(bomb.get_global_transform_with_canvas().origin),
+				label + ": a thrown bomb is drawn on screen in flight")
+		if bomb != null and is_instance_valid(bomb):
+			await tap_key(KEY_ESCAPE)
+			var frozen_at := bomb.global_position
+			await wait_physics_frames(30)
+			check(pause.is_open() and is_instance_valid(bomb) and bomb.global_position == frozen_at
+					and visible_rect.has_point(bomb.get_global_transform_with_canvas().origin),
+					label + ": under the pause menu the bomb hangs, still drawn on screen")
+			await tap_key(KEY_ESCAPE)
+		var exploded := explosions.size()
+		await wait_until(func() -> bool: return explosions.size() > exploded, "the bomb to explode", 120)
+		var explosion: AreaDamage = explosions[-1] if explosions.size() > exploded else null
+		check(explosion != null and is_instance_valid(explosion) and explosion.is_visible_in_tree()
+				and visible_rect.has_point(explosion.get_global_transform_with_canvas().origin),
+				label + ": its explosion is drawn on screen")
+		await wait_seconds(1.2)
+
+	# The pair: one explosion, both blobs hit, everything on screen.
+	DisplayServer.window_set_size(WINDOW_SIZES[0])
+	var north: Enemy = level.get_node("Actors/PairBlobNorth")
+	var south: Enemy = level.get_node("Actors/PairBlobSouth")
+	carl.teleport_to(Vector2(400, 176))
+	carl.facing_direction = Vector2.RIGHT
+	await wait_physics_frames(10)
+	var before := explosions.size()
+	await tap_key(KEY_S)
+	await wait_until(func() -> bool: return explosions.size() > before, "the bomb to explode on the pair", 120)
+	await wait_physics_frames(2)
+	var visible := root.get_visible_rect()
+	var blast: AreaDamage = explosions[-1] if explosions.size() > before else null
+	check(north.health.current_health == 10 and south.health.current_health == 10 and blast != null and is_instance_valid(blast)
+			and [north, south, blast].all(func(node: Node2D) -> bool: return visible.has_point(node.get_global_transform_with_canvas().origin)),
+			"1280x720: one explosion hits both blobs of the pair, all drawn on screen")
+	check(FloorRegistry.get_floor_id(state.floor_entry.scene_path) == &"floor_07", "the save now holds the Floor 7 checkpoint")
+
+
+## Phase 10: on the current floor (Floor 7 since Phase 12) at each size, the pause menu (its three
+## rows) and both of its questions (Return to Title, Quit Game: the warning text fits) are on screen
+## and centred, drawn over the HUD. Then Return to Title through the menu: the title screen is on
+## screen at each size and describes the Floor 7 checkpoint.
 func _check_pause_menu() -> void:
 	var pause: CanvasLayer = current_scene.get_node("PauseMenu")
 	var hud: CanvasLayer = current_scene.get_node("HUD")
@@ -403,8 +547,8 @@ func _check_pause_menu() -> void:
 		var visible_rect := root.get_visible_rect()
 		var info: Label = current_scene.get_node("%SaveInfoLabel")
 		check(visible_rect.encloses(info.get_global_rect()) and visible_rect.encloses(current_scene.get_node("%ContinueRow").get_global_rect())
-				and visible_rect.encloses(current_scene.get_node("%QuitRow").get_global_rect()) and info.text.begins_with("Saved at the start of Floor 6"),
-				"%dx%d: after Return to Title, the title is on screen and describes the Floor 6 checkpoint" % [window_size.x, window_size.y], info.text)
+				and visible_rect.encloses(current_scene.get_node("%QuitRow").get_global_rect()) and info.text.begins_with("Saved at the start of Floor 7"),
+				"%dx%d: after Return to Title, the title is on screen and describes the Floor 7 checkpoint" % [window_size.x, window_size.y], info.text)
 	DisplayServer.window_set_size(WINDOW_SIZES[0])
 
 
@@ -413,8 +557,8 @@ func _on_screen(control: Control) -> Rect2:
 	return control.get_global_transform_with_canvas() * Rect2(Vector2.ZERO, control.size)
 
 
-## The title menu fits at every size. Floor 6 above saved the last checkpoint, so Continue is
-## available and names Floor 6; a broken save file then shows the error message.
+## The title menu fits at every size. Floor 7 above saved the last checkpoint, so Continue is
+## available and names Floor 7; a broken save file then shows the error message.
 func _check_title_screen() -> void:
 	var title_path: String = ProjectSettings.get_setting("application/run/main_scene")
 	for broken_save in [false, true]:
@@ -428,7 +572,7 @@ func _check_title_screen() -> void:
 		check(title.is_continue_available() != broken_save, "title: Continue is %s" % ("unavailable with a broken save" if broken_save else "available"))
 		if not broken_save:
 			var info: String = title.get_node("%SaveInfoLabel").text
-			check(info.begins_with("Saved at the start of Floor 6"), "title: the save is at the start of Floor 6", info)
+			check(info.begins_with("Saved at the start of Floor 7"), "title: the save is at the start of Floor 7", info)
 		for window_size in WINDOW_SIZES:
 			DisplayServer.window_set_size(window_size)
 			await wait_physics_frames(10)

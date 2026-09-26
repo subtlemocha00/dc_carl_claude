@@ -9,6 +9,7 @@ const ACTIONS: Dictionary[StringName, ActionDefinition] = {
 	&"small_health_potion": preload("res://resources/actions/small_health_potion.tres"),
 	&"slingshot": preload("res://resources/actions/slingshot.tres"),
 	&"baseball_bat": preload("res://resources/actions/baseball_bat.tres"),
+	&"blast_bomb": preload("res://resources/actions/blast_bomb.tres"),
 }
 
 

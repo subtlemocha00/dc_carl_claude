@@ -1,3 +1,4 @@
+class_name ItemPickup
 extends Area2D
 ## An item lying in a level. Carl picks it up by walking over it: he gets `quantity` of `item`,
 ## and the pickup disappears. No key is needed.
@@ -10,6 +11,9 @@ extends Area2D
 ## pass over pickups without taking them.
 ## Nothing remembers a picked-up pickup. Retrying a floor loads the level again, so its
 ## pickups are back, and the retry also takes back what Carl picked up there.
+## Pickups can also be made while the game runs (Phase 12): a LootDrop creates one where its
+## enemy died. Set `item` and `quantity` before adding it to the level; it then works exactly like
+## a placed one.
 
 @export var item: ActionDefinition
 @export var quantity: int = 1
