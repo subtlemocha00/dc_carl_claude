@@ -1,6 +1,7 @@
 [gd_scene format=3 uid="uid://caavap4ff7myw"]
 
 [ext_resource type="Script" uid="uid://xqloq5auplsm" path="res://scripts/ui/title_screen.gd" id="1_title"]
+[ext_resource type="PackedScene" path="res://scenes/ui/settings_menu.tscn" id="2_settings"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_confirm"]
 content_margin_left = 32.0
@@ -87,6 +88,13 @@ theme_override_font_sizes/font_size = 26
 text = "New Game"
 horizontal_alignment = 1
 
+[node name="SettingsRow" type="Label" parent="CenterContainer/TextColumn/Menu"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 26
+text = "Settings"
+horizontal_alignment = 1
+
 [node name="QuitRow" type="Label" parent="CenterContainer/TextColumn/Menu"]
 unique_name_in_owner = true
 layout_mode = 2
@@ -99,6 +107,15 @@ unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(0.62, 0.65, 0.72, 1)
 theme_override_font_sizes/font_size = 16
+horizontal_alignment = 1
+
+[node name="SettingsInfoLabel" type="Label" parent="CenterContainer/TextColumn"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.5, 0.45, 1)
+theme_override_font_sizes/font_size = 16
+text = "Control settings could not be loaded. Defaults restored."
 horizontal_alignment = 1
 
 [node name="HintLabel" type="Label" parent="CenterContainer/TextColumn"]
@@ -180,3 +197,7 @@ theme_override_colors/font_color = Color(0.62, 0.65, 0.72, 1)
 theme_override_font_sizes/font_size = 14
 text = "Up/Down: choose     Enter: confirm     Esc: back"
 horizontal_alignment = 1
+
+[node name="SettingsMenu" parent="." instance=ExtResource("2_settings")]
+unique_name_in_owner = true
+layout_mode = 1

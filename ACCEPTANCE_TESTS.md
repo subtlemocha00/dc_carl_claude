@@ -499,3 +499,72 @@ Required:
 - [ ] Phase 11 infrastructure unchanged: the `DC CARL` user-data folder, `opengl3_angle` on
       Windows, the test save guard, title Quit Game.
 - [ ] Version in Project Settings: `0.12.0`.
+
+# Phase 13 — Persistent Control Rebinding and Settings Menu
+
+The Phase 3–12 rules still apply. Keyboard only: no gamepad/controller, mouse, chords, audio,
+graphics, resolution, fullscreen, renderer, language or accessibility settings. No new floors,
+items, enemies or save slots. **Slot contents are run state; key bindings are application
+settings.**
+
+Required:
+- [ ] **Nine rebindable gameplay controls**, with canonical defaults: Move Up/Down/Left/Right =
+      Up/Down/Left/Right Arrow, Action Slot W/A/S/D = W/A/S/D, Inventory = Space. With no settings
+      file the game behaves exactly as in Phase 12.
+- [ ] **Fixed menu keys**, never rebindable: Up/Down Arrow (rows), Left/Right Arrow (No/Yes),
+      Enter (confirm, GAME OVER retry), Escape (back/cancel/pause). Menus use their own InputMap
+      actions (`menu_up`, `menu_down`, `menu_left`, `menu_right`, `ui_confirm_game`, `pause_back`),
+      never the gameplay controls.
+- [ ] **Settings** on the title (Continue, New Game, Settings, Quit Game; without a valid save
+      Continue is shown unavailable) and in the pause menu (Resume, Settings, Return to Title, Quit
+      Game). Both open the same Settings screen; from the pause menu the game stays paused (no
+      enemy, projectile, cooldown or Donut timer advances); Escape/Back return to the menu it came
+      from.
+- [ ] The Settings screen has one section, Controls: the nine controls and their current keys,
+      Reset to Defaults, Back. Up/Down choose, Enter changes, Escape goes back.
+- [ ] **Key capture:** "Press a key for <control>"; the next key press becomes the binding and
+      applies at once; Escape cancels without changes. The captured press (and its key repeat)
+      neither triggers the gameplay action nor moves the menu selection; a key held through Resume
+      gives no free action.
+- [ ] **Conflicts:** a key already used by any other control (movement, slot or Inventory) is
+      refused with "<Key> is already assigned to <Control>."; both bindings stay unchanged; nothing
+      is unbound or swapped.
+- [ ] **Reserved/unusable keys:** Escape and Enter (and keypad Enter) can never be bound; modifiers
+      on their own, lock, function and media keys are refused; the old binding stays.
+- [ ] **InputMap:** bindings are applied to the existing actions (`move_*`, `action_w` … `action_d`,
+      `inventory_toggle`); Carl, the menus and combat read actions, never literal keys. After a
+      change the old key no longer triggers the action and the new one does, at once.
+- [ ] **Logical slots stay put:** rebinding the W slot's key from W to Q keeps the Slingshot in the W
+      slot; Q uses it, W does nothing (unless W is bound elsewhere). All four slot keys can be
+      rebound independently, and movement too (e.g. I/J/K/L).
+- [ ] **Inventory:** the rebound Inventory key opens and closes the action menu, the old one does
+      not, Escape still closes it. In the menu the slots' current keys assign (literal W does not
+      unless bound), and it names the current keys ("1   Slingshot", "(on 1)", "1/2/3/4: put it on
+      that key     Tab/Esc: close").
+- [ ] **HUD and hints** show the current keys ("Q: Slingshot   2: Potion x1 ...", "Tab: action
+      menu"); so do the signs that name keys (Surface, Floor 1). Quantities stay correct.
+- [ ] **Reset to Defaults** asks ("Reset all controls to defaults?", No selected); No and Escape keep
+      the custom keys; Yes restores, applies and saves the nine defaults, updates every hint, and
+      changes neither the save nor the run (inventory, floor, HP, slot contents).
+- [ ] **SettingsManager** (autoload) owns defaults, current bindings, validation, InputMap
+      application, loading at startup (before the title appears), safe writing and Reset.
+      SaveManager and GameState are unchanged in role and know nothing about bindings.
+- [ ] **Settings file** `user://settings.json` with `settings_version: 1`, stable control ids and key
+      names; written only when a binding changes or Reset is confirmed, via a temporary file that
+      is checked before it replaces the old one (a failed write keeps the old file).
+- [ ] **Persistence:** bindings survive a fresh process, New Game, Continue, Return to Title,
+      deleting the save and a retry; changing them never rewrites the save. The save stays
+      `save_version: 3`; version 1 and 2 saves still migrate.
+- [ ] **Invalid settings** (malformed/truncated JSON, unsupported version, duplicate key, missing or
+      unknown control, reserved or unknown key, wrong types, extra fields) never crash the game:
+      the defaults apply, the title and the Settings screen say "Control settings could not be
+      loaded. Defaults restored.", a valid save still continues, and the bad file is left until the
+      next change replaces it.
+- [ ] **Isolation:** tests use only `user://test_saves/` for settings as for saves; in a test run
+      SettingsManager refuses `user://settings.json` (fail closed). Automated tests leave the
+      production save and settings, the old shared folder and the sibling Codex repository
+      untouched.
+- [ ] Phase 11 infrastructure unchanged: the `DC CARL` folder, `opengl3_angle` on Windows, title
+      Quit Game. Settings screen, capture prompt, conflict message, Reset question, pause/title
+      Settings rows, rebound HUD and inventory hints readable at 1280×720, 640×360 and 1024×768.
+- [ ] Version in Project Settings: `0.13.0` (save format 3, settings format 1).

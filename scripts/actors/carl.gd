@@ -1,9 +1,11 @@
 extends CharacterBody2D
 ## Carl, the player-controlled character.
-## - The arrow keys (the move_* input actions) move him. W/A/S/D never do.
-## - W/A/S/D are his four action slots (action_w, action_a, action_s, action_d). Holding a
-##   slot's key uses the action in that slot toward his facing direction. Carl does not decide
-##   which action is in which slot: he asks `action_slots`, the run's ActionSlots.
+## - The move_* input actions move him (the arrow keys by default). The slot keys never do.
+## - He has four action slots (action_w, action_a, action_s, action_d; W/A/S/D by default).
+##   Holding a slot's key uses the action in that slot toward his facing direction. Carl does not
+##   decide which action is in which slot: he asks `action_slots`, the run's ActionSlots.
+## - He only ever asks for input actions, never for keys, so the player's key bindings (Phase 13,
+##   SettingsManager) apply to him without any change here.
 ## - Each action is carried out by an ActionPerformer made from the action's performer_scene,
 ##   so new weapons and items need no changes to this script. Using a consumable (a potion)
 ##   spends one from `inventory`, but only when the use really happened.

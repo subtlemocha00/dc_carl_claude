@@ -200,6 +200,7 @@ func _return_to_title_before_floor_7() -> bool:
 	var save_before := _save_text()
 	await tap_key(KEY_ESCAPE)
 	await tap_key(KEY_DOWN)
+	await tap_key(KEY_DOWN)
 	await tap_key(KEY_ENTER)
 	await tap_key(KEY_DOWN)
 	await tap_key(KEY_ENTER)

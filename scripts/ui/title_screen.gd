@@ -4,9 +4,14 @@ extends Control
 ##   checkpoint (GameState.continue_from()) and opens that floor.
 ## - New Game starts a new run on the Surface. The Surface's checkpoint then replaces the save,
 ##   so if a save file exists (loadable or not) the menu asks first, with No selected.
+## - Settings (Phase 13) opens the Settings screen (settings_menu.tscn, the same one the pause
+##   menu uses). No run is needed for it; Escape or Back there comes back here with Settings still
+##   selected. If the control settings file could not be used at startup, a line says so
+##   (SettingsManager.load_failed) until the controls are changed or reset.
 ## - Quit Game (Phase 11) closes the game at once, without asking: nothing on the title screen
 ##   can be lost, because the save is only ever written on entering a floor.
-## Up/Down go round the options on offer (Continue only when it is available). The first
+## Up/Down (the fixed menu keys, menu_up/menu_down, never the rebindable movement controls) go
+## round the options on offer (Continue only when it is available). The first
 ## selection is Continue when it is available and New Game otherwise, never Quit Game, so an
 ## Enter pressed as the title opens cannot close the game.
 ## An unloadable save never stops the game: Continue stays unavailable, a short message says
@@ -22,7 +27,7 @@ const DISABLED_COLOR := Color(0.42, 0.44, 0.5)
 const ERROR_COLOR := Color(1.0, 0.5, 0.45)
 const INFO_COLOR := Color(0.62, 0.65, 0.72)
 
-enum Option { CONTINUE, NEW_GAME, QUIT }
+enum Option { CONTINUE, NEW_GAME, SETTINGS, QUIT }
 
 ## First level of a new game.
 @export_file("*.tscn") var start_scene_path: String = "res://scenes/levels/surface.tscn"
@@ -36,8 +41,11 @@ var _confirm_yes := false
 @onready var version_label: Label = %VersionLabel
 @onready var continue_row: Label = %ContinueRow
 @onready var new_game_row: Label = %NewGameRow
+@onready var settings_row: Label = %SettingsRow
 @onready var quit_row: Label = %QuitRow
 @onready var save_info_label: Label = %SaveInfoLabel
+@onready var settings_info_label: Label = %SettingsInfoLabel
+@onready var settings_menu: Control = %SettingsMenu
 @onready var confirm_panel: Control = %ConfirmPanel
 @onready var confirm_dim: Control = %ConfirmDim
 @onready var confirm_question: Label = %ConfirmQuestion
@@ -53,18 +61,22 @@ func _ready() -> void:
 	version_label.text = "Version %s  |  Godot %s" % [game_version, engine_version]
 	confirm_panel.visible = false
 	confirm_dim.visible = false
+	settings_menu.closed.connect(_refresh)
 	GameState.end_run()
 	_read_save()
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if settings_menu.is_open():
+		# The Settings screen handles its own keys.
+		return
 	if _confirming:
 		_handle_confirm_input(event)
-	elif event.is_action_pressed(&"move_up", true) or event.is_action_pressed(&"move_down", true):
+	elif event.is_action_pressed(&"menu_up", true) or event.is_action_pressed(&"menu_down", true):
 		get_viewport().set_input_as_handled()
 		# Go round the options on offer; Continue can only be chosen when it is available.
 		var options := _get_available_options()
-		var step := -1 if event.is_action_pressed(&"move_up", true) else 1
+		var step := -1 if event.is_action_pressed(&"menu_up", true) else 1
 		_selected = options[wrapi(options.find(_selected) + step, 0, options.size())]
 		_refresh()
 	elif event.is_action_pressed(&"ui_confirm_game"):
@@ -77,6 +89,8 @@ func _unhandled_input(event: InputEvent) -> void:
 					_open_confirm()
 				else:
 					_start_new_game()
+			Option.SETTINGS:
+				settings_menu.open()
 			Option.QUIT:
 				_quit()
 
@@ -96,8 +110,8 @@ func get_selected_option() -> Option:
 ## The options Up/Down go through, top to bottom.
 func _get_available_options() -> Array[Option]:
 	if is_continue_available():
-		return [Option.CONTINUE, Option.NEW_GAME, Option.QUIT]
-	return [Option.NEW_GAME, Option.QUIT]
+		return [Option.CONTINUE, Option.NEW_GAME, Option.SETTINGS, Option.QUIT]
+	return [Option.NEW_GAME, Option.SETTINGS, Option.QUIT]
 
 
 ## Loads the save to decide what the menu offers.
@@ -162,7 +176,7 @@ func _handle_confirm_input(event: InputEvent) -> void:
 		else:
 			_close_confirm()
 	else:
-		for action: StringName in [&"move_up", &"move_down", &"move_left", &"move_right"]:
+		for action: StringName in [&"menu_up", &"menu_down", &"menu_left", &"menu_right"]:
 			if event.is_action_pressed(action):
 				_confirm_yes = not _confirm_yes
 				_refresh()
@@ -182,7 +196,9 @@ func _refresh() -> void:
 		continue_row.text = "   Continue"
 		continue_row.add_theme_color_override(&"font_color", DISABLED_COLOR)
 	_style_row(new_game_row, "New Game", _selected == Option.NEW_GAME and not _confirming)
+	_style_row(settings_row, "Settings", _selected == Option.SETTINGS and not _confirming)
 	_style_row(quit_row, "Quit Game", _selected == Option.QUIT and not _confirming)
+	settings_info_label.visible = SettingsManager.load_failed
 	_style_row(no_row, "No", not _confirm_yes)
 	_style_row(yes_row, "Yes", _confirm_yes)
 

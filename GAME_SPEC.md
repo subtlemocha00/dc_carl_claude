@@ -33,7 +33,7 @@ The prototype covers the surface introduction and Dungeon Floors 1–3.
 
 ## 4. Controls
 
-Gameplay:
+Gameplay (the default keys; since Phase 13 the player can rebind these nine, see section 15c):
 - Arrow Up: move north.
 - Arrow Down: move south.
 - Arrow Left: move west.
@@ -46,27 +46,35 @@ Gameplay:
 - Escape: pause/back/cancel as appropriate.
 - Enter: confirm menu/inventory selection; on the GAME OVER screen, retry the current floor.
 
-Title screen: Up/Down choose between Continue, New Game and Quit Game (going round the options
-on offer; Continue only when a save loads), Enter confirms. Continue is selected first when a
-save loads, New Game otherwise, never Quit Game (section 15b).
+Menus (fixed, never rebindable, section 15c): Up/Down Arrow choose, Left/Right Arrow choose in
+Yes/No questions, Enter confirms, Escape goes back, cancels or pauses.
 
-Escape and Space by situation (canonical since Phase 10, section 15a):
+Title screen: Up/Down choose between Continue, New Game, Settings and Quit Game (going round the
+options on offer; Continue only when a save loads), Enter confirms. Continue is selected first when
+a save loads, New Game otherwise, never Quit Game (section 15b). Settings: section 15c.
+
+Escape and Space by situation (canonical since Phase 10, section 15a; "Space" and "W/A/S/D" mean
+the Inventory key and the slot keys, whatever they are bound to since Phase 13):
 - during play: Escape opens the pause menu; Space opens the action/inventory menu;
 - in the action menu: Escape or Space closes it (and does nothing else: the same key press
   never opens the pause menu);
 - in the pause menu: Escape resumes; Up/Down choose; Enter confirms; Space and W/A/S/D do
   nothing;
+- in the Settings screen (Phase 13): Escape goes back; Up/Down choose; Enter changes the selected
+  row; while it waits for a key, the next key press is that key (Escape cancels);
 - in a pause-menu question: Escape means No;
 - on the GAME OVER screen: Enter retries; Escape and Space do nothing.
 At most one of the action menu, the pause menu and the GAME OVER screen is ever up.
 
 Carl's facing direction is determined by his most recent non-zero movement direction.
 
-W/A/S/D are never movement controls in this game. Movement is the arrow keys only.
+By default W/A/S/D are never movement controls in this game, and movement is the arrow keys only.
 
-The W/A/S/D keys themselves are fixed. What each of the four slots holds is the player's
-choice, changed through the in-game inventory/action menu (section 7). Rebinding the
-physical keys is a separate, future settings concern.
+The four action slots are logical slots named W, A, S and D. What each slot holds is the player's
+choice, changed through the in-game inventory/action menu (section 7), and is run state (saved in
+the checkpoint). Which physical key triggers each slot is a separate application setting: W, A, S
+and D by default, rebindable since Phase 13 (section 15c). Changing a slot's key never changes
+what the slot holds. **Slot contents are run state; key bindings are application settings.**
 
 ## 5. Carl
 
@@ -75,7 +83,7 @@ Carl is the player-controlled character.
 Initial target attributes, subject to later tuning:
 - Max HP: 100
 - Move speed: approximately 180 px/s
-- Four action slots mapped to W/A/S/D.
+- Four action slots, the W, A, S and D slots (triggered by W/A/S/D by default; rebindable).
 - Starts a new game with Fists in D and slots W, A and S empty.
 
 Carl reaching 0 HP causes the game-over state:
@@ -168,7 +176,7 @@ Do not over-engineer the initial item framework merely to satisfy every hypothet
 
 ## 8. Inventory
 
-Space opens/closes inventory.
+Space (the Inventory key, rebindable since Phase 13) opens/closes inventory.
 
 Opening the inventory pauses active gameplay.
 
@@ -181,7 +189,9 @@ Keyboard-only navigation is required:
 
 From an inventory item, the player must eventually be able to choose Equip and assign the item to W, A, S, or D.
 The first version of this menu assigns directly: select an action with Up/Down, then press
-W, A, S or D to put it in that slot. Escape also closes the menu.
+W, A, S or D to put it in that slot. Escape also closes the menu. Since Phase 13 the keys that
+assign are the slots' current keys (with the W slot on Q, Q assigns to the W slot and W does
+nothing), and the menu names the current keys ("Slingshot (on Q)"). Up/Down and Escape stay fixed.
 
 Inventory contents:
 - Innate actions (Fists) are always available, have no quantity and are never used up.
@@ -527,6 +537,9 @@ Persistent save (canonical since Phase 5):
 - Phase 12 keeps **version 3**: Blast Bombs are one more consumable quantity in the saved
   inventory (`"blast_bomb": 1`) and Floor 7 one more floor id. Older saves simply have no bombs.
   Bombs in flight, explosions, enemy drops and dropped pickups are never saved.
+- Phase 13 keeps **version 3**: key bindings are application settings in their own file
+  (section 15c), never in the save, and the save's slot assignments are unchanged (the four
+  logical slots `action_w` to `action_d`).
 - No mid-floor saving, multiple save slots or cloud saves in the prototype.
 
 Current-run state (what survives level changes during one playthrough, held in memory) is
@@ -541,8 +554,10 @@ Persisted state should eventually include at least:
 
 ## 15a. Pause menu, Return to Title and quitting (canonical since Phase 10)
 
-- Escape during play opens the **pause menu**: Resume, Return to Title, Quit Game, with Resume
-  selected each time it opens. Up/Down choose (wrapping round), Enter confirms, Escape resumes.
+- Escape during play opens the **pause menu**: Resume, Settings (Phase 13), Return to Title, Quit
+  Game, with Resume selected each time it opens. Up/Down choose (wrapping round), Enter confirms,
+  Escape resumes. Settings opens the Settings screen (section 15c) while the game stays paused;
+  Escape or Back there returns to the pause menu.
 - While it is open the game is paused exactly as it is while the action menu is open: Carl
   cannot move or act, Donut, the enemies, projectiles and knockback stop, cooldowns and Donut's
   recovery countdown stop counting, and stairs and pickups do nothing. Resume carries on from
@@ -577,10 +592,53 @@ Persisted state should eventually include at least:
   sometimes crashed as the game closed (Phase 10). Other platforms are unchanged. There is no
   graphics option for the player.
 - The title screen has **Quit Game**: with a save that loads it offers Continue, New Game and
-  Quit Game; otherwise New Game and Quit Game (Continue is shown unavailable). Quit Game closes
+  Quit Game; otherwise New Game and Quit Game (Continue is shown unavailable). (Since Phase 13,
+  Settings sits between New Game and Quit Game.) Quit Game closes
   the game at once, without asking, because nothing on the title screen can be lost: it saves
   nothing and changes nothing. It is never the first selection, so an Enter pressed as the title
   opens cannot close the game.
+
+## 15c. Settings and control bindings (canonical since Phase 13)
+
+- **Settings** is on the title screen (Continue, New Game, Settings, Quit Game) and in the pause
+  menu (Resume, Settings, Return to Title, Quit Game). Both open the same Settings screen. From the
+  title no run is needed; from the pause menu the game stays paused the whole time.
+- The Settings screen has one section, **Controls**: the nine rebindable gameplay controls with
+  their current keys, then **Reset to Defaults** and **Back**. Up/Down choose, Enter changes the
+  selected control (or chooses Reset/Back), Escape goes back.
+- The nine rebindable controls and their canonical defaults: Move Up = Up Arrow, Move Down = Down
+  Arrow, Move Left = Left Arrow, Move Right = Right Arrow, Action Slot W = W, Action Slot A = A,
+  Action Slot S = S, Action Slot D = D, Inventory = Space. Nothing else is rebindable.
+- **Fixed menu keys:** Up/Down Arrow (previous/next row), Left/Right Arrow (No/Yes in questions),
+  Enter (confirm; GAME OVER retry), Escape (back, cancel, pause). They never change, so no binding
+  can make a menu unusable.
+- **Key capture:** Enter on a control shows "Press a key for <control>". The next key press becomes
+  its key, applies at once and is saved; Escape cancels and changes nothing. The key press used this
+  way does nothing else: it never triggers the gameplay action or moves a menu selection.
+- **One key per control, all different.** A key already used by another control is refused
+  ("Q is already assigned to Action Slot W."): both bindings stay as they were; nothing is unbound or
+  swapped. This covers movement, slots and Inventory together.
+- **Reserved keys:** Escape and Enter can never be bound. Only ordinary single keys can be: letters,
+  digits, Space and punctuation, Tab, Backspace, Insert, Delete, Home, End, Page Up/Down, the arrow
+  keys and the keypad's digits and operators. Modifier keys on their own (Shift, Ctrl, Alt),
+  lock keys, function keys and media keys are refused; there are no chords such as Ctrl+Q.
+- **Reset to Defaults** asks first ("Reset all controls to defaults?", No selected). Yes restores the
+  nine defaults, applies them at once and saves them. It changes nothing else: not the save, the
+  inventory, the floor, HP or what each slot holds.
+- **Bindings are application settings, not run state.** They are kept in their own file,
+  `user://settings.json` in the game's own folder, beside the save, with its own format version
+  (`settings_version: 1`, separate from the save's version 3). New Game, Continue, Return to Title,
+  a retry and deleting or replacing the save never change them; changing them never rewrites the
+  save. They are loaded when the game starts, before the title screen appears, and written only when
+  a binding changes or Reset to Defaults is confirmed.
+- **A settings file that cannot be used** (corrupt, another version, a duplicate or reserved key, a
+  missing control, an unknown key) is ignored as a whole: the defaults apply, the title and the
+  Settings screen say "Control settings could not be loaded. Defaults restored.", and the game and a
+  valid save work normally. The next change replaces the file.
+- **Every key shown to the player is the current binding:** the HUD's slot bar ("Q: Slingshot"), its
+  hint ("Tab: action menu"), the action menu's slot column, "(on Q)" and help line, and the signs
+  that name keys (the Surface's "Arrow keys to move", Floor 1's "W/A/S/D use the actions ...").
+- Keyboard only: no controller, mouse, audio, graphics, language or accessibility settings yet.
 
 ## 16. HUD
 
@@ -588,7 +646,7 @@ Eventually display:
 - Carl HP.
 - Donut HP/state.
 - Floor number/name.
-- W/A/S/D action slots and assigned items/counts.
+- W/A/S/D action slots and assigned items/counts (each labelled with its current key, Phase 13).
 
 No minimap is required for the initial prototype.
 

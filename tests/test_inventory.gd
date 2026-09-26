@@ -108,7 +108,7 @@ func _check_slots_follow_the_inventory() -> void:
 	for slot: StringName in [A, S, D]:
 		slots.assign(POTION, slot)
 		check(slots.get_action(slot) == POTION and slots.find_slot(POTION) == slot,
-				"the potion can go on " + ActionSlots.KEY_LABELS[slot])
+				"the potion can go on " + ActionSlots.SLOT_NAMES[slot])
 	check(slots.find_slot(FISTS) == &"", "putting the potion on Fists' key unassigns Fists")
 	slots.assign(FISTS, D)
 	slots.assign(POTION, A)

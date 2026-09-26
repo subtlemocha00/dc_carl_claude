@@ -85,8 +85,9 @@ func _play() -> void:
 		root.propagate_notification(Node.NOTIFICATION_WM_CLOSE_REQUEST)
 		root.close_requested.emit()
 	elif _mode == "return_title_quit":
-		# Pause > Return to Title > Yes.
+		# Pause > Return to Title (past Settings, Phase 13) > Yes.
 		await tap_key(KEY_ESCAPE)
+		await tap_key(KEY_DOWN)
 		await tap_key(KEY_DOWN)
 		await tap_key(KEY_ENTER)
 		await tap_key(KEY_DOWN)
@@ -99,7 +100,9 @@ func _play() -> void:
 		return
 	else:
 		var pause: CanvasLayer = level.get_node("PauseMenu")
+		# Resume, Settings (Phase 13), Return to Title, Quit Game.
 		await tap_key(KEY_ESCAPE)
+		await tap_key(KEY_DOWN)
 		await tap_key(KEY_DOWN)
 		await tap_key(KEY_DOWN)
 		await tap_key(KEY_ENTER)
@@ -125,7 +128,7 @@ func _play() -> void:
 func _quit_from_title() -> void:
 	var title := current_scene
 	var quit_option: int = title.get_script().get_script_constant_map()["Option"]["QUIT"]
-	for i in 3:
+	for i in 4:
 		if title.get_selected_option() == quit_option:
 			break
 		await tap_key(KEY_DOWN)

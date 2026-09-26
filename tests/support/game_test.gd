@@ -8,6 +8,10 @@ extends SceneTree
 ## this too (Phase 8): in a test run it refuses, with an error, any file outside that folder,
 ## including the player's save, so a test that never chose its own file fails instead of
 ## touching it (see test_save_isolation.gd).
+## Phase 13: the control settings follow the same rules. Every test also gets its own settings
+## file, TEST_SAVE_FOLDER + "<test>_settings.json", deleted when it starts and finishes, and starts
+## with the default bindings; SettingsManager refuses any other file in a test run
+## (see test_settings_manager.gd).
 
 ## Where tests keep their save files (never SaveManager.DEFAULT_SAVE_PATH). The same folder as
 ## SaveManager.TEST_SAVE_FOLDER.
@@ -60,12 +64,21 @@ func save_manager() -> Node:
 	return root.get_node("SaveManager")
 
 
+## The SettingsManager autoload (Phase 13).
+func settings_manager() -> Node:
+	return root.get_node("SettingsManager")
+
+
 ## Points SaveManager at this test's own save file and deletes it, so the test starts with no
-## save and never touches the player's.
+## save and never touches the player's. The same for SettingsManager and this test's own
+## settings file; the test starts with the default bindings.
 func _use_test_save_file() -> void:
 	var test_name := (get_script() as Script).resource_path.get_file().get_basename()
 	save_manager().save_path = TEST_SAVE_FOLDER + test_name + ".json"
 	save_manager().delete_save()
+	settings_manager().settings_path = TEST_SAVE_FOLDER + test_name + "_settings.json"
+	settings_manager().delete_settings_file()
+	settings_manager().load_settings()
 
 
 ## Returns the engine errors and warnings recorded so far and forgets them, so they do not fail
@@ -276,6 +289,7 @@ func finish() -> void:
 	_finished = true
 	steer(Vector2.ZERO)
 	save_manager().delete_save()
+	settings_manager().delete_settings_file()
 	for message in _error_recorder.messages:
 		_failures.append("Engine error/warning: " + message)
 	if _failures.is_empty():

@@ -13,7 +13,10 @@ extends "res://tests/support/game_test.gd"
 ##   (driver.windows = "opengl3_angle"); every other platform keeps Godot's default driver, and
 ##   the fallbacks stay on. (The driver actually used is checked in a real window by
 ##   test_windowed_resolutions.gd; a headless run has none.)
-## - Version 0.12.0 (Phase 12); the save format is still version 3.
+## - Version 0.13.0 (Phase 13); the save format is still version 3, and the control settings have
+##   their own format, version 1, in their own file, user://settings.json, in the same folder. The
+##   autoloads are GameState, SaveManager and (Phase 13) SettingsManager, and nothing else. A test run
+##   may not use the player's settings file either.
 ##
 ## Run from the project folder:
 ##     godot --headless --path . -s res://tests/test_project_setup.gd
@@ -76,6 +79,15 @@ func _check_save_paths() -> void:
 		var text := FileAccess.get_file_as_string(script_path).to_lower()
 		var found := ABSOLUTE_PATH_MARKERS.filter(func(marker: String) -> bool: return text.contains(marker))
 		check(found.is_empty(), "%s names no absolute or per-user folder" % script_path.get_file(), str(found))
+	var settings := settings_manager()
+	var settings_constants: Dictionary = settings.get_script().get_script_constant_map()
+	check(settings_constants["DEFAULT_SETTINGS_PATH"] == "user://settings.json"
+			and ProjectSettings.globalize_path(settings_constants["DEFAULT_SETTINGS_PATH"]) == OS.get_user_data_dir().path_join("settings.json"),
+			"the player's control settings are user://settings.json, in the DC CARL folder, beside the save")
+	check(not settings.is_settings_path_allowed(settings_constants["DEFAULT_SETTINGS_PATH"])
+			and not settings.is_settings_path_allowed("user://test_saves/../settings.json"), "a test run may not use the player's settings")
+	check(settings.settings_path == TEST_SAVE_FOLDER + "test_project_setup_settings.json" and settings.is_settings_path_allowed(settings.settings_path),
+			"this test has its own settings file in the test folder", settings.settings_path)
 	# The Phase 8 guard: a test run may use only files in the test folder, never the player's save.
 	check(not saves.is_save_path_allowed(constants["DEFAULT_SAVE_PATH"]), "a test run may not use the player's save")
 	check(not saves.is_save_path_allowed("user://test_saves/../savegame.json"), "nor reach it through the test folder")
@@ -103,9 +115,14 @@ func _check_renderer_settings() -> void:
 
 func _check_versions() -> void:
 	print("-- Versions")
-	check(ProjectSettings.get_setting("application/config/version") == "0.12.0", "the game version is 0.12.0",
+	check(ProjectSettings.get_setting("application/config/version") == "0.13.0", "the game version is 0.13.0",
 			str(ProjectSettings.get_setting("application/config/version")))
 	check(save_manager().SAVE_VERSION == 3, "the save format is still version 3", str(save_manager().SAVE_VERSION))
+	check(settings_manager().SETTINGS_VERSION == 1, "the settings format is version 1", str(settings_manager().SETTINGS_VERSION))
+	var autoloads := Array(ProjectSettings.get_property_list()).map(func(property: Dictionary) -> String: return property["name"]).filter(
+			func(setting: String) -> bool: return setting.begins_with("autoload/"))
+	check(autoloads == ["autoload/GameState", "autoload/SaveManager", "autoload/SettingsManager"],
+			"the autoloads are GameState, SaveManager and SettingsManager", str(autoloads))
 
 
 ## Every .gd file under `folder`.

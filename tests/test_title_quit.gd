@@ -1,9 +1,9 @@
 extends "res://tests/support/game_test.gd"
 ## Phase 11: Quit Game on the title screen, on this test's own save file.
 ## In this process, through the real title screen and keys:
-## - no save: Continue (unavailable), New Game (selected) and Quit Game; Up/Down go round New Game
-##   and Quit Game only;
-## - a Floor 6 save: Continue (selected), New Game and Quit Game; Up/Down go round all three;
+## - no save: Continue (unavailable), New Game (selected), Settings (Phase 13) and Quit Game; Up/Down
+##   go round New Game, Settings and Quit Game only;
+## - a Floor 6 save: Continue (selected), New Game, Settings and Quit Game; Up/Down go round all four;
 ## - New Game over the save still asks first (No selected), and the question's keys do not move
 ##   the menu's selection;
 ## - an unloadable save: New Game selected, Quit Game offered, New Game still asks;
@@ -30,7 +30,8 @@ const BAT: ActionDefinition = preload("res://resources/actions/baseball_bat.tres
 ## The title's options (TitleScreen.Option; test scripts cannot name scene scripts' enums).
 const CONTINUE := 0
 const NEW_GAME := 1
-const QUIT := 2
+const SETTINGS := 2
+const QUIT := 3
 
 var _title_path: String = ProjectSettings.get_setting("application/run/main_scene")
 var _checkpoint_text := ""
@@ -41,8 +42,8 @@ func _initialize() -> void:
 
 
 func _run_checks() -> void:
-	check(_title_option("CONTINUE") == CONTINUE and _title_option("NEW_GAME") == NEW_GAME and _title_option("QUIT") == QUIT,
-			"the title's options are Continue, New Game, Quit Game")
+	check(_title_option("CONTINUE") == CONTINUE and _title_option("NEW_GAME") == NEW_GAME and _title_option("SETTINGS") == SETTINGS
+			and _title_option("QUIT") == QUIT, "the title's options are Continue, New Game, Settings, Quit Game")
 	await _title_without_a_save()
 	_quit_from_the_title_without_a_save()
 	_seed_floor_6_checkpoint()
@@ -60,17 +61,20 @@ func _title_without_a_save() -> void:
 	check(not FileAccess.file_exists(save_manager().save_path), "there is no save file")
 	if not await _open_title():
 		return
-	check(not _title().is_continue_available() and _rows() == ["   Continue", "> New Game", "   Quit Game"] and _selected() == NEW_GAME,
-			"Continue is unavailable, Quit Game is offered, New Game is selected", str(_rows()))
+	check(not _title().is_continue_available() and _rows() == ["   Continue", "> New Game", "   Settings", "   Quit Game"] and _selected() == NEW_GAME,
+			"Continue is unavailable, Settings and Quit Game are offered, New Game is selected", str(_rows()))
 	check(_row("%SaveInfoLabel") == "No saved game yet.", "the title says there is no save")
 	await tap_key(KEY_DOWN)
-	check(_selected() == QUIT and _rows() == ["   Continue", "   New Game", "> Quit Game"], "Down selects Quit Game", str(_rows()))
+	check(_selected() == SETTINGS and _rows() == ["   Continue", "   New Game", "> Settings", "   Quit Game"], "Down selects Settings", str(_rows()))
+	await tap_key(KEY_DOWN)
+	check(_selected() == QUIT and _rows() == ["   Continue", "   New Game", "   Settings", "> Quit Game"], "Down again selects Quit Game", str(_rows()))
 	await tap_key(KEY_DOWN)
 	check(_selected() == NEW_GAME, "Down again goes round to New Game, past the unavailable Continue")
 	await tap_key(KEY_UP)
 	check(_selected() == QUIT, "Up from New Game goes round to Quit Game")
 	await tap_key(KEY_UP)
-	check(_selected() == NEW_GAME and _rows()[0] == "   Continue", "Up again: New Game; Continue is never selected")
+	await tap_key(KEY_UP)
+	check(_selected() == NEW_GAME and _rows()[0] == "   Continue", "Up twice more: Settings, then New Game; Continue is never selected")
 
 
 func _quit_from_the_title_without_a_save() -> void:
@@ -107,17 +111,21 @@ func _title_with_a_save() -> void:
 	print("-- A Floor 6 save")
 	if not await _open_title():
 		return
-	check(_title().is_continue_available() and _rows() == ["> Continue", "   New Game", "   Quit Game"] and _selected() == CONTINUE,
-			"Continue, New Game and Quit Game are offered, Continue is selected", str(_rows()))
+	check(_title().is_continue_available() and _rows() == ["> Continue", "   New Game", "   Settings", "   Quit Game"] and _selected() == CONTINUE,
+			"Continue, New Game, Settings and Quit Game are offered, Continue is selected", str(_rows()))
 	check(_row("%SaveInfoLabel") == "Saved at the start of Floor 6  -  HP 80 / 100", "the title describes the save")
 	await tap_key(KEY_DOWN)
 	check(_selected() == NEW_GAME, "Down selects New Game")
 	await tap_key(KEY_DOWN)
-	check(_selected() == QUIT and _rows() == ["   Continue", "   New Game", "> Quit Game"], "Down again selects Quit Game", str(_rows()))
+	check(_selected() == SETTINGS, "Down again selects Settings")
+	await tap_key(KEY_DOWN)
+	check(_selected() == QUIT and _rows() == ["   Continue", "   New Game", "   Settings", "> Quit Game"], "Down again selects Quit Game", str(_rows()))
 	await tap_key(KEY_DOWN)
 	check(_selected() == CONTINUE, "Down again goes round to Continue")
 	await tap_key(KEY_UP)
 	check(_selected() == QUIT, "Up from Continue goes round to Quit Game")
+	await tap_key(KEY_UP)
+	check(_selected() == SETTINGS, "Up again selects Settings")
 	await tap_key(KEY_UP)
 	check(_selected() == NEW_GAME, "Up again selects New Game")
 
@@ -187,15 +195,18 @@ func _return_to_title_then_continue() -> void:
 		return
 	await wait_physics_frames(3)
 	current_scene.get_node("Actors/Carl").health.take_damage(50)
+	# Pause > Return to Title (past Settings) > Yes.
 	await tap_key(KEY_ESCAPE)
+	await tap_key(KEY_DOWN)
 	await tap_key(KEY_DOWN)
 	await tap_key(KEY_ENTER)
 	await tap_key(KEY_DOWN)
 	await tap_key(KEY_ENTER)
 	if not await wait_for_scene(_title_path):
 		return
-	check(_rows() == ["> Continue", "   New Game", "   Quit Game"] and _row("%SaveInfoLabel") == "Saved at the start of Floor 6  -  HP 80 / 100",
-			"back on the title: Continue selected, Quit Game offered, the checkpoint described", str(_rows()))
+	check(_rows() == ["> Continue", "   New Game", "   Settings", "   Quit Game"] and _row("%SaveInfoLabel") == "Saved at the start of Floor 6  -  HP 80 / 100",
+			"back on the title: Continue selected, Settings and Quit Game offered, the checkpoint described", str(_rows()))
+	await tap_key(KEY_DOWN)
 	await tap_key(KEY_DOWN)
 	await tap_key(KEY_DOWN)
 	check(_selected() == QUIT, "Quit Game can be selected")
@@ -220,11 +231,12 @@ func _title_with_an_unloadable_save() -> void:
 	if not await _open_title():
 		return
 	var title := _title()
-	check(not title.is_continue_available() and _rows() == ["   Continue", "> New Game", "   Quit Game"],
-			"Continue is unavailable, New Game is selected, Quit Game is offered", str(_rows()))
+	check(not title.is_continue_available() and _rows() == ["   Continue", "> New Game", "   Settings", "   Quit Game"],
+			"Continue is unavailable, New Game is selected, Settings and Quit Game are offered", str(_rows()))
 	check(_row("%SaveInfoLabel") == "Save data could not be loaded.", "the title says the save could not be loaded")
 	await tap_key(KEY_DOWN)
-	check(_selected() == QUIT, "Down selects Quit Game")
+	await tap_key(KEY_DOWN)
+	check(_selected() == QUIT, "Down twice selects Quit Game")
 	await tap_key(KEY_DOWN)
 	await tap_key(KEY_ENTER)
 	check(title.is_confirming() and _row("%ConfirmQuestion").contains("could not be loaded"), "New Game still asks before replacing the file")
@@ -275,4 +287,4 @@ func _row(row_name: String) -> String:
 
 
 func _rows() -> Array:
-	return ["%ContinueRow", "%NewGameRow", "%QuitRow"].map(func(row_name: String) -> String: return _row(row_name))
+	return ["%ContinueRow", "%NewGameRow", "%SettingsRow", "%QuitRow"].map(func(row_name: String) -> String: return _row(row_name))

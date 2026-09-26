@@ -145,7 +145,7 @@ func _check_slot_assignment() -> void:
 	inventory.add(BAT, 1)
 	for slot: StringName in [W, A, S, D]:
 		check(slots.assign(BAT, slot) and slots.find_slot(BAT) == slot and _slots_holding(slots, BAT) == 1,
-				"once owned it can go on %s, and is in one slot only" % ActionSlots.KEY_LABELS[slot])
+				"once owned it can go on %s, and is in one slot only" % ActionSlots.SLOT_NAMES[slot])
 	slots.assign(FISTS, D)
 	inventory.add(SLINGSHOT, 1)
 	inventory.add(POTION, 1)

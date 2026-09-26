@@ -1,10 +1,18 @@
 extends CanvasLayer
-## The action menu (Carl's inventory), opened and closed with Space. While it is open the game
-## is paused. It lists everything Carl has, with quantities for carried items (for example
-## "Small Health Potion x2"), and the player chooses which action each W/A/S/D slot holds:
-## - Up/Down select one of Carl's actions;
-## - W, A, S or D puts the selected action in that slot (and takes it out of its old slot);
-## - Space or Escape closes the menu, and the game carries on.
+## The action menu (Carl's inventory), opened and closed with the Inventory key (Space by
+## default). While it is open the game is paused. It lists everything Carl has, with quantities
+## for carried items (for example "Small Health Potion x2"), and the player chooses which action
+## each of the four slots holds:
+## - Up/Down select one of Carl's actions (the fixed menu keys, menu_up/menu_down);
+## - a slot's key (W, A, S or D by default) puts the selected action in that slot (and takes it
+##   out of its old slot);
+## - the Inventory key or Escape closes the menu, and the game carries on.
+## Phase 13: the slot keys and the Inventory key are the player's current bindings. The menu asks
+## for the actions (action_w, ..., inventory_toggle), never for literal keys, so with the W slot
+## rebound to Q, Q assigns to the W slot and W does nothing. Every key it names (the slot column,
+## "(on Q)", the help line) is the current binding. When a key is both a fixed menu key and a
+## rebound control (a slot on Up Arrow, say), the menu key wins here: Escape, Up and Down always
+## keep the menu usable.
 ## The menu only shows the Inventory and edits the ActionSlots it is given. It has no gameplay
 ## rules and stores no quantities of its own.
 ##
@@ -29,10 +37,12 @@ var _selected_row_style := StyleBoxFlat.new()
 @onready var slot_list: VBoxContainer = %SlotList
 @onready var action_list: VBoxContainer = %ActionList
 @onready var details_label: Label = %DetailsLabel
+@onready var help_label: Label = %HelpLabel
 
 
 func _ready() -> void:
 	visible = false
+	add_to_group(ControlBindings.HINT_GROUP)
 	_selected_row_style.bg_color = Color(1, 1, 1, 0.14)
 	_selected_row_style.set_content_margin_all(4)
 	_selected_row_style.set_corner_radius_all(3)
@@ -48,12 +58,14 @@ func _unhandled_input(event: InputEvent) -> void:
 	# While open, the menu takes every key press, so none of them reach the game.
 	if event is InputEventKey:
 		get_viewport().set_input_as_handled()
-	if event.is_action_pressed(&"inventory_toggle") or event.is_action_pressed(&"pause_back"):
+	if event.is_action_pressed(&"pause_back"):
 		close()
-	elif event.is_action_pressed(&"move_up", true):
+	elif event.is_action_pressed(&"menu_up", true):
 		_select(_selected_index - 1)
-	elif event.is_action_pressed(&"move_down", true):
+	elif event.is_action_pressed(&"menu_down", true):
 		_select(_selected_index + 1)
+	elif event.is_action_pressed(&"inventory_toggle"):
+		close()
 	else:
 		for slot in ActionSlots.SLOTS:
 			if event.is_action_pressed(slot):
@@ -89,6 +101,12 @@ func open() -> void:
 	visible = true
 
 
+## Shows the current keys (SettingsManager calls this on the hint group after a binding changes).
+func refresh_control_hints() -> void:
+	if _inventory != null:
+		_refresh()
+
+
 ## Hides the menu and lets the game carry on.
 func close() -> void:
 	if not is_open():
@@ -109,16 +127,18 @@ func _assign_selected_action(slot: StringName) -> void:
 	if action == null:
 		return
 	if _action_slots.assign(action, slot):
-		details_label.text = "%s is now on %s." % [action.display_name, ActionSlots.KEY_LABELS[slot]]
+		details_label.text = "%s is now on %s." % [action.display_name, ControlBindings.get_key_label(slot)]
 	else:
 		details_label.text = "%s cannot be put in a slot." % action.display_name
 
 
-## Rewrites every row from the current slots, inventory and selection.
+## Rewrites every row from the current slots, inventory, selection and keys.
 func _refresh() -> void:
+	var slot_keys := PackedStringArray()
 	for i in ActionSlots.SLOTS.size():
 		var slot := ActionSlots.SLOTS[i]
-		var text := "%s   %s" % [ActionSlots.KEY_LABELS[slot], _action_slots.get_display_name(slot)]
+		slot_keys.append(ControlBindings.get_key_label(slot))
+		var text := "%s   %s" % [ControlBindings.get_key_label(slot), _action_slots.get_display_name(slot)]
 		_update_row(_get_row(slot_list, i), text, ROW_COLOR, false)
 
 	var actions := _inventory.get_actions()
@@ -127,7 +147,7 @@ func _refresh() -> void:
 	for i in actions.size():
 		var action := actions[i]
 		var slot := _action_slots.find_slot(action)
-		var where := "on " + ActionSlots.KEY_LABELS[slot] if slot != &"" else "no slot"
+		var where := "on " + ControlBindings.get_key_label(slot) if slot != &"" else "no slot"
 		var is_selected := i == _selected_index
 		var color := SELECTED_ROW_COLOR if is_selected else ROW_COLOR
 		if not action.assignable:
@@ -138,6 +158,8 @@ func _refresh() -> void:
 		var extra_row := action_list.get_child(action_list.get_child_count() - 1)
 		action_list.remove_child(extra_row)
 		extra_row.queue_free()
+	help_label.text = "Up/Down: choose an action     %s: put it on that key     %s/Esc: close" % [
+			"/".join(slot_keys), ControlBindings.get_key_label(&"inventory_toggle")]
 
 
 ## Returns row `index` of `list`, adding Labels until it exists.

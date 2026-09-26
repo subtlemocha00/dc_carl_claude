@@ -29,6 +29,15 @@ extends "res://tests/support/game_test.gd"
 ## and Return to Title are then checked on Floor 7.
 ## Then the title screen at each size, with a Floor 7 save: Continue, New Game and Quit Game, the
 ## "could not be loaded" message, and the New Game confirmation.
+## Phase 13 adds, at each size, on Floor 7 through the pause menu's Settings row: the Settings
+## screen (its nine controls with their keys, Reset to Defaults, Back) on screen, centred, every row
+## inside it and fitting, over the paused game; the key-capture prompt; a conflict message with a
+## long key name ("BracketLeft is already assigned to Action Slot W."); the Reset to Defaults
+## question. Then, with the controls on 1/2/3/4 and Tab: the HUD's slot bar ("1: Baseball Bat
+## 2: Potion x2 ...") and hint ("Tab: action menu") on screen and fitting, and the action menu's slot
+## column, "(on 1)" rows and help line ("1/2/3/4: put it on that key     Tab/Esc: close") inside its
+## panel and fitting. The pause menu now has four rows (Settings second), and the title four
+## (Settings third), each on screen; the title's "Control settings could not be loaded" line too.
 ##
 ## Run from the project folder (NOT headless; a game window opens briefly):
 ##     godot --path . -s res://tests/test_windowed_resolutions.gd
@@ -155,6 +164,7 @@ func _run_checks() -> void:
 	await _check_floor_5()
 	await _check_floor_6()
 	await _check_floor_7()
+	await _check_settings_screen()
 	await _check_pause_menu()
 	await _check_title_screen()
 	finish()
@@ -493,6 +503,122 @@ func _check_floor_7() -> void:
 	check(FloorRegistry.get_floor_id(state.floor_entry.scene_path) == &"floor_07", "the save now holds the Floor 7 checkpoint")
 
 
+## Phase 13: the Settings screen, opened from the pause menu on Floor 7, at each size; then the HUD
+## and the action menu with rebound keys. The controls are back on their defaults afterwards.
+func _check_settings_screen() -> void:
+	var level := current_scene
+	var pause: CanvasLayer = level.get_node("PauseMenu")
+	var settings: Control = pause.get_node("%SettingsMenu")
+	var panel: Control = settings.get_node("%SettingsPanel")
+	var message: Label = settings.get_node("%MessageLabel")
+	await tap_key(KEY_ESCAPE)
+	await tap_key(KEY_DOWN)
+	await tap_key(KEY_ENTER)
+	check(settings.is_open() and paused, "Settings opens from the pause menu, the game paused")
+	await _check_settings_layout(settings, panel, "Settings")
+	# The capture prompt.
+	for i in 4:
+		await tap_key(KEY_DOWN)
+	await tap_key(KEY_ENTER)
+	await _check_settings_layout(settings, panel, "capture prompt")
+	check(message.text == "Press a key for Action Slot W   (Esc: cancel)", "the capture prompt reads \"%s\"" % message.text)
+	await tap_key(KEY_BRACKETLEFT)
+	# A conflict with a long key name.
+	for i in 4:
+		await tap_key(KEY_DOWN)
+	await tap_key(KEY_ENTER)
+	await tap_key(KEY_BRACKETLEFT)
+	check(message.text == "BracketLeft is already assigned to Action Slot W.", "the conflict message", message.text)
+	await _check_settings_layout(settings, panel, "conflict message")
+	# The Reset to Defaults question, then Yes.
+	await tap_key(KEY_DOWN)
+	await tap_key(KEY_ENTER)
+	var confirm: Control = settings.get_node("%ResetConfirmPanel")
+	for window_size in WINDOW_SIZES:
+		DisplayServer.window_set_size(window_size)
+		await wait_physics_frames(10)
+		var label := "%dx%d" % [window_size.x, window_size.y]
+		var visible_rect := root.get_visible_rect()
+		var rect := confirm.get_global_rect()
+		check(confirm.is_visible_in_tree() and not panel.is_visible_in_tree() and visible_rect.encloses(rect) and rect.get_center().distance_to(visible_rect.get_center()) < 2.0,
+				label + ": the Reset to Defaults question is on screen and centred", str(rect))
+		for row_name: String in ["%ResetQuestion", "%ResetNoRow", "%ResetYesRow"]:
+			var row: Label = settings.get_node(row_name)
+			check(rect.encloses(row.get_global_rect()) and row.get_minimum_size().x <= row.size.x,
+					"%s: %s \"%s\" is inside it and fits" % [label, row_name.trim_prefix("%"), row.text])
+	await tap_key(KEY_DOWN)
+	await tap_key(KEY_ENTER)
+	check(settings_manager().is_default(), "Yes restores the defaults")
+	await tap_key(KEY_ESCAPE)
+	await tap_key(KEY_ESCAPE)
+	check(not paused, "back in play")
+
+	# The HUD and the action menu with the controls on 1/2/3/4 and Tab.
+	for pair: Array in [[&"action_w", KEY_1], [&"action_a", KEY_2], [&"action_s", KEY_3], [&"action_d", KEY_4], [&"inventory_toggle", KEY_TAB]]:
+		settings_manager().set_binding(pair[0], pair[1])
+	var hud := level.get_node("HUD")
+	var slot_bar: Label = hud.get_node("%ActionSlotsLabel")
+	var hint: Label = hud.get_node("%MenuHint")
+	var action_menu: CanvasLayer = level.get_node("ActionMenu")
+	var menu_panel: Control = action_menu.get_node("%Panel")
+	var bombs: int = game_state().inventory.get_quantity(BOMB)
+	check(slot_bar.text == "1: Baseball Bat   2: Potion x2   3: Blast Bomb x%d   4: Slingshot" % bombs and hint.text == "Tab: action menu     Esc: pause",
+			"the HUD names 1/2/3/4 and Tab", "%s | %s" % [slot_bar.text, hint.text])
+	for window_size in WINDOW_SIZES:
+		DisplayServer.window_set_size(window_size)
+		await wait_physics_frames(10)
+		var label := "%dx%d" % [window_size.x, window_size.y]
+		var visible_rect := root.get_visible_rect()
+		check(visible_rect.encloses(slot_bar.get_global_rect()) and slot_bar.get_minimum_size().x <= slot_bar.size.x,
+				label + ": the rebound slot bar is on screen and fits", slot_bar.text)
+		check(visible_rect.encloses(hint.get_global_rect()) and hint.get_minimum_size().x <= hint.size.x
+				and not hint.get_global_rect().intersects(slot_bar.get_global_rect()), label + ": the rebound hint is on screen, fits, clear of the slot bar")
+		await tap_key(KEY_TAB)
+		check(action_menu.is_open(), label + ": Tab opens the action menu")
+		await process_frame
+		var panel_rect := menu_panel.get_global_rect()
+		var help: Label = action_menu.get_node("%HelpLabel")
+		check(help.text == "Up/Down: choose an action     1/2/3/4: put it on that key     Tab/Esc: close"
+				and panel_rect.encloses(help.get_global_rect()) and help.get_minimum_size().x <= help.size.x,
+				label + ": the menu's help line names 1/2/3/4 and Tab, inside the panel", help.text)
+		var slot_rows: Array = action_menu.get_node("%SlotList").get_children()
+		check(slot_rows.size() == 4 and (slot_rows[0] as Label).text == "1   Baseball Bat"
+				and slot_rows.all(func(row: Label) -> bool: return panel_rect.encloses(row.get_global_rect())),
+				label + ": the slot column names 1/2/3/4, inside the panel", str(slot_rows.map(func(row: Label) -> String: return row.text)))
+		var on_one := action_menu.get_node("%ActionList").get_children().filter(func(row: Label) -> bool: return row.text.contains("Baseball Bat   (on 1)"))
+		check(on_one.size() == 1 and panel_rect.encloses((on_one[0] as Label).get_global_rect()), label + ": the Bat's row says \"(on 1)\"")
+		await tap_key(KEY_TAB)
+	settings_manager().reset_to_defaults()
+	check(slot_bar.text.begins_with("W: Baseball Bat") and hint.text == "Space: action menu     Esc: pause", "defaults again: the HUD says W and Space")
+	DisplayServer.window_set_size(WINDOW_SIZES[0])
+	await wait_physics_frames(10)
+
+
+## The Settings screen at each size: on screen and centred, every row inside it and fitting.
+func _check_settings_layout(settings: Control, panel: Control, what: String) -> void:
+	for window_size in WINDOW_SIZES:
+		DisplayServer.window_set_size(window_size)
+		await wait_physics_frames(10)
+		var label := "%dx%d %s" % [window_size.x, window_size.y, what]
+		var visible_rect := root.get_visible_rect()
+		var rect := panel.get_global_rect()
+		check(settings.is_open() and visible_rect.encloses(rect) and rect.get_center().distance_to(visible_rect.get_center()) < 2.0,
+				label + ": the Settings screen is on screen and centred", str(rect))
+		var labels: Array[Label] = []
+		for row in settings.get_node("%Rows").get_children():
+			if row is HBoxContainer:
+				labels.append(row.get_child(0) as Label)
+				labels.append(row.get_child(1) as Label)
+			else:
+				labels.append(row as Label)
+		labels.append(settings.get_node("%MessageLabel") as Label)
+		check(labels.size() == 21 and labels.all(func(row: Label) -> bool:
+				return rect.encloses(row.get_global_rect()) and row.get_minimum_size().x <= row.size.x),
+				label + ": its 9 controls with their keys, Reset to Defaults, Back and the message are inside it and fit",
+				str(labels.filter(func(row: Label) -> bool: return not rect.encloses(row.get_global_rect()) or row.get_minimum_size().x > row.size.x).map(
+						func(row: Label) -> String: return row.text)))
+
+
 ## Phase 10: on the current floor (Floor 7 since Phase 12) at each size, the pause menu (its three
 ## rows) and both of its questions (Return to Title, Quit Game: the warning text fits) are on screen
 ## and centred, drawn over the HUD. Then Return to Title through the menu: the title screen is on
@@ -511,11 +637,13 @@ func _check_pause_menu() -> void:
 		var panel_rect := (pause.get_node("%MenuPanel") as Control).get_global_rect()
 		check(pause.is_open() and visible_rect.encloses(panel_rect) and panel_rect.get_center().distance_to(visible_rect.get_center()) < 2.0,
 				label + ": the pause menu is on screen and centred", str(panel_rect))
-		for row_name: String in ["%ResumeRow", "%ReturnToTitleRow", "%QuitRow"]:
+		for row_name: String in ["%ResumeRow", "%SettingsRow", "%ReturnToTitleRow", "%QuitRow"]:
 			var row: Label = pause.get_node(row_name)
 			check(panel_rect.encloses(row.get_global_rect()) and row.get_minimum_size().x <= row.size.x,
 					"%s: %s \"%s\" is inside the panel and fits" % [label, row_name.trim_prefix("%"), row.text])
-	for option: int in [1, 2]:
+	# Past Settings (Phase 13, checked above) to Return to Title, then Quit Game.
+	await tap_key(KEY_DOWN)
+	for option: int in [2, 3]:
 		await tap_key(KEY_DOWN)
 		await tap_key(KEY_ENTER)
 		var question: Label = pause.get_node("%ConfirmQuestion")
@@ -566,6 +694,11 @@ func _check_title_screen() -> void:
 			var file := FileAccess.open(save_manager().save_path, FileAccess.WRITE)
 			file.store_string("{broken")
 			file.close()
+			# Phase 13: a broken settings file too, so the title shows its message.
+			var settings_file := FileAccess.open(settings_manager().settings_path, FileAccess.WRITE)
+			settings_file.store_string("{broken")
+			settings_file.close()
+			settings_manager().load_settings()
 		change_scene_to_file(title_path)
 		await wait_for_scene(title_path)
 		var title := current_scene
@@ -578,11 +711,16 @@ func _check_title_screen() -> void:
 			await wait_physics_frames(10)
 			var label := "title %dx%d%s" % [window_size.x, window_size.y, " (broken save)" if broken_save else ""]
 			var visible_rect := root.get_visible_rect()
-			for row_name: String in ["%ContinueRow", "%NewGameRow", "%QuitRow", "%SaveInfoLabel", "%VersionLabel"]:
+			for row_name: String in ["%ContinueRow", "%NewGameRow", "%SettingsRow", "%QuitRow", "%SaveInfoLabel", "%VersionLabel"]:
 				check(visible_rect.encloses(title.get_node(row_name).get_global_rect()), "%s: %s is on screen" % [label, row_name.trim_prefix("%")])
-			var rows: Array = ["%ContinueRow", "%NewGameRow", "%QuitRow"].map(func(row_name: String) -> Rect2: return title.get_node(row_name).get_global_rect())
-			check(rows[0].end.y <= rows[1].position.y and rows[1].end.y <= rows[2].position.y and rows[2].end.y <= title.get_node("%SaveInfoLabel").get_global_rect().position.y,
-					"%s: the three rows are stacked in order above the save line" % label, str(rows))
+			var rows: Array = ["%ContinueRow", "%NewGameRow", "%SettingsRow", "%QuitRow"].map(func(row_name: String) -> Rect2: return title.get_node(row_name).get_global_rect())
+			check(rows[0].end.y <= rows[1].position.y and rows[1].end.y <= rows[2].position.y and rows[2].end.y <= rows[3].position.y
+					and rows[3].end.y <= title.get_node("%SaveInfoLabel").get_global_rect().position.y,
+					"%s: the four rows are stacked in order above the save line" % label, str(rows))
+			var settings_info: Label = title.get_node("%SettingsInfoLabel")
+			check(settings_info.visible == broken_save and (not broken_save or (visible_rect.encloses(settings_info.get_global_rect())
+					and settings_info.text == "Control settings could not be loaded. Defaults restored.")),
+					"%s: the settings line is %s" % [label, "on screen" if broken_save else "hidden"])
 		# Quit Game selected (Up goes round to it from the first option), then back.
 		await tap_key(KEY_UP)
 		var quit_row: Label = title.get_node("%QuitRow")

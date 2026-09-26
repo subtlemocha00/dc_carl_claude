@@ -8,6 +8,7 @@
 [ext_resource type="Script" uid="uid://cl04fq6klxd45" path="res://scripts/levels/level.gd" id="6_level"]
 [ext_resource type="PackedScene" uid="uid://b3qj7webupb5k" path="res://scenes/ui/hud.tscn" id="7_hud"]
 [ext_resource type="PackedScene" uid="uid://ct41gcr0xgp3i" path="res://scenes/ui/action_menu.tscn" id="9_menu"]
+[ext_resource type="Script" path="res://scripts/ui/key_hint_label.gd" id="10_key_hint"]
 
 [sub_resource type="NavigationPolygon" id="NavigationPolygon_level"]
 outlines = Array[PackedVector2Array]([PackedVector2Array(0, 0, 1536, 0, 1536, 896, 0, 896)])
@@ -42,6 +43,9 @@ theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_constants/outline_size = 4
 theme_override_font_sizes/font_size = 14
 text = "Arrow keys to move"
+script = ExtResource("10_key_hint")
+template = "{move_up}/{move_left}/{move_down}/{move_right} to move"
+default_text = "Arrow keys to move"
 horizontal_alignment = 1
 
 [node name="EntranceSign" type="Label" parent="Signs"]

@@ -1,5 +1,10 @@
 extends SceneTree
 ## Sanity check for the game's InputMap actions (GAME_SPEC.md section 4).
+## Phase 13: the nine gameplay controls below are the defaults the player can rebind in Settings
+## (they must equal ControlBindings.DEFAULT_KEYS, so no settings file means exactly these keys).
+## The menus have their own fixed actions, menu_up/down/left/right on the arrow keys, which share the
+## arrows with the default movement keys on purpose (a menu never moves Carl, and play never moves a
+## menu selection) and are never rebound, like ui_confirm_game (Enter) and pause_back (Escape).
 ##
 ## Run from the project folder:
 ##     godot --headless --path . -s res://tests/test_input_map.gd
@@ -24,13 +29,36 @@ const EXPECTED_BINDINGS: Dictionary = {
 }
 
 
+## The menus' own actions (Phase 13), fixed on the arrow keys and bound to nothing else.
+const MENU_BINDINGS: Dictionary = {
+	&"menu_up": KEY_UP,
+	&"menu_down": KEY_DOWN,
+	&"menu_left": KEY_LEFT,
+	&"menu_right": KEY_RIGHT,
+}
+
+
 func _initialize() -> void:
 	var failures := PackedStringArray()
 	for action: StringName in EXPECTED_BINDINGS:
 		failures.append_array(_check_action(action))
+	for action: StringName in MENU_BINDINGS:
+		if not InputMap.has_action(action):
+			failures.append("Missing input action '%s'." % action)
+		elif _get_bound_keys(action) != [MENU_BINDINGS[action]]:
+			failures.append("'%s' must be bound to %s only, not %s." % [action, OS.get_keycode_string(MENU_BINDINGS[action]), _get_bound_keys(action)])
+	# The rebindable controls and their defaults (Phase 13).
+	if ControlBindings.ACTIONS.size() != 9:
+		failures.append("There must be nine rebindable controls, not %d." % ControlBindings.ACTIONS.size())
+	for action in ControlBindings.ACTIONS:
+		if ControlBindings.DEFAULT_KEYS.get(action) != EXPECTED_BINDINGS.get(action):
+			failures.append("The default key of '%s' is not %s." % [action, OS.get_keycode_string(EXPECTED_BINDINGS.get(action, KEY_NONE))])
+	for fixed: StringName in [&"ui_confirm_game", &"pause_back"] + MENU_BINDINGS.keys():
+		if fixed in ControlBindings.ACTIONS:
+			failures.append("'%s' is a menu key and must not be rebindable." % fixed)
 
 	if failures.is_empty():
-		print("PASS: all %d input actions are bound as specified." % EXPECTED_BINDINGS.size())
+		print("PASS: all %d input actions are bound as specified." % (EXPECTED_BINDINGS.size() + MENU_BINDINGS.size()))
 		quit(0)
 	else:
 		for failure in failures:

@@ -7,8 +7,8 @@ Godot 4.7.2 stable (Standard build, not .NET)
 GDScript
 
 ## Current phase
-Phase 12 — Enemy Loot Drops, Blast Bombs, Area Damage and Floor 7: **complete, awaiting human
-review**.
+Phase 13 — Persistent Control Rebinding and Settings Menu: **complete, awaiting human review**.
+- Phase 12 — Enemy Loot Drops, Blast Bombs, Area Damage and Floor 7: complete (commit `b471ffe`).
 - Phase 11 — Project Data Isolation, Windows ANGLE Stability and Title-Screen Quit: complete
   (commit `41c57f2`).
 - Phase 10 — Pause Menu, Return to Title, Clean Quit and Runtime Stability: complete (commit
@@ -27,7 +27,7 @@ review**.
 - Phase 1 — First Traversal Slice: complete (commit `3cb8854`).
 - Phase 0 — Project Foundation: complete (commit `37b2c87`).
 
-There are no `PHASE_02_*.md` to `PHASE_12_*.md` files. Phases 2–12 came from the owner's
+There are no `PHASE_02_*.md` to `PHASE_13_*.md` files. Phases 2–13 came from the owner's
 prompts. Their acceptance criteria are recorded in `ACCEPTANCE_TESTS.md`.
 
 ## Canonical design decisions (do not reintroduce the old behaviour)
@@ -36,7 +36,8 @@ Phase 3 decisions, still in force:
 - **W/A/S/D are configurable action slots.** A new game has **Fists in D** and W, A and S
   empty. The player changes what each slot holds in the in-game action menu (Space).
 - **The keys themselves are fixed.** Rebinding physical keys is a separate, future
-  settings concern.
+  settings concern. (Superseded in Phase 13: the nine gameplay controls can be rebound in
+  Settings; the slots stay the same four logical slots, and the menus' own keys stay fixed.)
 - **Dungeon progression is downward only.** No level has stairs or triggers back up.
 - **GAME OVER freezes the game and waits for Enter.** It never restarts on a timer. Enter
   retries the current floor from its floor-entry state.
@@ -307,6 +308,67 @@ Phase 12 decisions (also written into `GAME_SPEC.md` §8, §9, §10, §14c, §14
   - the drop reuses the pink pickup label colour; the bomb has its own 32 × 32 icon, used by the
     pickup (the menu and HUD show names only, as for every item).
 
+Phase 13 decisions (also written into `GAME_SPEC.md` §4, §5, §8, §15, §15a, §15b, §15c and §16):
+- **Slot contents are run state; key bindings are application settings.** The four action slots
+  stay the logical slots `action_w` … `action_d` ("the W slot"), saved in the checkpoint as before.
+  Which physical key triggers each is a setting, kept apart from the save. Changing a key never
+  moves or clears what a slot holds, and nothing about slots changed in the save.
+- **Nine rebindable gameplay controls**, exactly the existing InputMap actions: `move_up`,
+  `move_down`, `move_left`, `move_right`, `action_w`, `action_a`, `action_s`, `action_d`,
+  `inventory_toggle`. Canonical defaults (Reset to Defaults): the arrow keys, W/A/S/D, Space, the
+  same as `project.godot`, so a player without a settings file sees no difference.
+- **Fixed menu keys:** menus no longer read the movement actions. New InputMap actions `menu_up`,
+  `menu_down`, `menu_left`, `menu_right` (the arrow keys) drive the title, the pause menu, its
+  questions, the action menu's selection and the Settings screen, next to the existing
+  `ui_confirm_game` (Enter) and `pause_back` (Escape). None of the six can be rebound, so no binding
+  can make a menu unusable. (By default the arrows are both movement and menu keys, on purpose: a
+  menu never moves Carl, and play never moves a selection.)
+- **Settings** is on the title (Continue, New Game, **Settings**, Quit Game) and in the pause menu
+  (Resume, **Settings**, Return to Title, Quit Game). Both instantiate the same scene,
+  `scenes/ui/settings_menu.tscn`. From the pause menu the game stays paused throughout.
+- **One section, Controls:** the nine controls with their keys, Reset to Defaults, Back. No empty
+  Audio/Graphics pages.
+- **Capture:** Enter on a control waits for the next key press, which becomes its key at once
+  (applied and saved); Escape cancels. The press is used up: its key repeat and release are ignored
+  by the screen, and the changed action counts as released until its new key is pressed again, so
+  it never also triggers the gameplay action (and Carl's existing held-through-unpause rule covers
+  holding it through Resume).
+- **Conflicts are refused, never swapped or stolen:** "Q is already assigned to Action Slot W.";
+  one pool of keys for movement, slots and Inventory.
+- **Reserved and unusable keys:** Escape, Enter and keypad Enter are reserved. Allowed: printable
+  keys (letters, digits, Space, punctuation), Tab, Backspace, Insert, Delete, Home, End, Page Up/Down,
+  the arrows and the keypad digits/operators. Refused: modifiers alone, lock keys, **function keys**
+  (F10 is special to Windows) and media keys. No chords.
+- **`SettingsManager`**, a third autoload (`scripts/autoload/settings_manager.gd`): defaults,
+  current bindings, validation, InputMap application, loading before the title appears, the safe
+  write, Reset to Defaults and the test-path guard. `ControlBindings`
+  (`scripts/settings/control_bindings.gd`, static) holds the list of controls, their names and
+  defaults, the key policy and the key names, and reads the InputMap for the UI. SaveManager and
+  GameState are unchanged in role and know nothing about bindings.
+- **Settings file** `user://settings.json` (`%APPDATA%\DC CARL\settings.json`), its own format
+  `settings_version: 1` (the save stays `save_version: 3`), stable control ids and key names:
+  `{"settings_version": 1, "keyboard": {"move_up": "I", ..., "inventory_toggle": "Tab"}}`.
+- **Invalid settings files are ignored as a whole** (defaults applied, a message on the title and the
+  Settings screen, the file left until the next change replaces it); they never affect the save.
+- **Dynamic hints:** the HUD slot bar and hint, the action menu's slot column, "(on …)", details and
+  help line, and the two signs that name keys (Surface, Floor 1) all show the current keys.
+- **Phase 13 choices the prompt left open** (the narrowest fit with the existing code):
+  - `SettingsManager` is an autoload although `ARCHITECTURE_RULES.md` §4 names only GameState and
+    SaveManager: the prompt asked for it by name, and only an autoload is guaranteed to have applied
+    the bindings before the main scene (the title) exists. It is the only addition;
+  - the menus got their own fixed actions (`menu_*`) rather than Godot's `ui_up`/`ui_down`, whose
+    defaults also include gamepad buttons (no controller support yet);
+  - keys are stored by Godot's layout-independent key name (`OS.get_keycode_string()`, "Q", "Tab",
+    "Kp 1") and bound by physical position, as `project.godot` always did;
+  - a refused capture (conflict, reserved, unusable key) ends the capture with its message; press
+    Enter to try again;
+  - in the action menu the fixed menu keys win over a control bound to the same key (Escape, Up and
+    Down always work there); a slot on Up or Down Arrow can then only be assigned by moving it;
+  - an unusable settings file is not rewritten on load (so a newer version's file is not destroyed);
+    the title says the defaults are in use until the next change or Reset writes a valid file;
+  - a test run loads a settings file at startup only when given `--settings-file=<file in
+    user://test_saves/>` (for the restart tests); the game always loads `user://settings.json`.
+
 ## Implemented
 - **Title screen** (main scene):
   - **Continue** (available only when the save loads) resumes the saved floor checkpoint;
@@ -318,20 +380,34 @@ Phase 12 decisions (also written into `GAME_SPEC.md` §8, §9, §10, §14c, §14
     unavailable.
   - **Quit Game (Phase 11)** closes the game at once, without a question, saving nothing.
     Continue (or New Game when no save loads) is selected first, never Quit Game.
+  - **Settings (Phase 13)**, between New Game and Quit Game, opens the Settings screen; no run is
+    started. A red line "Control settings could not be loaded. Defaults restored." shows while
+    `SettingsManager.load_failed` is set.
   - **Phase 10:** it is also where Return to Title lands, in the same process. On opening it
     drops the run from memory (`GameState.end_run()`) and reads the save again, so its line
     describes the saved checkpoint, never the floor just left.
 - **Pause menu (Phase 10,** `scenes/ui/pause_menu.tscn` + `scripts/ui/pause_menu.gd`**):** Escape
-  during play. "Paused" with Resume / Return to Title / Quit Game (a CanvasLayer on layer 11,
+  during play. "Paused" with Resume / Settings (Phase 13) / Return to Title / Quit Game (a CanvasLayer on layer 11,
   above the HUD and the action menu, over a dimmed screen); the two leaving options first ask
   "Return to title? / Quit game?" + "Progress since entering this floor will be lost." with No
   and Yes (an orange-bordered panel like the title's New Game question). Every level adds one in
   `Level._ready()`. See Architecture > Pause menu and the game session.
-- **Carl** (`scenes/actors/carl.tscn`): **unchanged in Phases 6–12** (Phase 8 only puts his scene in
-  the `party` group; Phase 9 added the Bat and Phase 12 the Blast Bomb without touching his script).
-  - Arrow-key movement at 180 px/s, wall collision, facing arrow, smoothed camera.
-  - **Action slots:** holding W/A/S/D uses the slot's action toward his facing direction.
-    An empty slot does nothing.
+- **Settings screen (Phase 13,** `scenes/ui/settings_menu.tscn` + `scripts/ui/settings_menu.gd`**):**
+  "Settings" / "Controls", the nine controls with their current keys (blue; "..." in orange while
+  waiting), Reset to Defaults, Back, a message line and "Up/Down: choose     Enter: change     Esc:
+  back"; the Reset question ("Reset all controls to defaults?", No / Yes) in an orange-bordered panel
+  like the title's. One instance in the title scene and one in the pause menu scene. See Architecture
+  > Settings and control bindings.
+- **SettingsManager autoload (Phase 13):** the control bindings in `user://settings.json`
+  (`settings_version: 1`), applied to the InputMap before the title appears.
+- **Carl** (`scenes/actors/carl.tscn`): **code unchanged in Phases 6–13** (Phase 8 only puts his scene
+  in the `party` group; Phase 9 added the Bat and Phase 12 the Blast Bomb without touching his script;
+  Phase 13 only corrected his description comment: he reads input actions, so rebinding needs nothing
+  from him).
+  - Movement (the `move_*` actions, arrow keys by default) at 180 px/s, wall collision, facing arrow,
+    smoothed camera.
+  - **Action slots:** holding a slot's key (W/A/S/D by default) uses the slot's action toward his
+    facing direction. An empty slot does nothing.
   - A consumable is used only if Carl has one, and a use that really happened spends one.
     Reusable items and Fists are never spent.
   - **Pickups:** `collect_item()` adds what a pickup gives to his inventory.
@@ -473,7 +549,9 @@ Phase 12 decisions (also written into `GAME_SPEC.md` §8, §9, §10, §14c, §14
 - **Stairs** (`scenes/props/stairs.tscn`): stairs **down**. They load `destination_scene_path`
   and ignore Carl for the first 2 physics frames of a level (no transition loops). **Phase 10:**
   they never change level once the game is frozen (Carl killed in the tick he reached them).
-- **HUD** (`scenes/ui/hud.tscn`): "Carl HP: x / 100" and, beside it (Phase 8), "Donut HP: y / 60"
+- **HUD** (`scenes/ui/hud.tscn`; Phase 13: every key it names is the current binding, for example
+  `Q: Slingshot   2: Potion x1 ...` and "Tab: action menu     Esc: pause"): "Carl HP: x / 100" and,
+  beside it (Phase 8), "Donut HP: y / 60"
   in orange, or "Donut HP: 0 / 60  -  DOWNED" in red; the slot bar, for example
   `W: Slingshot   A: Potion x1   S: Baseball Bat   D: Fists` (no quantity for the Slingshot or the
   Bat); a "Space: action menu     Esc: pause" hint (Phase 10; it said "Space: action menu"); the
@@ -482,55 +560,76 @@ Phase 12 decisions (also written into `GAME_SPEC.md` §8, §9, §10, §14c, §14
   `W: Baseball Bat   A: Potion x2   S: Blast Bomb x12   D: Slingshot`).
 - **Action menu** (`scenes/ui/action_menu.tscn`): lists the four slots and Carl's inventory,
   for example "Fists (on D)", "Small Health Potion x1 (on A)", "Slingshot (on W)", "Baseball Bat
-  (on S)", "Blast Bomb x2 (no slot)", with a description or confirmation line. Unchanged since
-  Phase 5.
+  (on S)", "Blast Bomb x2 (no slot)", with a description or confirmation line. Phase 13: the keys it
+  names ("1   Slingshot", "(on 1)", "Fists is now on 4.", "Up/Down: choose an action     1/2/3/4:
+  put it on that key     Tab/Esc: close") and the keys that assign are the current bindings; its
+  selection moves with the fixed `menu_up`/`menu_down`.
 - **GameState autoload:** Carl's and Donut's HP, inventory, slots and the floor-entry state (see
   Architecture).
 - **SaveManager autoload:** the persistent checkpoint in `user://savegame.json`, format
   version 3, with the version 1 and 2 migrations and the test-run guard (see Architecture).
 
-Not implemented (later phases): Donut controls, commands, slots or equipment, Donut items or
+Not implemented (later phases): gamepad/controller or mouse bindings, key chords, audio, graphics,
+resolution, fullscreen, language or accessibility settings, Donut controls, commands, slots or
+equipment, Donut items or
 healing, a revive key, permanent Donut death, ammunition, more weapons, weapon upgrades or
 durability, equipment slots or stats, critical hits, status effects, knockback on anything but
 the Bat (explosions included), random loot tables, drop chances, rarity, currency, crafting,
 destructible walls, Floor 8, other enemy types (Dungeon Rat, Crawler, Dungeon Brute), bosses (Floor Guardian), the
 prototype-complete screen, stairs that open only after goals or events, countdown timers,
-shops/economy, multiple save slots, mid-floor or cloud saving, save-anywhere, key rebinding,
-settings or options in the pause menu.
+shops/economy, multiple save slots, mid-floor or cloud saving, save-anywhere.
 
 ## Controls
+Rebindable gameplay controls (Phase 13; the key is the default, which Settings > Reset to Defaults
+restores):
+
+| Action             | Settings name | Default     | Effect                                                              |
+|--------------------|---------------|-------------|---------------------------------------------------------------------|
+| `move_up`          | Move Up       | Up Arrow    | Moves Carl north                                                    |
+| `move_down`        | Move Down     | Down Arrow  | Moves Carl south                                                    |
+| `move_left`        | Move Left     | Left Arrow  | Moves Carl west                                                     |
+| `move_right`       | Move Right    | Right Arrow | Moves Carl east                                                     |
+| `action_w`         | Action Slot W | W           | Uses the W slot (empty in a new game). In the action menu: put the selection in the W slot |
+| `action_a`         | Action Slot A | A           | Uses the A slot (empty in a new game). In the action menu: put the selection in the A slot |
+| `action_s`         | Action Slot S | S           | Uses the S slot (empty in a new game). In the action menu: put the selection in the S slot |
+| `action_d`         | Action Slot D | D           | Uses the D slot (**Fists** in a new game). In the action menu: put the selection in the D slot |
+| `inventory_toggle` | Inventory     | Space       | Opens / closes the action menu (not over GAME OVER or the pause menu) |
+
+Fixed menu and system keys (never rebindable):
+
 | Action             | Key         | Effect                                                              |
 |--------------------|-------------|---------------------------------------------------------------------|
-| `move_up`          | Up Arrow    | Moves Carl north. In a menu: select the previous item               |
-| `move_down`        | Down Arrow  | Moves Carl south. In a menu: select the next item                   |
-| `move_left`        | Left Arrow  | Moves Carl west                                                     |
-| `move_right`       | Right Arrow | Moves Carl east                                                     |
-| `action_w`         | W           | Uses slot W (empty in a new game). In the menu: put the selection on W |
-| `action_a`         | A           | Uses slot A (empty in a new game). In the menu: put the selection on A |
-| `action_s`         | S           | Uses slot S (empty in a new game). In the menu: put the selection on S |
-| `action_d`         | D           | Uses slot D (**Fists** in a new game). In the menu: put the selection on D |
-| `inventory_toggle` | Space       | Opens / closes the action menu (not over GAME OVER or the pause menu) |
-| `ui_confirm_game`  | Enter       | Title and pause menu: confirm the selection / Yes / No. GAME OVER: retry the floor |
-| `pause_back`       | Escape      | Play: opens the pause menu. Action menu: closes it (only). Pause menu: resumes. A question: No. GAME OVER: nothing |
+| `menu_up` (Phase 13)    | Up Arrow    | Any menu: select the previous row (wrapping where it did before)    |
+| `menu_down` (Phase 13)  | Down Arrow  | Any menu: select the next row                                        |
+| `menu_left` (Phase 13)  | Left Arrow  | Yes/No questions: toggle                                             |
+| `menu_right` (Phase 13) | Right Arrow | Yes/No questions: toggle                                             |
+| `ui_confirm_game`  | Enter       | Title, pause menu, Settings: confirm the selection / Yes / No / start waiting for a key. GAME OVER: retry the floor |
+| `pause_back`       | Escape      | Play: opens the pause menu. Action menu: closes it (only). Pause menu: resumes. Settings: back (while waiting for a key: cancel). A question: No. GAME OVER: nothing |
 
-Pause menu (Phase 10): **Up/Down** choose Resume, Return to Title or Quit Game (wrapping),
+Settings screen (Phase 13): **Up/Down** choose a control, Reset to Defaults or Back (wrapping),
+**Enter** changes the selected control (then the next key press is its key; **Escape** cancels) or
+chooses Reset (a No/Yes question, No selected) or Back, **Escape** goes back.
+
+Pause menu (Phase 10): **Up/Down** choose Resume, Settings (Phase 13), Return to Title or Quit Game (wrapping),
 **Enter** confirms, **Escape** resumes. In its questions, Up/Down (or Left/Right) choose No or Yes,
 Enter confirms, Escape means No. Space and W/A/S/D do nothing there.
 
-Title screen: **Up/Down** choose Continue, New Game or Quit Game (going round; Continue only when a
-save loads), **Enter** confirms. Quit Game closes the game at once (Phase 11). In the New Game
+Title screen: **Up/Down** choose Continue, New Game, Settings (Phase 13) or Quit Game (going round;
+Continue only when a save loads), **Enter** confirms. Quit Game closes the game at once (Phase 11). In the New Game
 confirmation, Up/Down (or Left/Right) choose No or Yes, Enter confirms, and **Escape** means No.
 
 Whatever slot holds the Slingshot fires it; whatever slot holds the Baseball Bat swings it;
 whatever slot holds the Blast Bomb throws one (Phase 12).
 Holding a slot key repeats its action as fast as the action's cooldown allows: Fists every
 0.4 s, the Slingshot every 0.6 s, the Bat every 0.75 s, a potion every 1 s while it can heal, a
-Blast Bomb every 1 s while any are left. Pickups need no key. No input actions were added in Phases 3–10 (the pause menu uses the existing `pause_back`, `ui_confirm_game` and `move_up`/`move_down`): Donut
-has no keys (her Scratch is automatic), and W/A/S/D never move or command her.
+Blast Bomb every 1 s while any are left. Pickups need no key. No input actions were added in Phases 3–12
+(the pause menu used the existing `pause_back`, `ui_confirm_game` and `move_up`/`move_down`); Phase 13
+added the four fixed `menu_*` actions and moved every menu onto them. Donut has no keys (her Scratch
+is automatic), and the slot keys never move or command her.
 
 ## Scene structure
 ```
-project.godot                                   Settings, InputMap, physics layer names, GameState + SaveManager autoloads; own user-data folder "DC CARL" and ANGLE on Windows (Phase 11)
+project.godot                                   Settings, InputMap (menu_* actions: Phase 13), physics layer names, GameState + SaveManager + SettingsManager (Phase 13) autoloads; own user-data folder "DC CARL" and ANGLE on Windows (Phase 11)
 assets/tiles/placeholder_world_tiles.png        Original 4-tile placeholder atlas
 assets/items/slingshot.png                      Original 32×32 placeholder Slingshot icon (Phase 6)
 assets/items/baseball_bat.png                   Original 32×32 placeholder Baseball Bat icon (Phase 9)
@@ -550,10 +649,11 @@ scenes/projectiles/slingshot_stone.tscn         The Slingshot's Projectile (Phas
 scenes/projectiles/spit_glob.tscn               The Spitting Blob's Projectile (Phase 7)
 scenes/projectiles/blast_bomb.tscn              The thrown Blast Bomb: a Projectile (no impact damage) + DetonateOnStop (Phase 12)
 scenes/effects/blast_explosion.tscn             The Blast Bomb's explosion: an AreaDamage, 20 damage, 72 px (Phase 12)
-scenes/ui/title_screen.tscn                     Main scene: Continue / New Game / Quit Game menu (Quit Game: Phase 11), overwrite confirmation
+scenes/ui/title_screen.tscn                     Main scene: Continue / New Game / Settings / Quit Game menu (Quit Game: Phase 11; Settings: Phase 13), overwrite confirmation, a SettingsMenu instance
+scenes/ui/settings_menu.tscn                    The Settings screen: Controls (nine rows), Reset to Defaults (with its question), Back (Phase 13)
 scenes/ui/hud.tscn                              Carl's and Donut's HP, slot bar, menu hint, GAME OVER panel (CanvasLayer)
 scenes/ui/action_menu.tscn                      The action/inventory menu (CanvasLayer 10)
-scenes/ui/pause_menu.tscn                       The pause menu and its two questions (CanvasLayer 11; Phase 10)
+scenes/ui/pause_menu.tscn                       The pause menu and its two questions (CanvasLayer 11; Phase 10), a SettingsMenu instance (Phase 13)
 scenes/actors/carl.tscn                         Carl (group "party"): Health, Hurtbox, Camera2D (performers added at run time)
 scenes/actors/donut.tscn                        Donut (group "party"): Look (her shapes), DownedLabel, Health, Hurtbox, Scratch (MeleeAttack), NavigationAgent2D
 scenes/enemies/gelatinous_blob.tscn             Blob: Health, Hurtbox, ContactAttack (MeleeAttack), KnockbackReceiver (Phase 9), NavigationAgent2D (EnemyNavigation)
@@ -563,12 +663,14 @@ scenes/props/item_pickup.tscn                   Reusable world pickup (item + qu
 scenes/levels/surface.tscn, floor_01.tscn … floor_07.tscn   The eight levels (floor_04: Phase 7; floor_05: Phase 8; floor_06: Phase 9; floor_07: Phase 12)
 scripts/autoload/game_state.gd                  GameState: the current run's state
 scripts/autoload/save_manager.gd                SaveManager: the one save file (encode, validate, migrate, safe write, load, delete)
+scripts/autoload/settings_manager.gd            SettingsManager (Phase 13): the control bindings (defaults, validation, InputMap, settings.json, reset)
+scripts/settings/control_bindings.gd            class ControlBindings (Phase 13): the nine controls, their names and defaults, the key policy, key names from the InputMap
 scripts/state/floor_entry.gd                    class FloorEntry: a floor checkpoint (Carl's and Donut's HP, inventory snapshot, slot layout)
 scripts/actions/action_registry.gd              class ActionRegistry: action id -> ActionDefinition (for loading saves)
 scripts/levels/floor_registry.gd                class FloorRegistry: floor id -> scene and name (the only floors a save can open)
 scripts/actions/action_definition.gd            class ActionDefinition (Resource): one slot-able action or item
 scripts/actions/action_performer.gd             class ActionPerformer (Node2D): base for what carries an action out
-scripts/actions/action_slots.gd                 class ActionSlots: which action each W/A/S/D slot holds
+scripts/actions/action_slots.gd                 class ActionSlots: which action each logical slot (W, A, S, D) holds
 scripts/actions/inventory.gd                    class Inventory: innate actions, owned reusable items, consumable quantities
 scripts/actions/heal_action.gd                  class HealAction (an ActionPerformer): heals the user
 scripts/combat/health.gd                        class Health: hit points, take_damage(), heal(), set_health(), set_down() and revive() (Phase 8)
@@ -587,7 +689,9 @@ scripts/enemies/gelatinous_blob.gd              The Gelatinous Blob (an Enemy): 
 scripts/enemies/spitting_blob.gd                The Spitting Blob (an Enemy): keep distance, spit when in sight (Phase 7)
 scripts/actors/donut.gd                         Donut: follow, Scratch, downed and recovery (Phase 8)
 scripts/levels/level.gd                         class Level: run-state wiring (Carl and Donut), GAME OVER, retry; adds the pause menu, Return to Title, Quit Game (Phase 10)
-scripts/ui/pause_menu.gd                        The pause menu: Resume / Return to Title / Quit Game, the questions (Phase 10)
+scripts/ui/pause_menu.gd                        The pause menu: Resume / Settings / Return to Title / Quit Game, the questions (Phase 10; Settings: Phase 13)
+scripts/ui/settings_menu.gd                     The Settings screen: key capture, refusals, Reset to Defaults (Phase 13)
+scripts/ui/key_hint_label.gd                    A Label that names the current keys (template with {action} placeholders; Phase 13): the Surface's and Floor 1's key signs
 scripts/levels/level_navigation.gd              Bakes a level's navigation mesh on load
 scripts/props/item_pickup.gd                    class ItemPickup (Phase 12 name): walk-over pickup, gives its item to Carl once; placed or dropped
 scripts/<actors|enemies|props|ui>/*.gd          One script per scene that needs one
@@ -1018,11 +1122,15 @@ Composition first, with one thin shared base:
 - Nothing records collected pickups. A retry reloads the level (pickups back) and restores
   the inventory (items back to the entry state), so the two always agree.
 
-### Action menu — unchanged in Phase 6
-- Space opens it only while the game is not paused (never over GAME OVER). It pauses the
-  scene tree; Space or Escape closes it. Paused stones stay where they are and fly on after.
-- It lists `Inventory.get_actions()` with labels and each action's slot. Up/Down select;
-  W/A/S/D assign. It refreshes on inventory and slot changes.
+### Action menu — unchanged in Phase 6 (keys: Phase 13)
+- The Inventory key (Space by default) opens it only while the game is not paused (never over
+  GAME OVER). It pauses the scene tree; the Inventory key or Escape closes it. Paused stones stay
+  where they are and fly on after.
+- It lists `Inventory.get_actions()` with labels and each action's slot. Up/Down (`menu_up`/
+  `menu_down`, fixed) select; the slot keys (W/A/S/D by default: the `action_*` actions) assign.
+  It refreshes on inventory and slot changes, and on binding changes (`control_hints` group).
+  Escape, Up and Down are checked first, so they keep their menu meaning even if a control shares
+  their key.
 - Its rows are Labels, which never take focus, so Godot's `ui_accept` (Space/Enter) cannot
   press anything.
 - **No free actions:** keys held when the game unpauses are ignored by Carl until
@@ -1044,8 +1152,9 @@ Composition first, with one thin shared base:
   menu gets the slots and the inventory. Carl, the HUD,
   the menu, pickups and projectiles never name `GameState` themselves. Test scripts compile
   before autoloads exist, so anything a test preloads must not name it.
-- ARCHITECTURE_RULES allows exactly two autoloads, `GameState` and `SaveManager`, and those
-  are the only two.
+- ARCHITECTURE_RULES names two autoloads, `GameState` and `SaveManager`. Phase 13 added a third,
+  `SettingsManager`, which the Phase 13 prompt asked for by name (application settings must be
+  applied before the title exists). There are no others (`test_project_setup.gd` checks the list).
 
 ### Floor-entry state and retry
 - Every level calls `GameState.record_floor_entry(scene_file_path)` when it starts, then
@@ -1236,6 +1345,73 @@ Composition first, with one thin shared base:
   and killing Carl in one tick. `Stairs._change_level()` now returns when the tree is paused; the
   retry reloads the floor, stairs included. `test_pause_menu.gd` checks it.
 
+### Settings and control bindings (Phase 13)
+**Slot contents are run state; key bindings are application settings.**
+
+| Concern | Owner | Where it lives | Survives |
+|---------|-------|----------------|----------|
+| What each slot holds (`action_w` = Slingshot) | `GameState.action_slots` (run) / `SaveManager` (checkpoint) | memory; `savegame.json` `action_slots` | floors, retries, Continue |
+| Which key triggers each control (`action_w` = Q) | `SettingsManager` | the InputMap; `settings.json` `keyboard` | everything: New Game, Continue, Return to Title, a deleted save, restarts |
+
+- **`ControlBindings`** (`scripts/settings/control_bindings.gd`, a static class, no state):
+  `ACTIONS` (the nine controls, in Settings order), `DISPLAY_NAMES` ("Action Slot W"),
+  `DEFAULT_KEYS`, `RESERVED_KEYS` (Escape, Enter, keypad Enter, each with its message),
+  `EXTRA_ALLOWED_KEYS`, `HINT_GROUP` (`control_hints`), and:
+  - `get_key(action)` / `get_key_label(action)`: the key bound in the **InputMap** now (the first
+    keyboard event of the action) and its name. The HUD, the action menu, the signs and the Settings
+    screen use these, so they never depend on the autoload and always show what is really bound;
+  - `get_key_name(key)` / `get_key_from_name(name)`: Godot's layout-independent key names
+    (`OS.get_keycode_string()`: "Q", "1", "Space", "Up", "Tab", "Kp 1"), used on screen and in the
+    file; a name must round-trip exactly ("q" is not a key name);
+  - `get_event_key(event)`: the physical key of an event (as `project.godot` binds keys);
+  - `get_key_problem(key)`: "" or why it cannot be bound (reserved, or not a printable key and not in
+    `EXTRA_ALLOWED_KEYS`: modifiers alone, lock, function and media keys).
+- **`SettingsManager`** (autoload, `scripts/autoload/settings_manager.gd`):
+  - `_ready()` (autoloads are ready before the main scene is added): `load_settings()` from
+    `user://settings.json`, which applies the file's bindings or the defaults. So the InputMap is
+    final before the title appears, and every level simply reads actions;
+  - `set_binding(action, key) -> String`: "" when `action` is now on `key`, else the refusal message
+    (reserved/unusable key; "Q is already assigned to Action Slot W." when another control has it).
+    Nothing is ever taken from another control or swapped. On success: apply, then `save_settings()`;
+  - `reset_to_defaults()`: `DEFAULT_KEYS`, apply, save;
+  - `_use_bindings()`: for each control whose key changed, erase its **keyboard** events (other kinds
+    of event would be kept: none exist yet), add one `InputEventKey` with the physical key, and
+    `Input.action_release()` it, so a held key never carries over as a press of the new binding; then
+    emits `bindings_changed` and calls `refresh_control_hints()` on the `control_hints` group (the HUD,
+    the action menu and the key signs join it);
+  - `encode()` / `decode(data)`: the file format; `decode()` rejects the whole file unless it is
+    exactly `{"settings_version": 1, "keyboard": {<the nine ids>: <a usable key name>}}` with nine
+    different keys (any other field, version, type, id, missing id, reserved/unusable/unknown key or
+    duplicate). Nothing is ever partly applied;
+  - `load_failed` / `last_error`: set when a file existed but could not be used (the defaults then
+    apply, and the title and the Settings screen show "Control settings could not be loaded. Defaults
+    restored."). The bad file is not rewritten on load; the next change or Reset replaces it;
+  - **safe write** (the save's method): JSON to `settings.json.tmp`, read back and compared, then
+    renamed over `settings.json`; a failure logs an error, returns false (`last_save_failed`), keeps
+    the old file, and the new binding still applies for this session (the Settings screen says it
+    could not be saved). A finished `.tmp` left by an interrupted write is loaded if `settings.json`
+    is missing;
+  - **written only** when a binding really changes or Reset is confirmed; never on load, on a key press
+    in play, by New Game, Continue or leaving.
+- **Test isolation (the save's rule, for settings):** in a test or tool run (`-s`), SettingsManager
+  starts with the defaults and **no file at all**, and refuses (with an error, touching nothing) any
+  path outside `user://test_saves/`, including `user://settings.json` and
+  `user://test_saves/../settings.json`. `game_test.gd` gives every test
+  `user://test_saves/<test>_settings.json` (deleted at the start and end, defaults loaded). Only a
+  test run started with `--settings-file=<file inside the test folder>` loads a file at startup,
+  exactly as the game does (`tests/support/settings_child.gd`, for the restart tests); a production
+  path there is refused like any other. The game itself never reads that argument.
+- **Menus:** the title, pause menu, action menu and Settings screen read the fixed `menu_*`,
+  `ui_confirm_game` and `pause_back` actions. Each menu takes every key event while open, so a key
+  pressed in a menu never reaches the game. The Settings screen is a child of the title and of the
+  pause menu (each checks `settings_menu.is_open()` first and leaves the keys to it).
+- **Adding a rebindable control later:** add its InputMap action in `project.godot`, then one entry
+  each in `ControlBindings.ACTIONS`, `DISPLAY_NAMES` and `DEFAULT_KEYS`. The Settings screen builds
+  its rows from `ACTIONS`. A settings file without the new control is then rejected as a whole (the
+  defaults apply), so give it a `settings_version` 2 migration in `decode()` if players' keys should
+  survive. A gamepad binding would be another block beside `"keyboard"` and events of another type in
+  `_use_bindings()`; Carl and the menus would not change.
+
 ### User-data folder and renderer (Phase 11)
 - **User data:** `project.godot` sets `application/config/use_custom_user_dir=true` and
   `application/config/custom_user_dir_name="DC CARL"`. Godot then puts `user://` in the operating
@@ -1266,7 +1442,8 @@ Composition first, with one thin shared base:
 ### Earlier decisions still in force
 - Compatibility renderer; 1280×720 base with `canvas_items` stretch and `expand` aspect;
   physical-keycode bindings; Godot's `ui_*` actions untouched.
-- Version in Project Settings, now `0.12.0` (the game's version; the save format is still 3).
+- Version in Project Settings, now `0.13.0` (the game's version; the save format is still 3, the
+  settings format 1).
 - `.godot/` ignored, `.uid` files committed, LF line endings.
 - Carl is a floating-mode `CharacterBody2D`; Camera2D inside Carl (zoom 1.5, smoothing);
   physics interpolation on.
@@ -1313,6 +1490,27 @@ Consequences:
   a wall (layer 1) between its centre and an enemy's shields that enemy.
   Enemies see through everything but walls, exactly where their globs can fly.
 - Navigation baking reads only layer 1.
+
+## Earlier behaviour changed in Phase 13
+1. **Menus use their own fixed keys** (`menu_up`, `menu_down`, `menu_left`, `menu_right`, on the
+   arrows) instead of the movement actions. With default keys nothing changes for the player.
+2. **The title has four rows** (Continue, New Game, **Settings**, Quit Game) and **the pause menu
+   four** (Resume, **Settings**, Return to Title, Quit Game). Tests that reach Return to Title or Quit
+   Game by Down presses press Down once more (`test_pause_menu.gd`, `test_return_to_title.gd`,
+   `test_title_quit.gd`, `test_floor_07_run.gd`, `test_windowed_resolutions.gd`,
+   `tests/support/quit_game_child.gd`), and their row lists include Settings.
+3. **`ActionSlots.KEY_LABELS` became `ActionSlots.SLOT_NAMES`** (the slots' logical names). Every key
+   shown to the player comes from `ControlBindings.get_key_label()`; four tests use the new name for
+   their labels.
+4. **The action menu checks Escape and Up/Down before the Inventory and slot keys**, so the menu keys
+   win when a control is bound to the same key (only possible after rebinding).
+5. **The HUD's hint, the action menu's help line and the Surface's and Floor 1's key signs are
+   built from the bindings** (identical texts with the default keys).
+6. **A third autoload, SettingsManager.** `game_test.gd` also gives every test its own settings file.
+7. `test_input_map.gd` also checks the `menu_*` actions and that the defaults equal
+   `ControlBindings.DEFAULT_KEYS`; `test_project_setup.gd` checks version `0.13.0`, settings format 1,
+   the settings path and the autoload list.
+8. Version in Project Settings: `0.13.0`.
 
 ## Earlier behaviour changed in Phase 12
 1. **Floor 6 has an exit** (stairs down to Floor 7) and a loot-carrying blob; its note
@@ -1421,12 +1619,16 @@ code or on any engine ERROR/WARNING in its output, except an error the test prov
 and checked (it prints `EXPECTED ERROR: <text>`, which excuses exactly one `ERROR: <text>` line;
 only `test_save_isolation.gd` does this). A test that ends before reaching `finish()` (for
 example because the game quit its process) fails with exit code 1 (Phase 11). Tests with "windowed" in their name get a real window,
-which opens briefly. The full run takes about 13 minutes (31 test files). Each test file can
+which opens briefly. The full run takes about 15 minutes (35 test files). Each test file can
 also be run on its own; the first lines of each file give the command.
 
 | Test file                               | Covers |
 |-----------------------------------------|--------|
-| `test_input_map.gd` (Phase 0)           | Every action bound to its key; no key shared between actions |
+| `test_input_map.gd` (Phase 0, 13)       | Every action bound to its key; no key shared between gameplay/system actions; **the fixed `menu_*` actions on the arrows only; the nine rebindable controls' defaults equal `ControlBindings.DEFAULT_KEYS`; no menu key is rebindable** |
+| `test_settings_manager.gd` (Phase 13)   | SettingsManager on its own test file: the nine defaults (each the only key event of its action) and the fixed menu keys; isolation (the player's `user://settings.json`, `test_saves/../`, look-alikes refused with errors, nothing touched; a stray file proves it first); a binding applies at once (old key dead, new key live, a held key released), emits once, refreshes hints, writes `settings_version` 1 + `keyboard` only, no `.tmp` left; all nine rebound; 17 refusals (conflicts across movement/slots/Inventory with their messages, Escape, Enter, keypad Enter, Shift, Ctrl, Alt, Meta, Caps Lock, F1, F10, volume, none) change nothing; loading a valid file, no file, a leftover `.tmp`; **27 kinds of bad file** each give the defaults with `load_failed`, the file untouched, the next change replacing it; a failed write keeps the old file; Reset to Defaults; **independence**: key changes leave the slots, inventory and save file (text and time) alone, the save is still version 3 with 7 fields and no bindings, New Game/end of run/deleting the save keep the bindings |
+| `test_settings_menu.gd` (Phase 13)      | Real title and Floor 6, keys through the input pipeline: Settings on the title (no run started), the list of nine controls + Reset + Back, wrapping, Escape/Back back to Settings selected, nothing written; capture (prompt, "...", Q applied and written, message, selection kept), Escape cancels, a captured Down (and its key repeat) does not move the selection; refusals (Inventory → Q, Action Slot A → I, Enter, Shift) with messages; Reset (No selected, No/Escape keep, Yes restores, list and file updated); **pause**: Settings second row, game stays paused (time, Carl, blob, Donut, a flying stone, a cooldown, Donut's countdown frozen) while Action Slot D moves to F, the F and D pressed there punch nobody, Fists stay in the D slot, HUD "F: Fists", Escape back to the paused menu, after Resume D does nothing and F punches, F held through Resume gives no free punch, Escape still pauses, Reset from the pause menu, the save untouched |
+| `test_rebinding_run.gd` (Phase 13)      | Real title/levels from a Floor 7 checkpoint (Slingshot W, potions A, bombs S, Bat D): all nine rebound by keys on the title (save untouched); Continue: same slots, HUD "1: Slingshot   2: Potion x2   3: Blast Bomb x2   4: Baseball Bat" + "Tab: action menu"; I/K/J/L move exactly like the arrows did, arrows and W/A/S/D do not; W/A/S/D use nothing, 1/2/3/4 fire, heal, throw, swing; Space opens nothing, Tab opens/closes, Escape closes; menu names 1/2/3/4/Tab, arrows move its selection (K does not), literal W assigns nothing, 4 puts Fists in the D slot and 4 punches; pause > Settings W → Q, Q fires at once; Return to Title keeps the keys, Continue plays with them; New Game keeps them (Surface sign "I/J/K/L to move", Floor 1 sign "Q/2/3/4 ... Tab"); Reset to Defaults in play updates HUD and sign at once, arrows move again, run and save untouched |
+| `test_settings_restart.gd` (Phase 13)   | Fresh processes (`tests/support/settings_child.gd`, loading this test's settings file at startup as the game loads `user://settings.json`): the custom keys are in the InputMap before any scene; title, Settings list, Continue with the same slots, HUD, I/Up, 1/W, Tab/Space; the Reset-then-Quit-Game process, then a fresh one with the defaults; 5 bad files (truncated, version 2, duplicate, Escape, missing control) each start with the defaults and the title message while the valid save continues, file and save untouched; the player's `user://settings.json` refused at startup and neither created nor changed |
 | `test_carl_movement.gd` (Phase 1, 3)    | Exact speed per arrow key, normalized diagonals, facing, tick-rate independence; W/A/S/D never move Carl |
 | `test_surface_traversal.gd` (Phase 1)   | Title → Surface, wall collision, Donut following, stairs → Floor 1, Floor 1 walls |
 | `test_combat.gd` (Phase 2, 3, 8)        | Health; Fists on D: facing, diagonals, no self-hit, W/A/S empty, exact cooldown, **Donut in the way is not hit and keeps 60 / 60 HP (Phase 8)**; Blob pursuit, walls, contact damage, death (in an arena with no navigation mesh, Carl the only party member); HUD "Carl HP"; downed Carl |
@@ -1440,7 +1642,7 @@ also be run on its own; the first lines of each file give the command.
 | `test_save_migration.gd` (Phase 6–12)   | The two real Phase 5 fixtures (version 1), the two real Phase 6 fixtures and **the real Phase 7 Floor 4 fixture** (version 2) load with their floor, HP, items and slots and **Donut at 60 / 60**, the files untouched, and are written back with the same values as version 3 plus Donut; a v1 Slingshot slot is emptied, a v1 `owned_items` ignored, a v1 Slingshot quantity rejected; 13 kinds of malformed v1 data rejected; v2 loads (a `donut` in a v2 file is ignored), v2 without owned_items rejected; **v3 loads with its own Donut HP, v3 without `donut` rejected**; versions 0/4/999/-1 rejected; title → Continue on the v1 Floor 2 save and **on the Phase 7 Floor 4 save** open those floors with their state and Donut at 60 / 60, and the files become version 3; the migrated game plays on; **Phase 9: the real Phase 8 Floor 5 save (version 3, no Bat) loads unchanged and is written back identically; no migrated v1/v2 fixture owns the Bat; a v1 file naming the Bat in owned_items and on W owns no Bat and W is emptied**; **Phase 12: the real Phase 11 Floor 6 save (`phase11_save_v3_floor_06.json`: version 3, Carl 80, Donut 40, Slingshot W, potion A, Bat S) loads unchanged with no bombs and is written back identically; no v1, v2 or Phase 8 fixture has bombs** |
 | `test_slingshot.gd` (Phase 6, 8)        | Ownership model (innate/reusable/consumable, owned once, never removed, snapshots, new run clears it); slots; pickup; firing in four directions; exactly 10 damage, 3 hits kill a blob; one target only; flies through a dying blob; hits a blob that steps onto it; stops at a wall face; 320 px / 40 ticks; never hurts Carl, **nor Donut, whose real Hurtbox is in the line of fire (60 / 60, Phase 8)**; no pickup, no stairs; point blank; cooldown; menu; HUD and menu labels |
 | `test_slingshot_run.gd` (Phase 6–8)     | Real run: New Game clears a previous Slingshot; Surface → Floor 1 → Floor 2 → Floor 3, nothing leads up (Floor 3's only exit leads down to Floor 4); Floor 2 entry has no Slingshot (run, entry state, disk: version 3, Donut 60 / 60); collect + W doesn't save; two Floor 2 deaths take it back; quit before Floor 3 → Continue without it; three stones kill the Floor 2 blob; Floor 3 arrival, the Floor 3 checkpoint owns it with W = Slingshot; a stone stops at Floor 3's wall tiles; two Floor 3 deaths keep it; Continue opens Floor 3 and it fires; New Game clears it |
-| `test_windowed_resolutions.gd` (Phase 2–12) | At 1280×720, 640×360, 1024×768: HUD with `W: Slingshot   A: Potion x2` **and "Donut HP: 0 / 60 - DOWNED" fully on screen, its text fitting, clear of Carl's HP and the slot bar**, GAME OVER panel, action menu, camera; Floor 2's Slingshot pickup; Floor 3's signs clear of the HUD; a flying stone; Floor 4's three signs clear of the HUD; the two blobs, a glob and a stone on screen together; **Floor 5's three signs clear of the HUD; a downed Donut's DOWNED label drawn on screen, clear of the HUD; Donut's colour unlike both blobs'**; **Phase 9: the slot bar `W: Slingshot   A: Potion x2   S: Baseball Bat   D: Fists` on screen with its text fitting; "Baseball Bat   (on S)" in the menu; Floor 5's Hint and its Bat pickup (icon and label) on screen and clear of the HUD; Floor 6's three signs clear of the HUD; a blob drawn on screen while the Bat knocks it back**; **Phase 10: the HUD hint "Space: action menu     Esc: pause" on screen and fitting; the pause menu above the HUD and action menu, on screen and centred with its rows fitting; both questions on screen and centred with the warning, No and Yes fitting; the title after Return to Title on screen with the Floor 6 checkpoint**; **Phase 11: the renderer the window really uses (Compatibility; on Windows `opengl3_angle`, printed with the adapter); the title's Quit Game row on screen at each size, the three rows stacked above the save line, and Quit Game selected on screen**; **Phase 12: Floor 6's `Signs/StairsHint` clear of the HUD; the dropped Blast Bomb x2 pickup (icon and label) on screen; Floor 7's three signs on screen, fitting and clear of the HUD; the longest slot bar `W: Baseball Bat   A: Potion x2   S: Blast Bomb x12   D: Slingshot` on screen with its text fitting, and its menu row; a thrown bomb drawn on screen in flight, frozen under the pause menu and still drawn, and its explosion drawn; once, one explosion on the pair: both hit, all on screen; the pause menu and Return to Title now on Floor 7**; the title screen (with a Floor 7 save, and broken) and its confirmation. Prints SKIP and passes when run headless |
+| `test_windowed_resolutions.gd` (Phase 2–13) | At 1280×720, 640×360, 1024×768: HUD with `W: Slingshot   A: Potion x2` **and "Donut HP: 0 / 60 - DOWNED" fully on screen, its text fitting, clear of Carl's HP and the slot bar**, GAME OVER panel, action menu, camera; Floor 2's Slingshot pickup; Floor 3's signs clear of the HUD; a flying stone; Floor 4's three signs clear of the HUD; the two blobs, a glob and a stone on screen together; **Floor 5's three signs clear of the HUD; a downed Donut's DOWNED label drawn on screen, clear of the HUD; Donut's colour unlike both blobs'**; **Phase 9: the slot bar `W: Slingshot   A: Potion x2   S: Baseball Bat   D: Fists` on screen with its text fitting; "Baseball Bat   (on S)" in the menu; Floor 5's Hint and its Bat pickup (icon and label) on screen and clear of the HUD; Floor 6's three signs clear of the HUD; a blob drawn on screen while the Bat knocks it back**; **Phase 10: the HUD hint "Space: action menu     Esc: pause" on screen and fitting; the pause menu above the HUD and action menu, on screen and centred with its rows fitting; both questions on screen and centred with the warning, No and Yes fitting; the title after Return to Title on screen with the Floor 6 checkpoint**; **Phase 11: the renderer the window really uses (Compatibility; on Windows `opengl3_angle`, printed with the adapter); the title's Quit Game row on screen at each size, the three rows stacked above the save line, and Quit Game selected on screen**; **Phase 12: Floor 6's `Signs/StairsHint` clear of the HUD; the dropped Blast Bomb x2 pickup (icon and label) on screen; Floor 7's three signs on screen, fitting and clear of the HUD; the longest slot bar `W: Baseball Bat   A: Potion x2   S: Blast Bomb x12   D: Slingshot` on screen with its text fitting, and its menu row; a thrown bomb drawn on screen in flight, frozen under the pause menu and still drawn, and its explosion drawn; once, one explosion on the pair: both hit, all on screen; the pause menu and Return to Title now on Floor 7**; the title screen (with a Floor 7 save, and broken) and its confirmation. Prints SKIP and passes when run headless; **Phase 13 (289 checks): the Settings screen from the pause menu (nine rows with keys, Reset, Back, the message) on screen, centred and fitting at each size, with the capture prompt and a "BracketLeft is already assigned to Action Slot W." conflict; the Reset question; with 1/2/3/4 and Tab the HUD slot bar and hint and the action menu's slot column, "(on 1)" row and help line fit at each size; the pause menu's and title's four rows; the title's settings-error line** |
 | `test_enemy_navigation.gd` (Phase 7, 8) | Arenas with a real baked navigation mesh, each waiting until the map holds exactly its mesh: the Blob waits beyond 220 px, notices Carl behind a wall, gives up beyond 320 px; it follows a route around a wall to Carl (its own path bends round the wall's end), never overlaps the wall, never stalls, reaches him and hurts him every 0.8 s; with no way around it stops beside the wall without jittering; the Spitting Blob with Carl hidden walks around the wall and spits only once it sees him; **Phase 8: with Carl far away, a blob picks Donut behind the wall, walks around it without overlapping it, reaches her and hurts her 10 every 0.8 s (60 → 30)** |
 | `test_spitting_blob.gd` (Phase 7, 8)    | Arenas (Carl the only party member): its numbers; waits beyond 360 px, closes in and spits at 320 px, holds at 280 px, backs off to 180 px, gives up beyond 480 px; touching it never hurts; a wall stops it spitting, stepping into sight or removing the wall makes it spit at once; a glob takes exactly 10 HP once; walls stop globs; a glob flies past stairs, a pickup, another Spitting Blob and a Gelatinous Blob and hits Carl, hurting none of them nor its own blob, even when made to target enemies; 384 px / 96 ticks; 5 globs exactly 90 ticks apart, no burst; three stones kill it; Fists by facing; the menu freezes everything, no free glob, stone or burst |
 | `test_donut.gd` (Phase 8)               | Arenas: a new run (also after one where she was downed) gives Donut 60 / 60; Health 60, Hurtbox on `player_hurtbox`, the `party` group, Scratch's numbers; an enemy's touch takes 10 every 0.8 s; HP never below 0; Carl's point-blank punch and a stone through her never hurt her; Scratch never hurts Carl or Donut and never fires with no enemy near; exactly 10 per scratch, exactly 60 ticks apart, three kill a blob, none on a dead one; an enemy 38 px away is scratched, 46 px is not; the nearest of two only; she stays by Carl and follows him, never toward an enemy; downed at 0: HUD "0 / 60 - DOWNED" in another colour, grey, on her side, DOWNED label, cannot be hit; no following, no scratching, a touch finds nothing, nothing paused; she gets up on her 360th downed tick (not at 359) with exactly 30 / 60, looks normal, catches up with Carl, scratches again; 5 s of menu do not count toward the 6 s; GAME OVER (the tree pause) and a downed Carl hold her countdown |
@@ -1451,11 +1653,11 @@ also be run on its own; the first lines of each file give the command.
 | `test_blast_bomb.gd` (Phase 12)         | Arenas (122 checks): the bomb's data (consumable, own icon; ProjectileLauncher 1.0 s; Projectile 220 px/s, 240 px, 0 impact damage, stopped by enemies and walls; DetonateOnStop; AreaDamage 20, 72 px, enemy_hurtbox, walls shield; registered); a new run has none (also after one that had 3 on S); not assignable at 0; "Blast Bomb x2"; W/A/S/D one at a time; the slot empties at 0 and it is assignable again after more; snapshots never duplicate; thrown right/up/left/down from Carl's centre, one per tap, each spending exactly one; one per 10-tick press; holding S throws at 0, 60 and 120 ticks; taps no faster; a press half a second after a throw spends nothing; ready again exactly 60 ticks after a throw; none at 0; in the open exactly 240 px in 66 ticks, one explosion where it stopped, never again; a wall stops it at its face and the blob 52 px behind the wall is unhurt; an enemy stops it and loses exactly 20 once; a second `detonate()` does nothing; one explosion: a Gelatinous and a Spitting Blob each lose exactly 20 once, a second kills both, a dying one is not hit, four around it each lose 20; reach: a blob 84 px away is hit, 88 px is not; explosions at Carl's and Donut's centres and a bomb against a wall 50 px away hurt and move neither; no push, nothing moves; wall shielding: 60 px behind a wall nothing, 60 px in the open 20, wall removed 20; the flash shows 0.35 s then goes; a tree pause freezes a bomb in flight (still lands 240 px away) and a flash; the menu: S throws nothing, closing it with S held throws nothing, one throw after, no burst; Carl down + frozen: nothing thrown; HUD `S: Blast Bomb x2` → x1 → `S: —`, menu rows follow; **loot drop**: nothing while the enemy lives, its death gives nothing, one pickup exactly where it died ("Blast Bomb x2", bomb icon, in the blob's parent), it stays after the blob fades, Donut and two enemies on it and a stone and a bomb over it take nothing, Carl walking over it gets exactly 2 once, two collectors get 2 in all, a death announced twice drops once, a Spitting Blob drops too, a bomb kill drops too; the Bat (20, 80 px push) and a stone (10, no push) unchanged |
 | `test_floor_07_run.gd` (Phase 12)       | Real run from the real Phase 11 save (118 checks): every exit leads one floor down, Floor 6's to Floor 7, Floor 7 none, `floor_07` registered as "Floor 7"; Continue → Floor 6 with no bombs, the checkpoint written back identical to the Phase 11 file, the loot blob carrying Blast Bomb x2, no drop lying there; the Bat kills it: no bombs from the death, one "Blast Bomb x2" pickup where it died, walking over it gives exactly 2, the menu lists it, A assigns it, HUD `A: Blast Bomb x2`, the save unchanged; two Floor 6 deaths: no bombs, A back to the potion, nothing duplicated, the blob alive at its spawn with its drop unused, no pickup; pause > Return to Title > Yes, then Continue: no bombs, the blob alive; a bomb at the Backstop blob: exactly 20, x1 left; the stairs → Floor 7: spawn, Donut, camera, sign, HUD `A: Blast Bomb x1`, three Gelatinous Blobs and a Spitting Blob as authored, the pair within one blast, the shielded blob within 72 px of the wall's face with the wall in between, no exits, the checkpoint in memory and on disk (version 3, seven fields, blast_bomb 1, A = blast_bomb) and loaded back, no loop; the last bomb at the pair: both lose exactly 20, unmoved, Carl and Donut unhurt, 0 left, A empty, the menu without it; a Floor 7 death: the bomb back on A, the pair at 30; a bomb against the blast wall explodes at its face within 72 px of the blob behind it, which takes nothing; quit and Continue: Floor 7 with the bomb on A, which hits the pair; New Game: no bombs, only Fists, the Surface checkpoint without bombs |
 | `test_save_isolation.gd` (Phase 8)      | The save guard: in a test run the player's save path, look-alike paths (`user://test_saves/../savegame.json`, `user://test_saves_old/...`), the `.tmp` beside it and other files are refused, test-folder paths allowed; a stray file outside the folder is neither written, loaded nor deleted, each refusal reported; then, pointed at the player's save, SaveManager finds and loads nothing and refuses to write, and a level starting in that state cannot save its checkpoint; the player's save (if any) keeps its modification time; the test's own file still works |
-| `test_pause_menu.gd` (Phase 10)         | Real levels, keys through the input pipeline: every level (Surface, Floors 1–6) has exactly one pause menu, Escape opens it (Resume selected, rows, no focus), gameplay ticks stop, Escape and Enter on Resume resume, the save untouched; Up/Down wrap, Resume selected on reopening; paused Carl cannot move, turn, punch, fire, swing, drink or reassign; a key held while resuming gives no free action, then D/W/S/A work; Donut stops mid-stride; a blob touching Carl while Donut scratches it: nothing happens for 180 paused ticks, then the next scratch is exactly 60 and the next touch exactly 48 ticks of play after the last; the Spitting Blob's glob freezes in flight, nothing is spat for 180 ticks, globs exactly 90 ticks of play apart; a stone freezes then flies on, no extra stone; a Bat push freezes unfinished, then completes exactly 80 px; Donut gets up after exactly 360 ticks of play with or without a 180-tick pause (her countdown holds); Space/Escape between the two menus (echo included, same-frame key pairs): never both open, paused exactly when one is open; GAME OVER: Escape/Space open nothing, everything frozen, Enter retries, the pause menu works after; stairs and a pickup do nothing while paused and work after; **the lifecycle fix: stairs + death in one tick keep GAME OVER on the floor with a loadable checkpoint, then retry and stairs work** |
-| `test_return_to_title.gd` (Phase 10)    | Real title and Floor 6 from a seeded checkpoint (Carl 80, Donut 40, potion on A, Slingshot W, Bat S): the question's text, No selected, Escape and No go back to the paused menu, Down/Up toggle Yes/No, the live floor untouched (Carl 60, Donut 10, no potion, stone flying on); Yes: the title in the same process, unpaused, the level freed, no Carl/Donut/enemy/projectile left, the save byte-identical and not rewritten, the title says HP 80 (not 60), GameState holds no run; Continue restores everything (HP, items, slots, the killed blob back, 30 HP each, no projectiles); **Continue reads the disk: a different checkpoint written while the title is up and a stale run planted in GameState → Continue opens the disk's Carl 55 / Donut 25**; 5 Continue → play → Return cycles with identical node and connection counts (one Carl, Donut, HUD, action menu, pause menu, 3 enemies); New Game after returning asks (No keeps the save), Yes gives the canonical Surface run and checkpoint; the save is version 3 with its seven fields; a Phase 5 v1 and a Phase 6 v2 save load after returning, Continue twice each, the file becomes version 3 |
-| `test_quit_game.gd` (Phase 10)          | Real process exits: a seeded Floor 6 checkpoint, then `tests/support/quit_game_child.gd` in its own Godot process: Continue, live changes (Carl 60, Donut 10, no potion, a kill, a stone), pause > Quit Game (the warning, No selected, Escape and No cancel, Yes quits): exit code 0, no engine error or crash marker, the save byte-identical and last written on floor entry; the same with the window's close request; after each, this process's title and Continue restore the checkpoint; the helper refuses (exit 2, nothing run) the player's save path, a `test_saves/../` path and no path, and the player's save keeps its modification time |
-| `test_project_setup.gd` (Phase 11, 12)  | Project settings in a real process: Use Custom User Dir on, Custom User Dir Name `DC CARL`; `OS.get_user_data_dir()` = app-data folder + `DC CARL` (printed), not `Godot/app_userdata/...`; `user://savegame.json` resolves inside it; no game script names an absolute or per-user path; the test guard refuses the player's save (also through `test_saves/../`), this test's own file is in `test_saves/` inside the new folder; the Compatibility renderer, `driver.windows` = `opengl3_angle`, the other platforms' drivers and both fallbacks at Godot's defaults, `project.godot`'s only driver line; version 0.12.0 (Phase 12); save format 3 |
-| `test_title_quit.gd` (Phase 11)         | Real title screen, keys through the input pipeline: no save → Continue greyed, New Game selected, Quit Game offered, Up/Down go round New Game and Quit Game only; a Floor 6 save → Continue selected, Up/Down round all three; New Game's question (No selected, its Up/Down leave the menu alone, Escape back, save untouched); an unloadable save → New Game selected, Quit Game offered, New Game still asks; Floor 6 > Return to Title → Quit Game selectable, then Continue restores the checkpoint. Real process exits (`quit_game_child.gd`): Quit Game on the title with no save (exit 0, no file created), with the save (exit 0, byte-identical, not rewritten), and after Return to Title (exit 0, the checkpoint, last written on floor entry); each pressed with Quit Game selected and GameState the title's cleared run |
+| `test_pause_menu.gd` (Phase 10, 13)         | Real levels, keys through the input pipeline: every level (Surface, Floors 1–6) has exactly one pause menu, Escape opens it (Resume selected, rows, no focus), gameplay ticks stop, Escape and Enter on Resume resume, the save untouched; Up/Down wrap, Resume selected on reopening; paused Carl cannot move, turn, punch, fire, swing, drink or reassign; a key held while resuming gives no free action, then D/W/S/A work; Donut stops mid-stride; a blob touching Carl while Donut scratches it: nothing happens for 180 paused ticks, then the next scratch is exactly 60 and the next touch exactly 48 ticks of play after the last; the Spitting Blob's glob freezes in flight, nothing is spat for 180 ticks, globs exactly 90 ticks of play apart; a stone freezes then flies on, no extra stone; a Bat push freezes unfinished, then completes exactly 80 px; Donut gets up after exactly 360 ticks of play with or without a 180-tick pause (her countdown holds); Space/Escape between the two menus (echo included, same-frame key pairs): never both open, paused exactly when one is open; GAME OVER: Escape/Space open nothing, everything frozen, Enter retries, the pause menu works after; stairs and a pickup do nothing while paused and work after; **the lifecycle fix: stairs + death in one tick keep GAME OVER on the floor with a loadable checkpoint, then retry and stairs work**; **Phase 13: four rows, Settings second, Down goes through all four** |
+| `test_return_to_title.gd` (Phase 10, 13)    | Real title and Floor 6 from a seeded checkpoint (Carl 80, Donut 40, potion on A, Slingshot W, Bat S): the question's text, No selected, Escape and No go back to the paused menu, Down/Up toggle Yes/No, the live floor untouched (Carl 60, Donut 10, no potion, stone flying on); Yes: the title in the same process, unpaused, the level freed, no Carl/Donut/enemy/projectile left, the save byte-identical and not rewritten, the title says HP 80 (not 60), GameState holds no run; Continue restores everything (HP, items, slots, the killed blob back, 30 HP each, no projectiles); **Continue reads the disk: a different checkpoint written while the title is up and a stale run planted in GameState → Continue opens the disk's Carl 55 / Donut 25**; 5 Continue → play → Return cycles with identical node and connection counts (one Carl, Donut, HUD, action menu, pause menu, 3 enemies); New Game after returning asks (No keeps the save), Yes gives the canonical Surface run and checkpoint; the save is version 3 with its seven fields; a Phase 5 v1 and a Phase 6 v2 save load after returning, Continue twice each, the file becomes version 3; **Phase 13: Return to Title is the third row** |
+| `test_quit_game.gd` (Phase 10, 13)          | Real process exits: a seeded Floor 6 checkpoint, then `tests/support/quit_game_child.gd` in its own Godot process: Continue, live changes (Carl 60, Donut 10, no potion, a kill, a stone), pause > Quit Game (the warning, No selected, Escape and No cancel, Yes quits): exit code 0, no engine error or crash marker, the save byte-identical and last written on floor entry; the same with the window's close request; after each, this process's title and Continue restore the checkpoint; the helper refuses (exit 2, nothing run) the player's save path, a `test_saves/../` path and no path, and the player's save keeps its modification time; **Phase 13: the child reaches Return to Title / Quit Game past Settings** |
+| `test_project_setup.gd` (Phase 11–13)  | Project settings in a real process: Use Custom User Dir on, Custom User Dir Name `DC CARL`; `OS.get_user_data_dir()` = app-data folder + `DC CARL` (printed), not `Godot/app_userdata/...`; `user://savegame.json` resolves inside it; no game script names an absolute or per-user path; the test guard refuses the player's save (also through `test_saves/../`), this test's own file is in `test_saves/` inside the new folder; the Compatibility renderer, `driver.windows` = `opengl3_angle`, the other platforms' drivers and both fallbacks at Godot's defaults, `project.godot`'s only driver line; version 0.12.0 (Phase 12); save format 3; **Phase 13: version 0.13.0, settings format 1, `user://settings.json` in the DC CARL folder and refused in a test run, this test's own settings file, the autoloads exactly GameState, SaveManager, SettingsManager** |
+| `test_title_quit.gd` (Phase 11, 13)         | Real title screen, keys through the input pipeline: no save → Continue greyed, New Game selected, Quit Game offered, Up/Down go round New Game and Quit Game only; a Floor 6 save → Continue selected, Up/Down round all three; New Game's question (No selected, its Up/Down leave the menu alone, Escape back, save untouched); an unloadable save → New Game selected, Quit Game offered, New Game still asks; Floor 6 > Return to Title → Quit Game selectable, then Continue restores the checkpoint. Real process exits (`quit_game_child.gd`): Quit Game on the title with no save (exit 0, no file created), with the save (exit 0, byte-identical, not rewritten), and after Return to Title (exit 0, the checkpoint, last written on floor entry); each pressed with Quit Game selected and GameState the title's cleared run; **Phase 13: four rows (Settings third) with and without a save and after Return to Title** |
 | `test_floor_04_run.gd` (Phase 7–9, 12)  | Real run from a real Phase 6 Floor 3 save: title → Continue → Floor 3 (the same checkpoint saved again as version 3 with Donut 60 / 60); every level's exits lead one floor down, **Floor 4's only exit to Floor 5**, Floor 5's to Floor 6 (Phase 9), Floor 6's to Floor 7 and Floor 7 none (Phase 12); Floor 3 → Floor 4 arrival and checkpoint (version 3); the Blob walks around wall A and three punches kill it; the Spitting Blob walks around wall B, spits only in sight, the menu freezes it and its glob; globs take Carl to 0 HP, GAME OVER waits; retry restores everything; GAME OVER with a glob in flight freezes it; three stones kill the Spitting Blob; quit and Continue on Floor 4; New Game starts clean (Donut 60 / 60). Donut is present and fights along throughout |
 
 Every test uses its own save file under `user://test_saves/`, and SaveManager refuses anything
@@ -1464,100 +1666,118 @@ else in a test run (see Persistent save > Test save isolation). The child proces
 it only runs when one of them starts it; Phase 11 added its `title_quit` and `return_title_quit` modes)
 takes its save file on the command line and refuses, before doing anything, a path outside that
 folder or no path; being a `-s` run, SaveManager would refuse the player's save too.
+Every test also has its own settings file under `user://test_saves/` (Phase 13), and SettingsManager
+refuses anything else in a test run. `tests/support/settings_child.gd` (the child of
+`test_settings_restart.gd`) takes its files on the command line and refuses, before doing anything,
+save or settings paths outside that folder (except in its `production` mode, which exists to show
+SettingsManager refusing the player's file at startup).
 
-## Validation performed (Phase 12)
-All runs used Godot 4.7.2.stable.official on a **different machine from Phases 10–11**: Windows 10
-(user `Komputer`), an NVIDIA GeForce GTX 750 Ti (driver 32.0.15.6094), 60 Hz. (Phase 11's full
-validation record, including the ANGLE shutdown stress tables and the Intel native-OpenGL crash
-history, is in `PROJECT_STATE.md` at commit `41c57f2`; Phase 10's at `8dff143`.) Everything that
-could write a save ran either as a guarded test (`-s`, its own file in `user://test_saves/`) or in a
-scratch copy of the project whose only differences were its own `custom_user_dir_name` (and, for
-the played sessions, a scratch-only driver autoload): `dc_carl_p12_play`, `dc_carl_p12_mutation`.
-- **Baseline before changes:** HEAD `41c57f2` = `origin/main`, clean tree. This machine's `.godot`
-  class cache was stale (it predated Phase 9's `Knockback`), so the first suite attempt failed to
-  compile; `godot --headless --import` rebuilt it (no tracked file changed) and the unmodified
-  Phase 11 suite then passed **29 of 29** (763 s). The normal entry point (title screen, real window,
-  no script, 240 frames) exited 0 and reported "OpenGL ES 3.0 (ANGLE 2.1.1) … ANGLE (NVIDIA, NVIDIA
-  GeForce GTX 750 Ti Direct3D11 …)": **`opengl3_angle`**, as intended.
-- **Phase 11 fixture:** `tests/fixtures/phase11_save_v3_floor_06.json` was written by the unmodified
-  Phase 11 code (a scratch `-s` script: GameState set to Carl 80, Donut 40, a potion on A, the
-  Slingshot on W, the Bat on S, then Floor 6 opened, whose `Level._ready()` saved the checkpoint into
-  `user://test_saves/`), before any Phase 12 change; the scratch file was then deleted.
-- **Test suite:** `run_all.gd` passed **31 of 31** (841 s) on the Phase 12 code, and again **31 of 31**
-  (844 s) on the final committed tree (after comment-only and documentation edits). New:
-  `test_blast_bomb.gd` (122 checks), `test_floor_07_run.gd` (118 checks). Changed:
-  `test_save_manager.gd` (164), `test_save_migration.gd` (108), `test_windowed_resolutions.gd` (219,
-  real window, ANGLE), `test_floor_04/05/06_run.gd`, `test_project_setup.gd`, `test_pause_menu.gd`
-  (doc only; it checks every registered floor, now 8).
-- **Measured numbers:** a bomb thrown in the open flies exactly 240 px in **66 ticks**; the launcher
-  is ready again exactly **60 ticks** after a throw; holding the key throws at ticks 0, 60, 120; the
-  explosion flash lasts 21 ticks.
-- **Mutation checks** (`dc_carl_p12_mutation`, its own user-data folder; each mutation applied,
-  its tests run, the files restored; "caught" = FAIL lines or an exit code the unmutated copy does
-  not have; in the copy `test_project_setup.gd` always reports its two folder-name failures, which
-  were subtracted): Bomb does not consume quantity; Bomb consumes two; explosion damages Donut;
-  explosion damages Carl; explosion damages the same enemy twice; explosion passes through walls
-  (`blocking_layers` removed); explosion applies Bat knockback; enemy death adds the loot directly
-  without a pickup; a drop can be collected twice; a Floor 6 retry keeps newly earned bombs; Floor 7
-  loses checkpointed bombs; an unnecessary save-format bump to 4; `floor_07` missing from
-  `FloorRegistry`; upward stairs from Floor 7 to Floor 6; tests falling back to the production save
-  path (the harness pointing at `user://savegame.json` and the guard allowing it).
-  **All 15 caught** (by `test_blast_bomb`, `test_floor_07_run`, `test_floor_06_run`,
-  `test_save_manager`, `test_save_migration`, `test_project_setup` and `test_save_isolation`).
-- **Real gameplay, real processes** (`dc_carl_p12_play`, the normal title screen as main scene,
-  real windows, real key events through Godot's input pipeline and held move actions; no
-  `--rendering-driver` argument: every run reported `opengl3_angle`). Run at **1280×720, 640×360 and
-  1024×768**, each size from a fresh copy of the real Phase 11 Floor 6 save:
-  - *Session 1* (28 checks each size, all passed): the title offers "Saved at the start of Floor 6";
-    Continue; no bombs; the loot blob carries its LootDrop; Carl walks to it and kills it with the
-    Bat; one "Blast Bomb x2" pickup exactly where it died, no bombs yet; walking over it gives 2;
-    the menu lists "Blast Bomb x2 (no slot)", A assigns it, HUD "A: Blast Bomb x2"; a bomb thrown
-    at the west wall right beside Carl (the blast centre 34 px from him, Donut beside him) leaves Carl 70 → 70 and Donut 40 → 40 and moves
-    Carl 0 px; 1 left; a lethal hit through Carl's Hurtbox (the driver's shortcut to GAME OVER):
-    GAME OVER waits, Enter: no bombs, A = potion again, the blob back at its spawn, no drop;
-    bombs earned again, pause > Return to Title > Yes: the title still says Floor 6, the save
-    unchanged; Continue: no bombs, the blob alive; bombs earned again; a bomb at the Backstop blob
-    (which had noticed Carl and was walking at him): Escape while it flies froze it in place, the
-    blast hit the blob for exactly [20], it was not knocked back (0.92 px in the next tick, walking),
-    HUD "A: Blast Bomb x1"; the Bat took its last 10; Carl walked to the stairs past the Spitting
-    Blob; Floor 7: 1 bomb on A, the checkpoint on disk version 3 with `"blast_bomb": 1` and
-    `"action_a": "blast_bomb"`, no stairs. Then pause > Quit Game > Yes: **exit 0**.
-  - *Session 2*, a **new process** on that save (12 checks each size, all passed): the title says
-    "Saved at the start of Floor 7"; Continue: HUD "A: Blast Bomb x1"; the menu lists "Blast Bomb x1
-    (on A)"; from (330, 176) the last bomb hits the pair: both 30 → 10 from one explosion, neither
-    moved, Carl and Donut unhurt, 0 left, "A: —", the menu without it; GAME OVER, Enter: Blast Bomb
-    x1 back on A; a bomb against the blast wall: it exploded 66 px from the blob behind the wall,
-    which kept 30 HP; the pair noticed Carl and came for him: one Slingshot stone [10], the Bat [20,
-    10]; Donut with Carl. Quit Game: **exit 0**; the save file's hash was the same before and after
-    (Continue and the retry re-save the same checkpoint).
-  - *Fists* (a short extra real process on the migrated Floor 2 save): Continue, the Floor 2 blob
-    punched to death with D, [10, 10, 10]; exit 0.
-  - *Version 1 save* (a copy of the Phase 5 Floor 2 fixture): the title offers "Saved at the start of
-    Floor 2"; Continue opens Floor 2; the file became version 3 with no bombs; exit 0.
-  - No engine error, warning or crash marker in any of these logs.
-- **Visual check under ANGLE** (the sessions' screenshots, inspected) at all three sizes: the title
-  (Floor 6 and Floor 7 saves); Floor 6 on arrival with the loot sign; the dropped "Blast Bomb x2"
-  pickup with its bomb icon; the menu with "Blast Bomb x2 (no slot)" and "(on A)"; the HUD with the
-  bomb; a bomb in flight (charcoal, with a fuse spark and trail, unlike the pale stone and violet
-  glob); the pause menu over a frozen bomb; the explosion on the Backstop blob (an orange disc the
-  size of the blast with a bright core); the point-blank blast; the grouped explosion covering both
-  blobs; the shielded explosion at the blast wall; GAME OVER on Floors 6 and 7; the HUD after the
-  last bomb ("A: —"); the menu without the bomb; Floor 7 on arrival. Everything is drawn; nothing is
-  missing or garbled. At 640×360 the text is small but legible, as before, and world signs near the
-  top can slide under the HUD (the known camera-limit issue). The explosion disc is also drawn over
-  the wall it is shielded by (a placeholder simplification, listed below).
-- **Save locations, before and after** (read-only snapshots: every file's SHA-256, size and time):
-  - *production folder* `%APPDATA%\DC CARL\`: **no `savegame.json` at the start and none at the
-    end**. The tests and the one normal title launch only created `logs/`, `shader_cache/`,
-    `objectdb_snapshots/` and `test_saves/` (empty at the end);
-  - *old shared folder* `%APPDATA%\Godot\app_userdata\Carl & Donut Dungeon Prototype\`: 11 files
-    (its `savegame.json`, logs, shader cache): **identical hashes and timestamps at the end**;
-  - *sibling project* `../dc_carl_codex`: `git status` and HEAD (`3e5b9de`) identical before and
-    after; nothing there was opened, run or changed;
-  - scratch saves lived only in the `dc_carl_p12_*` folders.
-- No test file is left in `test_saves/`, and no save file is tracked by Git.
+## Validation performed (Phase 13)
+All runs used Godot 4.7.2.stable.official on the Phase 12 machine: Windows 10 (user `Komputer`), an
+NVIDIA GeForce GTX 750 Ti (driver 32.0.15.6094). (Phase 12's validation record is in
+`PROJECT_STATE.md` at commit `b471ffe`, Phase 11's at `41c57f2`.) Everything that could write a save
+or a settings file ran either as a guarded test (`-s`, its own files in `user://test_saves/`) or in a
+scratch copy of the project whose only differences were its own `custom_user_dir_name` (and, for the
+played sessions, a scratch-only driver autoload): `dc_carl_p13_play`, `dc_carl_p13_mutation`.
+- **Baseline before changes:** HEAD `b471ffe` = `origin/main`, clean tree. The unmodified Phase 12
+  suite passed **31 of 31** (842 s). The normal entry point (title screen, real window, no script,
+  240 frames) exited 0 on "OpenGL ES 3.0 (ANGLE 2.1.1) … ANGLE (NVIDIA, NVIDIA GeForce GTX 750 Ti
+  Direct3D11 …)": **`opengl3_angle`**. (The class cache was current this time; one `--import` after
+  adding the new scripts registered `ControlBindings`.)
+- **Test suite:** `run_all.gd` passed **35 of 35** on the Phase 13 code, and again **35 of 35**
+  (906 s) on the final tree; a normal launch of the final tree then exited 0 on `opengl3_angle` and
+  wrote no settings file. New: `test_settings_manager.gd` (222 checks), `test_settings_menu.gd` (58),
+  `test_rebinding_run.gd` (74), `test_settings_restart.gd` (72, with `tests/support/settings_child.gd`). Changed: see Tests and
+  "Earlier behaviour changed in Phase 13". The windowed test (real window, ANGLE) now makes 289
+  checks.
+- **Mutation checks** (`dc_carl_p13_mutation`, its own user-data folder; each mutation applied, its
+  tests run, the files restored; "caught" = FAIL lines or an exit code the unmutated copy does not
+  have; `test_project_setup.gd` always reports its two folder-name failures in the copy, which were
+  subtracted). **All 13 caught:**
+  settings stored inside the savegame instead of their own file (settings_manager, save_manager,
+  settings_restart); New Game resets custom controls (rebinding_run, settings_manager); changing a
+  slot's key clears that slot's action (settings_menu, rebinding_run, settings_manager); HUD still
+  hard-coded to W/A/S/D (settings_menu, rebinding_run); inventory assignment listening to literal
+  W/A/S/D (rebinding_run); duplicate keys accepted (settings_manager, settings_menu); Escape allowed
+  as a binding (settings_manager, settings_restart); corrupt settings crash startup, i.e. validation
+  removed (settings_manager, settings_restart); settings loaded by the level instead of at startup
+  (settings_restart); Reset to Defaults modifies the savegame (rebinding_run, settings_menu,
+  settings_manager); save schema bumped to 4 (project_setup, settings_manager, save_manager); renderer
+  reverted from ANGLE (project_setup, windowed_resolutions); automated tests using the production
+  settings file, with the guard opened (settings_manager, project_setup).
+- **Real gameplay, real processes** (`dc_carl_p13_play`: the normal title screen as main scene, real
+  windows, real key events through Godot's input pipeline, movement included, pressing whichever
+  keys are bound; no `--rendering-driver` argument: every run reported `opengl3_angle`; every run
+  ended through the game's own Quit Game, exit code 0; no engine error, warning or crash in any log):
+  - *rebind*, at **1280×720, 640×360 and 1024×768**, each from a fresh folder holding only the real
+    Phase 11 Floor 6 save (48 checks each, all passed): at startup the defaults and no settings file;
+    the title offers Continue, New Game, Settings, Quit Game; Settings rebinds by key presses Move Up/
+    Down/Left/Right = I/K/J/L, Action Slots W/A/S/D = 1/2/3/4, Inventory = Tab (capture prompt shown);
+    Inventory → 1 refused ("1 is already assigned to Action Slot W."); Reset asks with No selected, No
+    keeps them; the copy's `settings.json` holds `settings_version` 1 and the keys, and the save is
+    untouched. Continue: HUD "1: Slingshot   2: Potion x1   3: Baseball Bat   4: Fists" and "Tab:
+    action menu". Up/Down/Left/Right and W/A/S/D move Carl 0 px; L/K/J/I move him 60 px right, down,
+    left, up. Literal W/A/S/D use nothing; **2** drinks the potion (80 → 100, "2: —"); **3** swings
+    the Bat at the loot blob ([20, 10]); walking over its drop with I/J/K/L gives 2 Blast Bombs; Space
+    opens nothing, **Tab** opens the menu, literal W assigns nothing, **2** puts the bombs in the A
+    slot ("Blast Bomb x2 (on 2)", help "1/2/3/4: put it on that key     Tab/Esc: close"), Tab and
+    Escape close it (Escape pauses nothing); at the Backstop blob **1** fires a stone (10), **4**
+    punches (10) and **2** throws a bomb whose blast kills it (one bomb left). Escape: the pause menu
+    with Settings; Action Slot D 4 → F while paused (the F punched nothing, nothing moved); after
+    Resume 4 does nothing and F punches, HUD "F: Fists". Return to Title: the title's Settings lists
+    I, K, J, L, 1, 2, 3, F, Tab; Continue: the Floor 6 checkpoint again with those keys, I moves Carl.
+  - *restart* (1280×720), a **new process**: the custom keys were in the InputMap before the title
+    ran; the title's Settings lists them; Continue re-saved an identical checkpoint; HUD "1: Slingshot
+    2: Potion x1   3: Baseball Bat   F: Fists"; I moves Carl, Up does not; 1 fires, W does not; Tab
+    opens the menu. Back on the title: Settings > Reset to Defaults > Yes (No was selected first): the
+    nine defaults, the save unchanged; Quit Game on the title: exit 0 (9 checks).
+  - *defaults* (1280×720), a **new process** after that: the defaults at startup, HUD "W: Slingshot
+    A: Potion x1   S: Baseball Bat   D: Fists" and "Space: action menu"; Up moves Carl, I does not; W
+    fires, 1 does not; Space opens the menu (5 checks).
+  - *corrupt* settings, written into the copy's folder before a launch: a truncated file (at all three
+    sizes), a file binding I to Move Up and Action Slot W (duplicate), and a file binding Inventory to
+    Escape (reserved), each with the valid save present (6 checks each): the game started with the
+    defaults and `load_failed`; the title showed "Control settings could not be loaded. Defaults
+    restored." (in red, under the save line) and still offered Continue; the Settings screen showed the
+    same message; Continue opened Floor 6, Up moved Carl, W fired. The bad file and the save kept the
+    same hashes.
+  - Across all ten launches the save file kept one hash (Continue writes the same checkpoint back).
+- **Visual check under ANGLE** (the sessions' screenshots, inspected, plus the windowed test's layout
+  checks) at 1280×720, 640×360 and 1024×768: the title with Settings (selected and not), the Settings
+  screen with the defaults and the custom keys, the capture prompt ("..." and "Press a key for Action
+  Slot W   (Esc: cancel)"), the conflict message, the Reset question, the pause menu's four rows, the
+  Settings screen over the paused Floor 6, the rebound HUD ("F: Fists", "Tab: action menu"), the
+  rebound action menu ("(on 2)", "1/2/3/4 ... Tab/Esc: close"), and the title and Settings screen
+  with the settings error. Everything is drawn, centred and inside its panel; at 640×360 the text is
+  small but legible, as before. (The Settings panel was then made fully opaque, because the title
+  showed faintly through its 98 % background.)
+- **Save and settings locations, before and after** (read-only snapshots):
+  - *production folder* `%APPDATA%\DC CARL\`: **no `savegame.json` and no `settings.json` at the
+    start or at the end**; `test_saves/` empty at the end. The one normal launch only read (no
+    settings file: defaults, nothing written);
+  - *old shared folder* `%APPDATA%\Godot\app_userdata\Carl & Donut Dungeon Prototype\`: every file's
+    hash, size and time identical at the end;
+  - *sibling project* `../dc_carl_codex`: `git status` and HEAD (`3e5b9de`) identical before and after;
+  - scratch saves and settings lived only in the `dc_carl_p13_*` folders.
+- No test file is left in `test_saves/`, and no save or settings file is tracked by Git.
 
 ## Known issues / limitations
+- **Control settings (Phase 13 simplifications):**
+  - keyboard only: one key per control, no gamepad, mouse or chords; function keys, modifiers on
+    their own, lock and media keys cannot be bound;
+  - key names are Godot's English, layout-independent names of the physical key position ("Q",
+    "BracketLeft", "Kp 1", "QuoteLeft"): on a non-US layout a key may be labelled differently from
+    what is printed on it (the binding itself follows the physical key, as before Phase 13);
+  - long key names can make the HUD's slot bar and the signs longer than their boxes (checked with
+    1/2/3/4 and Tab at every size; "BracketLeft" for all four slots with the longest items would not
+    fit at 640×360);
+  - in the action menu Escape, Up and Down keep their menu meaning, so a slot bound to Up or Down Arrow
+    cannot be assigned by its key there (assign it to another slot's key, or rebind it);
+  - a refused capture ends with its message; press Enter to try again;
+  - an unusable settings file stays on disk until the next change or Reset (the defaults are used and
+    the title says so at every launch until then);
+  - the signs that name keys follow the bindings; other world text never names keys;
+  - the pause menu and the title keep their fixed hints ("Up/Down: choose ...").
 - **Blast Bomb, area damage and drops (Phase 12 placeholders and simplifications):**
   - the bomb, its fuse spark and the explosion are drawn shapes: no sprite animation, particles,
     sound, screen shake or throwing arc (it flies straight, top-down). The explosion's disc is drawn
@@ -1739,35 +1959,33 @@ the played sessions, a scratch-only driver autoload): `dc_carl_p12_play`, `dc_ca
   the runtime load check. By design, this is not worked around.
 
 ## Manual verification required
-Your save is `%APPDATA%\DC CARL\savegame.json` (Phase 11). Nothing in Phase 12 created or changed
-it: the tests never touch it, and every game-mode run used a scratch copy with its own folder.
-1. Open the project in Godot 4.7.2 and let it import the changes (a new icon, three scripts, four
-   scenes). The Output panel should show no errors; the renderer line should still mention
-   **ANGLE** and **Direct3D11**.
-2. Reach Floor 6 (Continue if your save is on Floor 5 or 6, or play down from a New Game). Near the
-   south-west Gelatinous Blob a sign reads "This blob carries Blast Bombs." Kill it (the Bat or the
-   Slingshot): a bomb icon labelled "Blast Bomb x2" appears where it died; nothing is added until you
-   walk over it. Walk over it: the pickup disappears.
-3. **Space**: the menu lists "Blast Bomb x2 (no slot)". Select it and press a slot key (for example
-   A); close the menu: the HUD shows "A: Blast Bomb x2".
-4. Face an enemy and tap **A**: a dark bomb flies straight, explodes on the enemy with an orange
-   circle, the enemy loses 20 (a 30 HP blob keeps a third of its bar), and the HUD says x1. Hold A:
-   at most one throw per second.
-5. Throw one at a wall right next to Carl and Donut: neither loses HP and nothing is pushed.
-6. Press **Escape** while a bomb is flying: it hangs in the air until you resume.
-7. Before taking the stairs, **Escape > Return to Title > Yes**, then **Continue**: Floor 6 again,
-   without the bombs, and the blob is back. Get them again and take the stairs in the far
-   south-east corner to **Floor 7 - Blast Range** with at least one bomb.
-8. On Floor 7, walk right from the start and throw at the two blobs standing together: both lose
-   20 from one explosion. Throw one at the thin wall in the south with the blob behind it (from its
-   west side): the blob behind the wall is unhurt.
-9. Quit (Escape > Quit Game > Yes) and relaunch: Continue opens Floor 7 with the bombs you entered
-   it with, on the same key.
-10. There are no stairs on Floor 7; nothing leads back up.
+Your save is `%APPDATA%\DC CARL\savegame.json` and your control settings will be
+`%APPDATA%\DC CARL\settings.json` (created the first time you change a key). Nothing in Phase 13
+created or changed either: the tests use `user://test_saves/`, and every game-mode run used a scratch
+copy with its own folder.
+1. Open the project in Godot 4.7.2 and let it import (three new scripts, one new scene). The Output
+   panel should show no errors, and the renderer line should still mention **ANGLE**.
+2. Run the game: the title shows **Continue / New Game / Settings / Quit Game**. Choose **Settings**:
+   "Controls" lists Move Up … Inventory with Up, Down, Left, Right, W, A, S, D, Space.
+3. Select **Action Slot W**, press Enter ("Press a key for Action Slot W"), press **Q**: the row says Q.
+   Select **Inventory**, Enter, press **Q**: "Q is already assigned to Action Slot W." and Inventory
+   stays Space. Enter then Escape changes nothing; Enter then Enter says Enter is reserved.
+4. Rebind movement to **I/K/J/L** (Move Up = I, Move Down = K, Move Left = J, Move Right = L) and
+   Inventory to **Tab**. Escape back to the title, Continue (or New Game).
+5. In play: the arrows do nothing, I/J/K/L move Carl; the HUD reads "Q: …" for the W slot and "Tab:
+   action menu"; Q uses whatever the W slot holds and W does nothing; Tab opens the menu, which says
+   "(on Q)", and Q assigns the selected item to the W slot.
+6. **Escape > Settings** (the game stays paused), change one key, Back, Resume: the new key works at
+   once. Return to Title and quit the game; start it again: Settings still lists your keys.
+7. **Settings > Reset to Defaults**: No keeps them; Yes restores the arrows, W/A/S/D and Space, and
+   your save is untouched (Continue shows the same floor, HP and slots).
+8. Optional: close the game, put a few random characters into `settings.json` and start it: the title
+   says "Control settings could not be loaded. Defaults restored.", Continue still works, and the next
+   change in Settings writes a good file.
 
 ## Next phase
-Phase 13 is **not specified** here. Provide its prompt, with acceptance criteria, after Phase 12 is
-reviewed. (Random loot tables, explosion knockback and Floor 8, possible next steps, were
+Phase 14 is **not specified** here. Provide its prompt, with acceptance criteria, after Phase 13 is
+reviewed. (Controller bindings, audio/graphics settings and Floor 8, possible next steps, were
 deliberately not started.)
 
 Groundwork for later phases:
@@ -1797,3 +2015,6 @@ Groundwork for later phases:
   another explosive, a spell, or an enemy's blast on `player_hurtbox`.
 - **Save format changes:** bump `SaveManager.SAVE_VERSION` to 4, add `_migrate_version_3()`,
   and chain the migrations in `decode()`.
+- **More settings / controller bindings:** see Architecture > Settings and control bindings ("Adding
+  a rebindable control later"). A new kind of setting is another block in `settings.json` with a
+  `settings_version` bump and a migration in `SettingsManager.decode()`; the save never changes.

@@ -11,6 +11,7 @@
 [ext_resource type="PackedScene" uid="uid://b1uxff71rwat4" path="res://scenes/props/stairs.tscn" id="10_stairs"]
 [ext_resource type="PackedScene" uid="uid://bnm72g20yeqty" path="res://scenes/props/item_pickup.tscn" id="11_pickup"]
 [ext_resource type="Resource" uid="uid://dwfvybkwc6ydu" path="res://resources/actions/small_health_potion.tres" id="12_potion"]
+[ext_resource type="Script" path="res://scripts/ui/key_hint_label.gd" id="13_key_hint"]
 
 [sub_resource type="NavigationPolygon" id="NavigationPolygon_level"]
 outlines = Array[PackedVector2Array]([PackedVector2Array(0, 0, 960, 0, 960, 640, 0, 640)])
@@ -56,6 +57,8 @@ theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_constants/outline_size = 4
 theme_override_font_sizes/font_size = 12
 text = "W/A/S/D use the actions shown top-left. Space: change them."
+script = ExtResource("13_key_hint")
+template = "{action_w}/{action_a}/{action_s}/{action_d} use the actions shown top-left. {inventory_toggle}: change them."
 horizontal_alignment = 1
 
 [node name="StairsSign" type="Label" parent="Signs"]

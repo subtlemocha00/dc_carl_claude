@@ -146,7 +146,7 @@ func _check_inventory_and_slots() -> void:
 			"labelled 'Blast Bomb x2'", inventory.get_label(BOMB))
 	for slot: StringName in [W, A, S, D]:
 		check(slots.assign(BOMB, slot) and slots.find_slot(BOMB) == slot and _slots_holding(slots, BOMB) == 1,
-				"it can go on %s, and is in one slot only" % ActionSlots.KEY_LABELS[slot])
+				"it can go on %s, and is in one slot only" % ActionSlots.SLOT_NAMES[slot])
 	slots.assign(FISTS, D)
 	slots.assign(BOMB, S)
 	check(slots.get_display_name(S, true) == "Blast Bomb x2", "slot S shows 'Blast Bomb x2'", slots.get_display_name(S, true))

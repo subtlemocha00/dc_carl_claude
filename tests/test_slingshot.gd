@@ -141,7 +141,7 @@ func _check_slot_assignment() -> void:
 	for slot: StringName in [A, S, W]:
 		slots.assign(SLINGSHOT, slot)
 		check(slots.find_slot(SLINGSHOT) == slot and _slots_holding(slots, SLINGSHOT) == 1 and slots.get_action(D) == FISTS,
-				"it moves to %s and is in one slot only, next to Fists on D" % ActionSlots.KEY_LABELS[slot])
+				"it moves to %s and is in one slot only, next to Fists on D" % ActionSlots.SLOT_NAMES[slot])
 	slots.assign(SLINGSHOT, D)
 	check(slots.get_action(D) == SLINGSHOT and slots.find_slot(FISTS) == &"" and _slots_holding(slots, SLINGSHOT) == 1,
 			"it can go on D too (Fists, replaced, lose their slot as always)")

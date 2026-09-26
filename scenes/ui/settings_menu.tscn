@@ -1,14 +1,13 @@
-[gd_scene format=3 uid="uid://c5is3ll1v0ran"]
+[gd_scene format=3]
 
-[ext_resource type="Script" path="res://scripts/ui/pause_menu.gd" id="1_pause"]
-[ext_resource type="PackedScene" path="res://scenes/ui/settings_menu.tscn" id="2_settings"]
+[ext_resource type="Script" path="res://scripts/ui/settings_menu.gd" id="1_settings"]
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_menu"]
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_settings"]
 content_margin_left = 40.0
 content_margin_top = 24.0
 content_margin_right = 40.0
 content_margin_bottom = 24.0
-bg_color = Color(0.1, 0.11, 0.15, 0.97)
+bg_color = Color(0.1, 0.11, 0.15, 1)
 border_width_left = 2
 border_width_top = 2
 border_width_right = 2
@@ -35,88 +34,103 @@ corner_radius_top_right = 6
 corner_radius_bottom_right = 6
 corner_radius_bottom_left = 6
 
-[node name="PauseMenu" type="CanvasLayer"]
+[node name="SettingsMenu" type="Control"]
 process_mode = 3
-layer = 11
 visible = false
-script = ExtResource("1_pause")
-
-[node name="Dim" type="ColorRect" parent="."]
+layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
-color = Color(0, 0, 0, 0.55)
+script = ExtResource("1_settings")
 
-[node name="MenuPanel" type="PanelContainer" parent="."]
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.03, 0.03, 0.05, 0.88)
+
+[node name="SettingsPanel" type="PanelContainer" parent="."]
 unique_name_in_owner = true
+layout_mode = 1
 anchors_preset = 8
 anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -230.0
-offset_top = -160.0
-offset_right = 230.0
-offset_bottom = 160.0
+offset_left = -270.0
+offset_top = -300.0
+offset_right = 270.0
+offset_bottom = 300.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
-theme_override_styles/panel = SubResource("StyleBoxFlat_menu")
+theme_override_styles/panel = SubResource("StyleBoxFlat_settings")
 
-[node name="Layout" type="VBoxContainer" parent="MenuPanel"]
+[node name="Layout" type="VBoxContainer" parent="SettingsPanel"]
 layout_mode = 2
 mouse_filter = 2
 theme_override_constants/separation = 8
 alignment = 1
 
-[node name="Title" type="Label" parent="MenuPanel/Layout"]
+[node name="Title" type="Label" parent="SettingsPanel/Layout"]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.96, 0.93, 0.85, 1)
 theme_override_font_sizes/font_size = 32
-text = "Paused"
-horizontal_alignment = 1
-
-[node name="ResumeRow" type="Label" parent="MenuPanel/Layout"]
-unique_name_in_owner = true
-layout_mode = 2
-theme_override_font_sizes/font_size = 24
-text = "Resume"
-horizontal_alignment = 1
-
-[node name="SettingsRow" type="Label" parent="MenuPanel/Layout"]
-unique_name_in_owner = true
-layout_mode = 2
-theme_override_font_sizes/font_size = 24
 text = "Settings"
 horizontal_alignment = 1
 
-[node name="ReturnToTitleRow" type="Label" parent="MenuPanel/Layout"]
-unique_name_in_owner = true
+[node name="SectionLabel" type="Label" parent="SettingsPanel/Layout"]
 layout_mode = 2
-theme_override_font_sizes/font_size = 24
-text = "Return to Title"
+theme_override_colors/font_color = Color(0.96, 0.62, 0.25, 1)
+theme_override_font_sizes/font_size = 20
+text = "Controls"
 horizontal_alignment = 1
 
-[node name="QuitRow" type="Label" parent="MenuPanel/Layout"]
+[node name="Rows" type="VBoxContainer" parent="SettingsPanel/Layout"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_font_sizes/font_size = 24
-text = "Quit Game"
+size_flags_horizontal = 4
+mouse_filter = 2
+theme_override_constants/separation = 2
+
+[node name="ResetRow" type="Label" parent="SettingsPanel/Layout/Rows"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+text = "Reset to Defaults"
+
+[node name="BackRow" type="Label" parent="SettingsPanel/Layout/Rows"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+text = "Back"
+
+[node name="MessageLabel" type="Label" parent="SettingsPanel/Layout"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 22)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.75, 0.77, 0.82, 1)
+theme_override_font_sizes/font_size = 16
 horizontal_alignment = 1
 
-[node name="Hint" type="Label" parent="MenuPanel/Layout"]
+[node name="HintLabel" type="Label" parent="SettingsPanel/Layout"]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.62, 0.65, 0.72, 1)
 theme_override_font_sizes/font_size = 14
-text = "Up/Down: choose     Enter: confirm     Esc: resume"
+text = "Up/Down: choose     Enter: change     Esc: back"
 horizontal_alignment = 1
 
-[node name="ConfirmPanel" type="PanelContainer" parent="."]
+[node name="ResetConfirmPanel" type="PanelContainer" parent="."]
 unique_name_in_owner = true
 visible = false
+layout_mode = 1
 anchors_preset = 8
 anchor_left = 0.5
 anchor_top = 0.5
@@ -131,41 +145,37 @@ grow_vertical = 2
 mouse_filter = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_confirm")
 
-[node name="Layout" type="VBoxContainer" parent="ConfirmPanel"]
+[node name="Layout" type="VBoxContainer" parent="ResetConfirmPanel"]
 layout_mode = 2
 mouse_filter = 2
 theme_override_constants/separation = 10
 alignment = 1
 
-[node name="ConfirmQuestion" type="Label" parent="ConfirmPanel/Layout"]
+[node name="ResetQuestion" type="Label" parent="ResetConfirmPanel/Layout"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(0.96, 0.93, 0.85, 1)
 theme_override_font_sizes/font_size = 22
-text = "Return to title?
-Progress since entering this floor will be lost."
+text = "Reset all controls to defaults?"
 horizontal_alignment = 1
 
-[node name="NoRow" type="Label" parent="ConfirmPanel/Layout"]
+[node name="ResetNoRow" type="Label" parent="ResetConfirmPanel/Layout"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 24
 text = "No"
 horizontal_alignment = 1
 
-[node name="YesRow" type="Label" parent="ConfirmPanel/Layout"]
+[node name="ResetYesRow" type="Label" parent="ResetConfirmPanel/Layout"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 24
 text = "Yes"
 horizontal_alignment = 1
 
-[node name="ConfirmHint" type="Label" parent="ConfirmPanel/Layout"]
+[node name="ResetHint" type="Label" parent="ResetConfirmPanel/Layout"]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.62, 0.65, 0.72, 1)
 theme_override_font_sizes/font_size = 14
 text = "Up/Down: choose     Enter: confirm     Esc: back"
 horizontal_alignment = 1
-
-[node name="SettingsMenu" parent="." instance=ExtResource("2_settings")]
-unique_name_in_owner = true

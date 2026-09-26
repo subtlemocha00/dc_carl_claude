@@ -85,7 +85,8 @@ func _check_every_level() -> void:
 		check(not _pause_menu().is_open() and not paused, floor_name + ": it starts closed")
 		await tap_key(KEY_ESCAPE)
 		check(_pause_menu().is_open() and _pause_menu().visible and paused, floor_name + ": Escape opens it and pauses the game")
-		check(_rows() == ["> Resume", "   Return to Title", "   Quit Game"], floor_name + ": Resume, Return to Title, Quit Game, Resume selected", str(_rows()))
+		check(_rows() == ["> Resume", "   Settings", "   Return to Title", "   Quit Game"],
+				floor_name + ": Resume, Settings (Phase 13), Return to Title, Quit Game, Resume selected", str(_rows()))
 		check(root.gui_get_focus_owner() == null, floor_name + ": nothing in it has keyboard focus")
 		var ticks := _counter.ticks
 		await wait_physics_frames(30)
@@ -107,13 +108,15 @@ func _check_selection() -> void:
 		return
 	await tap_key(KEY_ESCAPE)
 	await tap_key(KEY_DOWN)
-	check(_rows() == ["   Resume", "> Return to Title", "   Quit Game"], "Down selects Return to Title", str(_rows()))
+	check(_rows() == ["   Resume", "> Settings", "   Return to Title", "   Quit Game"], "Down selects Settings", str(_rows()))
 	await tap_key(KEY_DOWN)
-	check(_rows()[2] == "> Quit Game", "Down again selects Quit Game")
+	check(_rows() == ["   Resume", "   Settings", "> Return to Title", "   Quit Game"], "Down again selects Return to Title", str(_rows()))
+	await tap_key(KEY_DOWN)
+	check(_rows()[3] == "> Quit Game", "Down again selects Quit Game")
 	await tap_key(KEY_DOWN)
 	check(_rows()[0] == "> Resume", "Down from Quit Game wraps to Resume")
 	await tap_key(KEY_UP)
-	check(_rows()[2] == "> Quit Game", "Up from Resume wraps to Quit Game")
+	check(_rows()[3] == "> Quit Game", "Up from Resume wraps to Quit Game")
 	await tap_key(KEY_ESCAPE)
 	check(not _pause_menu().is_open(), "Escape resumes whatever is selected")
 	await tap_key(KEY_ESCAPE)
@@ -570,7 +573,7 @@ func _donut() -> CharacterBody2D:
 	return current_scene.get_node("Actors/Donut")
 
 
-## The texts of the pause menu's three rows.
+## The texts of the pause menu's four rows (Settings since Phase 13).
 func _rows() -> Array:
-	return ["%ResumeRow", "%ReturnToTitleRow", "%QuitRow"].map(
+	return ["%ResumeRow", "%SettingsRow", "%ReturnToTitleRow", "%QuitRow"].map(
 			func(row: String) -> String: return (_pause_menu().get_node(row) as Label).text)

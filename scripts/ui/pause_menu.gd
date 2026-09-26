@@ -3,8 +3,13 @@ extends CanvasLayer
 ## paused, exactly as it is while the action menu is open: the scene tree is paused, so Carl,
 ## Donut, the enemies, projectiles, knockback, cooldowns and Donut's recovery countdown all stop
 ## (they count physics ticks), and stairs and pickups cannot trigger.
-## - Up/Down choose Resume, Return to Title or Quit Game; Enter confirms; Escape resumes.
+## - Up/Down choose Resume, Settings, Return to Title or Quit Game; Enter confirms; Escape
+##   resumes.
 ## - Resume closes the menu and the game carries on where it was.
+## - Settings (Phase 13) opens the Settings screen (settings_menu.tscn, the same one the title
+##   screen uses) over the dimmed game. The game stays paused the whole time; Escape or Back there
+##   comes back to this menu with Settings still selected. New keys apply as soon as they are
+##   chosen, so Resume carries on with them.
 ## - Return to Title and Quit Game each ask first ("Progress since entering this floor will be
 ##   lost."), with No selected. Up/Down (or Left/Right) choose, Enter confirms, Escape means No.
 ##   No goes back to the pause menu, still paused.
@@ -12,11 +17,15 @@ extends CanvasLayer
 ##   saves anything: the save keeps the checkpoint written when Carl entered the floor.
 ## The menu has no gameplay rules and never touches GameState or the save.
 ##
+## Its own keys are fixed (menu_up, menu_down, ui_confirm_game, pause_back; menu_left and
+## menu_right in the questions): rebinding the gameplay controls never changes them.
+##
 ## Input notes (the same rules as the action menu):
 ## - It runs while the game is paused (process_mode Always), but only opens while the game is
 ##   not paused. So it never opens over the action menu or GAME OVER, and the action menu (which
 ##   has the same rule) never opens over it: only one of them can be open at a time.
 ## - While open it takes every key press, so none of them reach the game or the action menu.
+##   While the Settings screen is open, that screen takes them instead.
 ##   One key press therefore never both closes one menu and opens another. Carl also ignores
 ##   keys that are still held when the game carries on (see carl.gd).
 ## - Its rows are Labels, which never take keyboard focus, so Godot's built-in ui_accept and
@@ -27,7 +36,7 @@ signal return_to_title_requested
 ## Emitted when the player confirms Quit Game.
 signal quit_requested
 
-enum Option { RESUME, RETURN_TO_TITLE, QUIT }
+enum Option { RESUME, SETTINGS, RETURN_TO_TITLE, QUIT }
 
 const SELECTED_COLOR := Color(1.0, 0.86, 0.35)
 const NORMAL_COLOR := Color(0.9, 0.91, 0.94)
@@ -42,15 +51,17 @@ var _confirm_yes := false
 var _leaving := false
 
 @onready var menu_panel: Control = %MenuPanel
-@onready var option_rows: Array[Label] = [%ResumeRow, %ReturnToTitleRow, %QuitRow]
+@onready var option_rows: Array[Label] = [%ResumeRow, %SettingsRow, %ReturnToTitleRow, %QuitRow]
 @onready var confirm_panel: Control = %ConfirmPanel
 @onready var confirm_question: Label = %ConfirmQuestion
 @onready var no_row: Label = %NoRow
 @onready var yes_row: Label = %YesRow
+@onready var settings_menu: Control = %SettingsMenu
 
 
 func _ready() -> void:
 	visible = false
+	settings_menu.closed.connect(_refresh)
 	_refresh()
 
 
@@ -61,6 +72,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			open()
 		return
 
+	# The Settings screen, when open, handles its own keys.
+	if settings_menu.is_open():
+		return
 	# While open, the pause menu takes every key press, so none of them reach the game.
 	if event is InputEventKey:
 		get_viewport().set_input_as_handled()
@@ -70,9 +84,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		_handle_confirm_input(event)
 	elif event.is_action_pressed(&"pause_back"):
 		resume()
-	elif event.is_action_pressed(&"move_up", true):
+	elif event.is_action_pressed(&"menu_up", true):
 		_select(wrapi(_selected - 1, 0, Option.size()))
-	elif event.is_action_pressed(&"move_down", true):
+	elif event.is_action_pressed(&"menu_down", true):
 		_select(wrapi(_selected + 1, 0, Option.size()))
 	elif event.is_action_pressed(&"ui_confirm_game"):
 		_choose(_selected)
@@ -84,6 +98,10 @@ func is_open() -> bool:
 
 func is_confirming() -> bool:
 	return _confirming
+
+
+func is_settings_open() -> bool:
+	return settings_menu.is_open()
 
 
 ## The highlighted option.
@@ -104,13 +122,14 @@ func open() -> void:
 	get_tree().paused = true
 	_selected = Option.RESUME
 	_confirming = false
+	settings_menu.visible = false
 	visible = true
 	_refresh()
 
 
 ## Hides the menu and lets the game carry on from where it was.
 func resume() -> void:
-	if not is_open() or _leaving:
+	if not is_open() or _leaving or settings_menu.is_open():
 		return
 	_confirming = false
 	visible = false
@@ -126,6 +145,9 @@ func _choose(option: Option) -> void:
 	match option:
 		Option.RESUME:
 			resume()
+		Option.SETTINGS:
+			settings_menu.open()
+			_refresh()
 		Option.RETURN_TO_TITLE:
 			_open_confirm("Return to title?")
 		Option.QUIT:
@@ -152,7 +174,7 @@ func _handle_confirm_input(event: InputEvent) -> void:
 		else:
 			quit_requested.emit()
 	else:
-		for action: StringName in [&"move_up", &"move_down", &"move_left", &"move_right"]:
+		for action: StringName in [&"menu_up", &"menu_down", &"menu_left", &"menu_right"]:
 			if event.is_action_pressed(action, true):
 				_confirm_yes = not _confirm_yes
 				_refresh()
@@ -166,7 +188,7 @@ func _close_confirm() -> void:
 
 
 func _refresh() -> void:
-	menu_panel.visible = not _confirming
+	menu_panel.visible = not _confirming and not settings_menu.is_open()
 	confirm_panel.visible = _confirming
 	for option: int in option_rows.size():
 		_style_row(option_rows[option], _option_text(option), option == _selected)
@@ -176,6 +198,8 @@ func _refresh() -> void:
 
 func _option_text(option: Option) -> String:
 	match option:
+		Option.SETTINGS:
+			return "Settings"
 		Option.RETURN_TO_TITLE:
 			return "Return to Title"
 		Option.QUIT:

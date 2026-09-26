@@ -1,8 +1,11 @@
 extends CanvasLayer
 ## The in-game HUD: Carl's and Donut's hit points ("Carl HP: 80 / 100", "Donut HP: 40 / 60",
-## or "Donut HP: 0 / 60 - DOWNED"), what each W/A/S/D action slot holds (with the quantity of a
-## carried item, for example "A: Potion x2"), and the GAME OVER screen. It sits on its own
-## canvas layer, so it stays fixed on screen while the camera moves.
+## or "Donut HP: 0 / 60 - DOWNED"), what each action slot holds (with the quantity of a carried
+## item, for example "A: Potion x2"), and the GAME OVER screen. It sits on its own canvas layer,
+## so it stays fixed on screen while the camera moves.
+## Phase 13: each slot is labelled with the key that triggers it now, not its logical name: with
+## the W slot rebound to Q it reads "Q: Slingshot". The hint names the current Inventory key
+## ("Space: action menu"). Both refresh when a binding changes (ControlBindings.HINT_GROUP).
 ## It keeps running while the game is paused (process_mode Always), so the GAME OVER screen
 ## can react to Enter.
 
@@ -17,7 +20,13 @@ var _action_slots: ActionSlots
 @onready var health_label: Label = %HealthLabel
 @onready var donut_health_label: Label = %DonutHealthLabel
 @onready var action_slots_label: Label = %ActionSlotsLabel
+@onready var menu_hint: Label = %MenuHint
 @onready var game_over_message: Control = %GameOverMessage
+
+
+func _ready() -> void:
+	add_to_group(ControlBindings.HINT_GROUP)
+	refresh_control_hints()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -49,6 +58,13 @@ func show_action_slots(action_slots: ActionSlots, inventory: Inventory) -> void:
 	_on_action_slots_changed()
 
 
+## Shows the current keys (SettingsManager calls this on the hint group after a binding changes).
+func refresh_control_hints() -> void:
+	menu_hint.text = "%s: action menu     Esc: pause" % ControlBindings.get_key_label(&"inventory_toggle")
+	if _action_slots != null:
+		_on_action_slots_changed()
+
+
 func _on_health_changed(current: int, maximum: int) -> void:
 	health_label.text = "Carl HP: %d / %d" % [current, maximum]
 
@@ -61,7 +77,7 @@ func _on_donut_health_changed(current: int, maximum: int) -> void:
 func _on_action_slots_changed() -> void:
 	var parts := PackedStringArray()
 	for slot in ActionSlots.SLOTS:
-		parts.append("%s: %s" % [ActionSlots.KEY_LABELS[slot], _action_slots.get_display_name(slot, true)])
+		parts.append("%s: %s" % [ControlBindings.get_key_label(slot), _action_slots.get_display_name(slot, true)])
 	action_slots_label.text = "   ".join(parts)
 
 

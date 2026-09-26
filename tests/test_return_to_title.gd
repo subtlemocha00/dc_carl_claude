@@ -108,6 +108,8 @@ func _check_confirmation() -> void:
 
 	await tap_key(KEY_ESCAPE)
 	var stone_position: Vector2 = stone.global_position if stone != null else Vector2.ZERO
+	# Resume, Settings (Phase 13), Return to Title.
+	await tap_key(KEY_DOWN)
 	await tap_key(KEY_DOWN)
 	await tap_key(KEY_ENTER)
 	var question: Label = pause.get_node("%ConfirmQuestion")
@@ -304,9 +306,11 @@ func _check_older_saves_after_return() -> void:
 			check(current_scene.get_node("%SaveInfoLabel").text.ends_with("HP 70 / 100"), "version %d: after returning, the title still says HP 70" % version)
 
 
-## Escape, Down, Enter, Down (Yes), Enter: the whole Return to Title, by keys.
+## Escape, Down, Down, Enter, Down (Yes), Enter: the whole Return to Title, by keys (past Settings,
+## the pause menu's second row since Phase 13).
 func _return_to_title() -> void:
 	await tap_key(KEY_ESCAPE)
+	await tap_key(KEY_DOWN)
 	await tap_key(KEY_DOWN)
 	await tap_key(KEY_ENTER)
 	await tap_key(KEY_DOWN)

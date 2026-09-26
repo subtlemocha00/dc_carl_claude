@@ -1,8 +1,11 @@
 class_name ActionSlots
 extends RefCounted
 ## Which action each of Carl's four action slots holds.
-## A slot is named after the InputMap action of its key (action_w, action_a, action_s,
-## action_d): pressing that key uses whatever the slot holds.
+## A slot is named after its InputMap action (action_w, action_a, action_s, action_d): pressing the
+## key bound to that action uses whatever the slot holds. The slots are logical: "the W slot" is
+## action_w, whichever physical key triggers it (W by default; the player can rebind it in
+## Settings, Phase 13). What a slot holds is run state (GameState, the save); which key triggers it
+## is an application setting (SettingsManager). Changing the key never changes the contents.
 ## GameState owns the current run's ActionSlots. Carl, the HUD and the action menu all share
 ## it, so a change made in the menu applies everywhere at once and survives level changes.
 ## Rules:
@@ -21,8 +24,9 @@ const SLOT_S := &"action_s"
 const SLOT_D := &"action_d"
 ## Every slot, in display order.
 const SLOTS: Array[StringName] = [SLOT_W, SLOT_A, SLOT_S, SLOT_D]
-## The key shown for each slot.
-const KEY_LABELS: Dictionary[StringName, String] = {SLOT_W: "W", SLOT_A: "A", SLOT_S: "S", SLOT_D: "D"}
+## The logical name of each slot ("Action Slot W" in Settings). The key that triggers a slot is
+## shown with ControlBindings.get_key_label(slot) instead, since it may have been rebound.
+const SLOT_NAMES: Dictionary[StringName, String] = {SLOT_W: "W", SLOT_A: "A", SLOT_S: "S", SLOT_D: "D"}
 ## Shown in place of an action name for an empty slot.
 const EMPTY_LABEL := "—"
 
