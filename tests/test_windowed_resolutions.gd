@@ -38,6 +38,14 @@ extends "res://tests/support/game_test.gd"
 ## column, "(on 1)" rows and help line ("1/2/3/4: put it on that key     Tab/Esc: close") inside its
 ## panel and fitting. The pause menu now has four rows (Settings second), and the title four
 ## (Settings third), each on screen; the title's "Control settings could not be loaded" line too.
+## Phase 14 adds, at each size: Floor 7's stairs hint (it replaced the prototype note) clear of the
+## HUD; the Settings screen with its ten controls (Interact last); Floor 7's closed chest with Carl
+## next to it and the prompt "E: Open Chest" on screen, fitting and clear of the HUD; the prompt
+## hidden under the pause menu; the prompt with a long key name ("BracketLeft: Open Chest") on
+## screen. Once opened: the open chest, its two loot pickups (icons and labels) and no prompt, on
+## screen at each size; after collecting them, the HUD's slot bar and the menu rows with the new
+## quantities fit. At the end, Floor 8's three signs on screen, fitting and clear of the HUD, at
+## each size.
 ##
 ## Run from the project folder (NOT headless; a game window opens briefly):
 ##     godot --path . -s res://tests/test_windowed_resolutions.gd
@@ -52,6 +60,7 @@ const FLOOR_4_PATH := "res://scenes/levels/floor_04.tscn"
 const FLOOR_5_PATH := "res://scenes/levels/floor_05.tscn"
 const FLOOR_6_PATH := "res://scenes/levels/floor_06.tscn"
 const FLOOR_7_PATH := "res://scenes/levels/floor_07.tscn"
+const FLOOR_8_PATH := "res://scenes/levels/floor_08.tscn"
 const POTION: ActionDefinition = preload("res://resources/actions/small_health_potion.tres")
 const SLINGSHOT: ActionDefinition = preload("res://resources/actions/slingshot.tres")
 const BAT: ActionDefinition = preload("res://resources/actions/baseball_bat.tres")
@@ -164,9 +173,11 @@ func _run_checks() -> void:
 	await _check_floor_5()
 	await _check_floor_6()
 	await _check_floor_7()
+	await _check_chest()
 	await _check_settings_screen()
 	await _check_pause_menu()
 	await _check_title_screen()
+	await _check_floor_8()
 	finish()
 
 
@@ -437,7 +448,7 @@ func _check_floor_7() -> void:
 		await wait_physics_frames(10)
 		var label := "%dx%d" % [window_size.x, window_size.y]
 		var visible_rect := root.get_visible_rect()
-		for sign_path: String in ["Signs/FloorTitle", "Signs/Hint", "Signs/PrototypeNote"]:
+		for sign_path: String in ["Signs/FloorTitle", "Signs/Hint", "Signs/StairsHint"]:
 			var sign_label: Label = level.get_node(sign_path)
 			var sign_rect := _on_screen(sign_label)
 			check(visible_rect.encloses(sign_rect) and sign_label.get_minimum_size().x <= sign_label.size.x
@@ -530,7 +541,8 @@ func _check_settings_screen() -> void:
 	await tap_key(KEY_BRACKETLEFT)
 	check(message.text == "BracketLeft is already assigned to Action Slot W.", "the conflict message", message.text)
 	await _check_settings_layout(settings, panel, "conflict message")
-	# The Reset to Defaults question, then Yes.
+	# The Reset to Defaults question, then Yes (past Interact, the tenth control since Phase 14).
+	await tap_key(KEY_DOWN)
 	await tap_key(KEY_DOWN)
 	await tap_key(KEY_ENTER)
 	var confirm: Control = settings.get_node("%ResetConfirmPanel")
@@ -562,7 +574,8 @@ func _check_settings_screen() -> void:
 	var action_menu: CanvasLayer = level.get_node("ActionMenu")
 	var menu_panel: Control = action_menu.get_node("%Panel")
 	var bombs: int = game_state().inventory.get_quantity(BOMB)
-	check(slot_bar.text == "1: Baseball Bat   2: Potion x2   3: Blast Bomb x%d   4: Slingshot" % bombs and hint.text == "Tab: action menu     Esc: pause",
+	var potions: int = game_state().inventory.get_quantity(POTION)
+	check(slot_bar.text == "1: Baseball Bat   2: Potion x%d   3: Blast Bomb x%d   4: Slingshot" % [potions, bombs] and hint.text == "Tab: action menu     Esc: pause",
 			"the HUD names 1/2/3/4 and Tab", "%s | %s" % [slot_bar.text, hint.text])
 	for window_size in WINDOW_SIZES:
 		DisplayServer.window_set_size(window_size)
@@ -612,11 +625,141 @@ func _check_settings_layout(settings: Control, panel: Control, what: String) -> 
 			else:
 				labels.append(row as Label)
 		labels.append(settings.get_node("%MessageLabel") as Label)
-		check(labels.size() == 21 and labels.all(func(row: Label) -> bool:
+		check(labels.size() == 23 and labels.all(func(row: Label) -> bool:
 				return rect.encloses(row.get_global_rect()) and row.get_minimum_size().x <= row.size.x),
-				label + ": its 9 controls with their keys, Reset to Defaults, Back and the message are inside it and fit",
+				label + ": its 10 controls with their keys, Reset to Defaults, Back and the message are inside it and fit",
 				str(labels.filter(func(row: Label) -> bool: return not rect.encloses(row.get_global_rect()) or row.get_minimum_size().x > row.size.x).map(
 						func(row: Label) -> String: return row.text)))
+
+
+## Phase 14: Floor 7's treasure chest at each size, with Carl next to it: the closed chest and the
+## prompt "E: Open Chest" on screen, fitting and clear of the HUD; no prompt under the pause menu;
+## a long key name in the prompt. Then opened: the open chest and its two loot pickups (icons and
+## labels) on screen, no prompt; collected: the HUD's slot bar and the menu rows with the new
+## quantities, on screen and fitting.
+func _check_chest() -> void:
+	var level := current_scene
+	var chest: TreasureChest = level.get_node("NavigationRegion2D/Props/TreasureChest")
+	var carl: CharacterBody2D = level.get_node("Actors/Carl")
+	var controller: InteractionController = carl.get_node("InteractionController")
+	var prompt: Label = controller.prompt_label
+	var pause: CanvasLayer = level.get_node("PauseMenu")
+	var hud := level.get_node("HUD")
+	var slot_bar: Label = hud.get_node("%ActionSlotsLabel")
+	var hud_rects: Array[Rect2] = []
+	for node_path: String in ["%HealthLabel", "%DonutHealthLabel", "%ActionSlotsLabel", "MenuHint"]:
+		hud_rects.append((hud.get_node(node_path) as Control).get_global_rect())
+	carl.teleport_to(chest.global_position + Vector2(0, -30))
+	await wait_physics_frames(3)
+	for window_size in WINDOW_SIZES:
+		DisplayServer.window_set_size(window_size)
+		await wait_physics_frames(10)
+		var label := "%dx%d" % [window_size.x, window_size.y]
+		var visible_rect := root.get_visible_rect()
+		check(not chest.is_open() and chest.get_node("ClosedLook").is_visible_in_tree()
+				and visible_rect.has_point(chest.get_global_transform_with_canvas().origin), label + ": the closed chest is drawn on screen")
+		var prompt_rect := _on_screen(prompt)
+		check(prompt.visible and prompt.text == "E: Open Chest" and visible_rect.encloses(prompt_rect) and prompt.get_minimum_size().x <= prompt.size.x
+				and hud_rects.all(func(r: Rect2) -> bool: return not r.intersects(prompt_rect)),
+				label + ": the prompt \"E: Open Chest\" is on screen, fits and is clear of the HUD", str(prompt_rect))
+		check(prompt_rect.end.y <= _on_screen_point(chest.global_position).y, label + ": the prompt sits above the chest")
+		await tap_key(KEY_ESCAPE)
+		check(pause.is_open() and not prompt.visible, label + ": under the pause menu there is no prompt")
+		await tap_key(KEY_ESCAPE)
+		await wait_physics_frames(2)
+		settings_manager().set_binding(&"interact", KEY_BRACKETLEFT)
+		prompt_rect = _on_screen(prompt)
+		check(prompt.text == "BracketLeft: Open Chest" and visible_rect.encloses(prompt_rect) and prompt.get_minimum_size().x <= prompt.size.x,
+				label + ": with a long key name the prompt still fits on screen", prompt.text)
+		settings_manager().reset_to_defaults()
+		await wait_physics_frames(2)
+	DisplayServer.window_set_size(WINDOW_SIZES[0])
+	await wait_physics_frames(10)
+	await tap_key(KEY_E)
+	await wait_physics_frames(3)
+	var loot: Array = level.get_node("Pickups").get_children().filter(func(node: Node) -> bool: return node is ItemPickup)
+	check(chest.is_open() and loot.size() == 2, "E opens the chest: two pickups")
+	for window_size in WINDOW_SIZES:
+		DisplayServer.window_set_size(window_size)
+		await wait_physics_frames(10)
+		var label := "%dx%d" % [window_size.x, window_size.y]
+		var visible_rect := root.get_visible_rect()
+		check(chest.get_node("OpenLook").is_visible_in_tree() and not chest.get_node("ClosedLook").is_visible_in_tree()
+				and visible_rect.has_point(chest.get_global_transform_with_canvas().origin) and not prompt.visible,
+				label + ": the open chest is drawn on screen, with no prompt")
+		for pickup: ItemPickup in loot:
+			var pickup_label: Label = pickup.get_node("Label")
+			var marker: Node2D = pickup.get_node("Marker/Icon") if pickup.item.icon != null else pickup.get_node("Marker/DefaultGem")
+			check(marker.is_visible_in_tree() and visible_rect.has_point(marker.get_global_transform_with_canvas().origin)
+					and visible_rect.encloses(_on_screen(pickup_label)) and pickup_label.get_minimum_size().x <= pickup_label.size.x,
+					"%s: the loot \"%s\" (its %s and label) is on screen" % [label, pickup_label.text, "icon" if pickup.item.icon != null else "gem"])
+		var rects: Array = loot.map(func(pickup: ItemPickup) -> Rect2: return _text_on_screen(pickup.get_node("Label")))
+		check(not (rects[0] as Rect2).intersects(rects[1]), label + ": the two loot labels' texts do not overlap", str(rects))
+	DisplayServer.window_set_size(WINDOW_SIZES[0])
+	var state := game_state()
+	var potions: int = state.inventory.get_quantity(POTION)
+	var bombs: int = state.inventory.get_quantity(BOMB)
+	for pickup: ItemPickup in loot:
+		carl.teleport_to(pickup.global_position)
+		await wait_physics_frames(3)
+	check(state.inventory.get_quantity(POTION) == potions + 1 and state.inventory.get_quantity(BOMB) == bombs + 2, "Carl collects Potion x1 and Blast Bomb x2")
+	var action_menu: CanvasLayer = level.get_node("ActionMenu")
+	for window_size in WINDOW_SIZES:
+		DisplayServer.window_set_size(window_size)
+		await wait_physics_frames(10)
+		var label := "%dx%d" % [window_size.x, window_size.y]
+		var visible_rect := root.get_visible_rect()
+		check(slot_bar.text == "W: Baseball Bat   A: Potion x%d   S: Blast Bomb x%d   D: Slingshot" % [potions + 1, bombs + 2]
+				and visible_rect.encloses(slot_bar.get_global_rect()) and slot_bar.get_minimum_size().x <= slot_bar.size.x,
+				label + ": after the chest, the slot bar is on screen and fits", slot_bar.text)
+		action_menu.open()
+		await process_frame
+		var panel_rect := (action_menu.get_node("%Panel") as Control).get_global_rect()
+		var rows: Array = action_menu.get_node("%ActionList").get_children().filter(func(row: Label) -> bool:
+			return row.text.contains("Small Health Potion x%d   (on A)" % (potions + 1)) or row.text.contains("Blast Bomb x%d   (on S)" % (bombs + 2)))
+		check(rows.size() == 2 and rows.all(func(row: Label) -> bool: return panel_rect.encloses(row.get_global_rect()) and row.get_minimum_size().x <= row.size.x),
+				label + ": the menu's potion and bomb rows show the new quantities, inside the panel")
+		action_menu.close()
+		await wait_physics_frames(2)
+	DisplayServer.window_set_size(WINDOW_SIZES[0])
+	carl.teleport_to(Vector2(176, 176))
+	await wait_physics_frames(10)
+
+
+## Phase 14: Floor 8's three signs at each size, on screen, fitting and clear of the HUD.
+func _check_floor_8() -> void:
+	game_state().start_new_run()
+	change_scene_to_file(FLOOR_8_PATH)
+	await wait_for_scene(FLOOR_8_PATH)
+	var level := current_scene
+	var hud := level.get_node("HUD")
+	var hud_rects: Array[Rect2] = []
+	for node_path: String in ["%HealthLabel", "%DonutHealthLabel", "%ActionSlotsLabel", "MenuHint"]:
+		hud_rects.append((hud.get_node(node_path) as Control).get_global_rect())
+	for window_size in WINDOW_SIZES:
+		DisplayServer.window_set_size(window_size)
+		await wait_physics_frames(10)
+		var label := "%dx%d" % [window_size.x, window_size.y]
+		var visible_rect := root.get_visible_rect()
+		for sign_path: String in ["Signs/FloorTitle", "Signs/Hint", "Signs/PrototypeNote"]:
+			var sign_label: Label = level.get_node(sign_path)
+			var sign_rect := _on_screen(sign_label)
+			check(visible_rect.encloses(sign_rect) and sign_label.get_minimum_size().x <= sign_label.size.x
+					and hud_rects.all(func(r: Rect2) -> bool: return not r.intersects(sign_rect)),
+					"%s: Floor 8's %s is on screen, fits and is clear of the HUD" % [label, sign_path.get_file()], str(sign_rect))
+	DisplayServer.window_set_size(WINDOW_SIZES[0])
+	await wait_physics_frames(10)
+
+
+## Where a centred world-space Label's text itself (not its whole box) is on screen.
+func _text_on_screen(text_label: Label) -> Rect2:
+	var width := text_label.get_minimum_size().x
+	return text_label.get_global_transform_with_canvas() * Rect2((text_label.size.x - width) / 2.0, 0.0, width, text_label.size.y)
+
+
+## Where a world point is on screen (after the camera).
+func _on_screen_point(point: Vector2) -> Vector2:
+	return root.get_canvas_transform() * point
 
 
 ## Phase 10: on the current floor (Floor 7 since Phase 12) at each size, the pause menu (its three

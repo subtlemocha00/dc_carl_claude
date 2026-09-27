@@ -13,8 +13,9 @@ extends "res://tests/support/game_test.gd"
 ##   (driver.windows = "opengl3_angle"); every other platform keeps Godot's default driver, and
 ##   the fallbacks stay on. (The driver actually used is checked in a real window by
 ##   test_windowed_resolutions.gd; a headless run has none.)
-## - Version 0.13.0 (Phase 13); the save format is still version 3, and the control settings have
-##   their own format, version 1, in their own file, user://settings.json, in the same folder. The
+## - Version 0.14.0 (Phase 14); the save format is still version 3, and the control settings have
+##   their own format, version 2 since Phase 14 (it was 1), in their own file, user://settings.json,
+##   in the same folder. The
 ##   autoloads are GameState, SaveManager and (Phase 13) SettingsManager, and nothing else. A test run
 ##   may not use the player's settings file either.
 ##
@@ -115,10 +116,10 @@ func _check_renderer_settings() -> void:
 
 func _check_versions() -> void:
 	print("-- Versions")
-	check(ProjectSettings.get_setting("application/config/version") == "0.13.0", "the game version is 0.13.0",
+	check(ProjectSettings.get_setting("application/config/version") == "0.14.0", "the game version is 0.14.0",
 			str(ProjectSettings.get_setting("application/config/version")))
 	check(save_manager().SAVE_VERSION == 3, "the save format is still version 3", str(save_manager().SAVE_VERSION))
-	check(settings_manager().SETTINGS_VERSION == 1, "the settings format is version 1", str(settings_manager().SETTINGS_VERSION))
+	check(settings_manager().SETTINGS_VERSION == 2, "the settings format is version 2", str(settings_manager().SETTINGS_VERSION))
 	var autoloads := Array(ProjectSettings.get_property_list()).map(func(property: Dictionary) -> String: return property["name"]).filter(
 			func(setting: String) -> bool: return setting.begins_with("autoload/"))
 	check(autoloads == ["autoload/GameState", "autoload/SaveManager", "autoload/SettingsManager"],

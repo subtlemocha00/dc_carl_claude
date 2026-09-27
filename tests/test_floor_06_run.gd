@@ -2,7 +2,7 @@ extends "res://tests/support/game_test.gd"
 ## Phase 9 end-to-end run: the Baseball Bat on Floor 5 and Floor 6, through the real title screen
 ## and levels, on this test's own save file:
 ## - Every level's exits lead one floor down (Floor 5's to Floor 6; since Phase 12 Floor 6's to
-##   Floor 7); Floor 7 has none.
+##   Floor 7); Floor 7's to Floor 8 (Phase 14); Floor 8 has none.
 ## - A. Continue on a real Phase 8 save (tests/fixtures/phase8_save_v3_floor_05.json: version 3,
 ##   Floor 5, Carl 80, Donut 40, Slingshot on W, a potion on A, no Bat) opens Floor 5 with that
 ##   state: no Bat, S empty, and the Bat pickup lying there. Floor 5's enemies are kept idle
@@ -38,6 +38,7 @@ const FLOOR_4_PATH := "res://scenes/levels/floor_04.tscn"
 const FLOOR_5_PATH := "res://scenes/levels/floor_05.tscn"
 const FLOOR_6_PATH := "res://scenes/levels/floor_06.tscn"
 const FLOOR_7_PATH := "res://scenes/levels/floor_07.tscn"
+const FLOOR_8_PATH := "res://scenes/levels/floor_08.tscn"
 const BLOB_PATH := "res://scenes/enemies/gelatinous_blob.tscn"
 const SPITTER_PATH := "res://scenes/enemies/spitting_blob.tscn"
 const PHASE_8_SAVE := "res://tests/fixtures/phase8_save_v3_floor_05.json"
@@ -74,11 +75,11 @@ func _run_checks() -> void:
 
 
 func _check_downward_only() -> void:
-	print("-- Every exit leads one floor down; Floor 7 has none")
+	print("-- Every exit leads one floor down; Floor 8 has none (Phase 14)")
 	var expected := {
 		SURFACE_PATH: [FLOOR_1_PATH], FLOOR_1_PATH: [FLOOR_2_PATH], FLOOR_2_PATH: [FLOOR_3_PATH],
 		FLOOR_3_PATH: [FLOOR_4_PATH], FLOOR_4_PATH: [FLOOR_5_PATH], FLOOR_5_PATH: [FLOOR_6_PATH],
-		FLOOR_6_PATH: [FLOOR_7_PATH], FLOOR_7_PATH: [],
+		FLOOR_6_PATH: [FLOOR_7_PATH], FLOOR_7_PATH: [FLOOR_8_PATH], FLOOR_8_PATH: [],
 	}
 	for level_path: String in expected:
 		var level: Node = (load(level_path) as PackedScene).instantiate()

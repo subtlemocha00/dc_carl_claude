@@ -18,6 +18,14 @@ extends "res://tests/support/game_test.gd"
 ##   default keys play; the bad file and the save are left as they were.
 ## - A process told to load the player's own settings file (user://settings.json) refuses it with an
 ##   error at startup and uses the defaults; that file is neither created nor changed.
+## - Phase 14 (settings version 2, Interact): the fresh process's Settings screen lists Interact (E);
+##   at Floor 7's chest the prompt names the Interact key, another key does nothing and the Interact
+##   key opens it. The two real Phase 13 settings files (version 1, written by the Phase 13 game)
+##   start a fresh process with their nine keys and Interact on E (I/J/K/L, 1/2/3/4, Tab) or, with
+##   E and F taken, on R; the Settings screen and the chest prompt show that key and it opens the
+##   chest while E does not; the file is then version 2 with the ten keys, and the next fresh process
+##   reads it as it is (no second migration, the file unchanged). An unsupported version 3 file and a
+##   version 2 file without Interact are bad files like the others.
 ##
 ## Run from the project folder:
 ##     godot --headless --path . -s res://tests/test_settings_restart.gd
@@ -30,8 +38,10 @@ const POTION: ActionDefinition = preload("res://resources/actions/small_health_p
 const SLINGSHOT: ActionDefinition = preload("res://resources/actions/slingshot.tres")
 const BAT: ActionDefinition = preload("res://resources/actions/baseball_bat.tres")
 const BOMB: ActionDefinition = preload("res://resources/actions/blast_bomb.tres")
-const CUSTOM_KEYS := "move_up=I move_down=K move_left=J move_right=L action_w=1 action_a=2 action_s=3 action_d=4 inventory_toggle=Tab"
-const DEFAULT_KEYS := "move_up=Up move_down=Down move_left=Left move_right=Right action_w=W action_a=A action_s=S action_d=D inventory_toggle=Space"
+const CUSTOM_KEYS := "move_up=I move_down=K move_left=J move_right=L action_w=1 action_a=2 action_s=3 action_d=4 inventory_toggle=Tab interact=E"
+const DEFAULT_KEYS := "move_up=Up move_down=Down move_left=Left move_right=Right action_w=W action_a=A action_s=S action_d=D inventory_toggle=Space interact=E"
+const V1_CUSTOM_FIXTURE := "res://tests/fixtures/phase13_settings_v1_custom.json"
+const V1_E_TAKEN_FIXTURE := "res://tests/fixtures/phase13_settings_v1_e_taken.json"
 const SLOTS_LINE := "CHILD: slots action_w=slingshot action_a=small_health_potion action_s=blast_bomb action_d=baseball_bat"
 
 var _save_text := ""
@@ -47,6 +57,7 @@ func _run_checks() -> void:
 	_check_reset_then_fresh_process()
 	_check_bad_settings_files()
 	_check_player_settings_refused()
+	_check_version_1_files_migrate()
 	finish()
 
 
@@ -80,7 +91,8 @@ func _check_custom_bindings_in_a_fresh_process() -> void:
 	check("CHILD: startup scene=none keys=%s load_failed=false" % CUSTOM_KEYS in lines,
 			"the fresh process has the custom keys in the InputMap before any scene exists")
 	check("CHILD: title continue=true settings_message=<none>" in lines, "its title offers Continue and no settings message")
-	check("CHILD: settings screen open=true keys=I|K|J|L|1|2|3|4|Tab" in lines, "its Settings screen lists the custom keys")
+	check("CHILD: settings screen open=true keys=I|K|J|L|1|2|3|4|Tab|E" in lines, "its Settings screen lists the custom keys, and Interact E")
+	check("CHILD: startup migrated_from_version=0" in lines, "a version 2 file needs no migration")
 	check("CHILD: entered floor_07.tscn hud=1: Slingshot   2: Potion x2   3: Blast Bomb x2   4: Baseball Bat | Tab: action menu     Esc: pause" in lines,
 			"Continue opens Floor 7; the HUD names 1/2/3/4 and Tab")
 	check(SLOTS_LINE in lines, "the four slots hold what the save says")
@@ -88,6 +100,8 @@ func _check_custom_bindings_in_a_fresh_process() -> void:
 	check("CHILD: pressed W stones=0" in lines and "CHILD: pressed 1 stones=1" in lines, "1 fires the Slingshot, W does not")
 	check("CHILD: pressed Space action_menu_open=false" in lines and "CHILD: pressed Tab action_menu_open=true" in lines,
 			"Tab opens the action menu, Space does not")
+	check("CHILD: chest prompt=E: Open Chest" in lines and "CHILD: pressed Q chest_open=false" in lines and "CHILD: pressed E chest_open=true" in lines,
+			"at Floor 7's chest: \"E: Open Chest\", Q does nothing, E opens it")
 	check(FileAccess.get_file_as_string(settings_manager().settings_path) == settings_text, "the settings file is unchanged")
 	check(FileAccess.get_file_as_string(save_manager().save_path) == _save_text, "the save is still the same checkpoint")
 
@@ -102,8 +116,9 @@ func _check_reset_then_fresh_process() -> void:
 			"the game itself ended the process through Quit Game")
 	var data: Variant = JSON.parse_string(FileAccess.get_file_as_string(settings_manager().settings_path))
 	var keyboard: Dictionary = data.get("keyboard", {}) if data is Dictionary else {}
-	check(data is Dictionary and data.get("settings_version") == 1.0 and keyboard.get("move_up") == "Up" and keyboard.get("action_w") == "W"
-			and keyboard.get("inventory_toggle") == "Space", "the settings file now holds the defaults", str(data))
+	check(data is Dictionary and data.get("settings_version") == 2.0 and keyboard.get("move_up") == "Up" and keyboard.get("action_w") == "W"
+			and keyboard.get("inventory_toggle") == "Space" and keyboard.get("interact") == "E" and keyboard.size() == 10,
+			"the settings file now holds the ten defaults", str(data))
 	lines = _run_child("play")
 	check("CHILD: startup scene=none keys=%s load_failed=false" % DEFAULT_KEYS in lines, "the next fresh process starts with the defaults")
 	check("CHILD: entered floor_07.tscn hud=W: Slingshot   A: Potion x2   S: Blast Bomb x2   D: Baseball Bat | Space: action menu     Esc: pause" in lines
@@ -117,6 +132,8 @@ func _check_bad_settings_files() -> void:
 	print("-- Bad settings files at startup")
 	var custom := {"move_up": "I", "move_down": "K", "move_left": "J", "move_right": "L",
 			"action_w": "1", "action_a": "2", "action_s": "3", "action_d": "4", "inventory_toggle": "Tab"}
+	var custom_v2 := custom.duplicate()
+	custom_v2["interact"] = "E"
 	var valid := JSON.stringify({"settings_version": 1, "keyboard": custom})
 	var duplicate := custom.duplicate()
 	duplicate["action_w"] = "I"
@@ -126,7 +143,8 @@ func _check_bad_settings_files() -> void:
 	missing.erase("action_d")
 	var bad_files := {
 		"truncated JSON": valid.substr(0, 40),
-		"settings_version 2": JSON.stringify({"settings_version": 2, "keyboard": custom}),
+		"settings_version 3": JSON.stringify({"settings_version": 3, "keyboard": custom_v2}),
+		"a version 2 file without Interact": JSON.stringify({"settings_version": 2, "keyboard": custom}),
 		"a duplicate key": JSON.stringify({"settings_version": 1, "keyboard": duplicate}),
 		"Escape as a key": JSON.stringify({"settings_version": 1, "keyboard": escape}),
 		"a missing control": JSON.stringify({"settings_version": 1, "keyboard": missing}),
@@ -158,6 +176,41 @@ func _check_player_settings_refused() -> void:
 			"the process starts with the defaults and carries on")
 	check(FileAccess.file_exists(player_file) == existed and (not existed or FileAccess.get_modified_time(player_file) == modified_time),
 			"the player's settings file is neither created nor changed")
+
+
+func _check_version_1_files_migrate() -> void:
+	print("-- Real Phase 13 (version 1) settings files, migrated in fresh processes")
+	for case: Array in [[V1_CUSTOM_FIXTURE, "E", "Q", "E free"], [V1_E_TAKEN_FIXTURE, "R", "E", "E and F taken"]]:
+		var fixture_text := FileAccess.get_file_as_string(case[0])
+		var fixture: Dictionary = JSON.parse_string(fixture_text)
+		var keyboard: Dictionary = fixture["keyboard"]
+		var file := FileAccess.open(settings_manager().settings_path, FileAccess.WRITE)
+		file.store_string(fixture_text)
+		file.close()
+		var expected_keys := " ".join(ControlBindings.ACTIONS.map(func(action: StringName) -> String:
+			return "%s=%s" % [action, keyboard.get(String(action), case[1])]))
+		var screen_keys := "|".join(ControlBindings.ACTIONS.map(func(action: StringName) -> String: return keyboard.get(String(action), case[1])))
+		var lines := _run_child("play")
+		check(fixture.get("settings_version") == 1.0 and "CHILD: startup scene=none keys=%s load_failed=false" % expected_keys in lines,
+				"%s: the fresh process starts with the nine Phase 13 keys and Interact on %s" % [case[3], case[1]])
+		check("CHILD: startup migrated_from_version=1" in lines, "%s: the file was migrated from version 1" % case[3])
+		check("CHILD: title continue=true settings_message=<none>" in lines, "%s: no settings message; Continue is offered" % case[3])
+		check("CHILD: settings screen open=true keys=%s" % screen_keys in lines, "%s: the Settings screen lists Interact as %s" % [case[3], case[1]])
+		check("CHILD: held I moved (0.0, -63.0)" in lines and "CHILD: held Up moved (0.0, 0.0)" in lines, "%s: the migrated movement keys play" % case[3])
+		check("CHILD: chest prompt=%s: Open Chest" % case[1] in lines and "CHILD: pressed %s chest_open=false" % case[2] in lines
+				and "CHILD: pressed %s chest_open=true" % case[1] in lines,
+				"%s: the chest prompt says %s; %s does nothing and %s opens it" % [case[3], case[1], case[2], case[1]])
+		var written_text := FileAccess.get_file_as_string(settings_manager().settings_path)
+		var written: Variant = JSON.parse_string(written_text)
+		var expected_keyboard := keyboard.duplicate()
+		expected_keyboard["interact"] = case[1]
+		check(written is Dictionary and written.get("settings_version") == 2.0 and written.get("keyboard") == expected_keyboard,
+				"%s: the file is now version 2 with the ten keys" % case[3], written_text)
+		check(FileAccess.get_file_as_string(save_manager().save_path) == _save_text, "%s: the save is untouched" % case[3])
+		lines = _run_child("play")
+		check("CHILD: startup scene=none keys=%s load_failed=false" % expected_keys in lines and "CHILD: startup migrated_from_version=0" in lines,
+				"%s: the next fresh process reads version 2 with the same keys, no second migration" % case[3])
+		check(FileAccess.get_file_as_string(settings_manager().settings_path) == written_text, "%s: and does not rewrite it" % case[3])
 
 
 ## Runs settings_child.gd in its own headless Godot process. Returns its output lines. A clean run

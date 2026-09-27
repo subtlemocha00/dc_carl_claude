@@ -9,9 +9,11 @@ extends "res://tests/support/game_test.gd"
 ##   test save folder, except in mode "production", where the parent checks that SettingsManager
 ##   refuses the player's file.
 ## - --save: the save file to Continue from, inside the test save folder.
-## - --mode=play: the startup bindings; the title (its settings message, Continue, the Settings
-##   screen's keys); Continue; movement with I and Up, the W slot with 1 and W, the Inventory key
-##   with Tab and Space; then quits.
+## - --mode=play: the startup bindings (and whether a version 1 file was migrated, Phase 14); the
+##   title (its settings message, Continue, the Settings screen's keys); Continue; movement with I
+##   and Up, the W slot with 1 and W, the Inventory key with Tab and Space; on Floor 7 (Phase 14),
+##   the chest's prompt, then a key that is not Interact and the Interact key at the chest; then
+##   quits.
 ## - --mode=reset: the startup bindings; Settings > Reset to Defaults > Yes on the title screen, then
 ##   Quit Game on the title (the game ends the process).
 ## - --mode=production: the startup bindings and what SettingsManager did with its file; then quits.
@@ -41,6 +43,7 @@ func _use_test_save_file() -> void:
 	# The bindings SettingsManager applied before this script could do anything, and before any
 	# scene was loaded.
 	print("CHILD: startup scene=%s keys=%s load_failed=%s" % ["none" if current_scene == null else current_scene.name, _keys(), settings_manager().load_failed])
+	print("CHILD: startup migrated_from_version=%d" % settings_manager().migrated_from_version)
 	create_timer(60.0).timeout.connect(func() -> void:
 		print("CHILD: watchdog, giving up")
 		quit(4))
@@ -117,6 +120,17 @@ func _play() -> void:
 		print("CHILD: pressed %s action_menu_open=%s" % [OS.get_keycode_string(key), menu.is_open()])
 		if menu.is_open():
 			await tap_key(KEY_ESCAPE)
+	var chest: TreasureChest = level.get_node_or_null("NavigationRegion2D/Props/TreasureChest")
+	if chest != null:
+		# Just above the chest, then a key that is not Interact, then the Interact key.
+		carl.teleport_to(chest.global_position + Vector2(0, -30))
+		await wait_physics_frames(3)
+		print("CHILD: chest prompt=%s" % (carl.get_node("InteractionController") as InteractionController).get_prompt_text())
+		var interact_key := ControlBindings.get_key(&"interact")
+		for key: Key in ([KEY_E, interact_key] if interact_key != KEY_E else [KEY_Q, KEY_E]):
+			await tap_key(key)
+			await wait_physics_frames(2)
+			print("CHILD: pressed %s chest_open=%s" % [OS.get_keycode_string(key), chest.is_open()])
 	_quit()
 
 

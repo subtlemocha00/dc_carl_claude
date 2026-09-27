@@ -257,7 +257,7 @@ func _check_return_to_title_and_continue() -> void:
 	var settings: Control = current_scene.get_node("%SettingsMenu")
 	var keys: Array = settings.get_node("%Rows").get_children().filter(func(row: Node) -> bool: return row is HBoxContainer).map(
 			func(row: HBoxContainer) -> String: return (row.get_child(1) as Label).text)
-	check(keys == ["I", "K", "J", "L", "Q", "2", "3", "4", "Tab"], "the title's Settings still lists the custom keys", str(keys))
+	check(keys == ["I", "K", "J", "L", "Q", "2", "3", "4", "Tab", "E"], "the title's Settings still lists the custom keys (and Interact E, Phase 14)", str(keys))
 	await tap_key(KEY_ESCAPE)
 	await tap_key(KEY_UP)
 	await tap_key(KEY_UP)
@@ -323,11 +323,12 @@ func _check_reset_in_play() -> void:
 	await tap_key(KEY_DOWN)
 	await tap_key(KEY_ENTER)
 	var settings: Control = pause.get_node("%SettingsMenu")
-	await _select_row(settings, 9)
+	# The Reset to Defaults row comes right after the controls (ten since Phase 14).
+	await _select_row(settings, ControlBindings.ACTIONS.size())
 	await tap_key(KEY_ENTER)
 	await tap_key(KEY_DOWN)
 	await tap_key(KEY_ENTER)
-	check(settings_manager().is_default(), "Reset to Defaults: the nine defaults")
+	check(settings_manager().is_default(), "Reset to Defaults: the ten defaults")
 	check(_hud_slots() == "W: —   A: —   S: —   D: Fists" and _hud_hint() == "Space: action menu     Esc: pause", "the HUD names them at once", _hud_slots())
 	check(current_scene.get_node("Signs/CombatHint").text == "W/A/S/D use the actions shown top-left. Space: change them.",
 			"so does the sign", current_scene.get_node("Signs/CombatHint").text)

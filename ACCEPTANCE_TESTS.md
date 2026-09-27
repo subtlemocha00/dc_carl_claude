@@ -568,3 +568,66 @@ Required:
       Quit Game. Settings screen, capture prompt, conflict message, Reset question, pause/title
       Settings rows, rebound HUD and inventory hints readable at 1280×720, 640×360 and 1024×768.
 - [ ] Version in Project Settings: `0.13.0` (save format 3, settings format 1).
+
+# Phase 14 — Generic Interaction System, Loot Chests, Settings v2 and Floor 8
+
+The Phase 3–13 rules still apply. No Floor 9, locked chests, keys, random loot, rarity, shops,
+currency, crafting, NPCs, dialogue, quests, switches, levers, doors, timers, objective or
+event-locked stairs, procedural generation, controller support, graphics/audio settings, new
+weapons, consumables or enemies, bosses. The interaction system is not used to lock stairs.
+
+Required:
+- [ ] **Interact** (`interact`, "Interact", default **E**) is the tenth rebindable gameplay control:
+      Move Up/Down/Left/Right, Action Slot W/A/S/D, Inventory, Interact. It shares one pool of unique
+      keys with the other nine ("E is already assigned to Interact."); Escape and Enter stay reserved
+      and the menu keys fixed. Reset to Defaults (asks first, No selected) restores all ten (arrows,
+      W/A/S/D, Space, E) and changes neither the save, the run nor the slot contents.
+- [ ] **Settings format 2** (`settings_version: 2`, ten keys). The game's version is `0.14.0`; the
+      save stays `save_version: 3`. The three are separate.
+- [ ] **Settings migration 1 → 2:** a valid Phase 13 file keeps all nine bindings; Interact gets E if
+      E is free, otherwise the first free key of the documented fallback order (E, F, R, T, G, Y, H,
+      U, V, B, N, M, 5, 6, 7, 8, 9, 0); no existing binding is moved or reset; all ten stay unique.
+      The migrated result applies at once and is written back as version 2 with the safe write
+      (only after the version 1 file validated); the next start reads it without migrating again.
+      Invalid version 1 files, unknown future versions (3), malformed files, duplicates, reserved
+      keys and a version 2 file without Interact give the defaults and the "could not be loaded"
+      message, never crash, and never affect a good save.
+- [ ] The Settings screen lists Interact with its current key; capture, conflicts and reserved keys
+      work for it as for the other controls; the screen fits at 1280×720, 640×360 and 1024×768.
+- [ ] **Generic interaction:** a reusable `Interactable` component (prompt text, enabled, one_shot,
+      `interacted` signal) and Carl's `InteractionController` (child of Carl, no chest-specific
+      code): Interactables within **56 px** of Carl's centre, with no wall between, count; the nearest
+      is used (ties: the one earlier in the scene tree; less than 0.5 px apart counts as a tie); one
+      key press uses exactly one; disabled/used ones are skipped; nothing in range does nothing.
+- [ ] **Prompt:** "<Interact key>: <prompt>" ("E: Open Chest"; "Q: Open Chest" when rebound) above the
+      object, named by the same key-label function as every other hint; hidden with nothing in range,
+      for an opened chest, while any menu is open, at GAME OVER and when Carl is down.
+- [ ] **Modal safety:** Interact does nothing while the action menu, the pause menu, the Settings
+      screen (key capture included) or GAME OVER is up; a key used in a menu or held through a
+      resume never interacts; only a new key press does. Gameplay code never checks a literal key.
+- [ ] **Treasure Chest** (`scenes/props/treasure_chest.tscn`): starts closed, "Open Chest"; opening it
+      shows it open, turns its Interactable off for good (it cannot reopen in that live floor) and
+      spawns its contents as ordinary `ItemPickup`s near it — it never changes the inventory itself.
+      Contents are data (`contents`: stable item id → quantity, through `ActionRegistry`); unknown ids
+      or bad quantities are reported and left out, nothing is loaded from an id. Pickups go to fixed,
+      deterministic spots that are free of walls and in the chest's room, never on top of each other
+      or on Carl. Only Carl collects them (not Donut, enemies or projectiles), once each.
+- [ ] **Floor 7** gains one chest (Small Health Potion x1, Blast Bomb x2), away from the blast test
+      geometry, and stairs down to Floor 8 in the far south-east corner. Its checkpoint is made
+      before the chest opens: a retry, Return to Title or quitting before Floor 8 gives back a
+      closed chest, no loot on the ground and the entry inventory; reopening gives exactly one set;
+      nothing ever duplicates. Opening the chest and collecting its loot never save.
+- [ ] **Floor 8** (`floor_08`, "Floor 8"): collision, safe arrival for Carl and Donut, HUD, action
+      menu, pause/Settings, a Floor 8 label, a Gelatinous Blob and a Spitting Blob, navigation
+      geometry; no stairs up and no exit (no Floor 9). Registered in `FloorRegistry`; `floor_09` is
+      unknown.
+- [ ] **Carry-forward:** loot collected on Floor 7 and carried down is in the Floor 8 checkpoint
+      (with HP, Donut's HP, owned items and slot assignments); uncollected loot is not. Continue (a
+      fresh process) and a Floor 8 retry restore it. Current settings (e.g. Interact = Q) stay
+      independent of Continue and New Game.
+- [ ] Save compatibility: version 1, 2 and 3 saves still load; a Floor 8 version 3 save loads;
+      unknown floors are rejected.
+- [ ] Phase 11–13 infrastructure unchanged: the `DC CARL` folder, `opengl3_angle` on Windows, title
+      Quit Game, the test guards for saves and settings. The chest, its prompt, its loot, Floor 8 and
+      the Settings screen are readable at 1280×720, 640×360 and 1024×768.
+- [ ] Version in Project Settings: `0.14.0` (save format 3, settings format 2).

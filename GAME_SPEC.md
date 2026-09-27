@@ -33,7 +33,8 @@ The prototype covers the surface introduction and Dungeon Floors 1–3.
 
 ## 4. Controls
 
-Gameplay (the default keys; since Phase 13 the player can rebind these nine, see section 15c):
+Gameplay (the default keys; since Phase 13 the player can rebind these, ten since Phase 14, see
+section 15c):
 - Arrow Up: move north.
 - Arrow Down: move south.
 - Arrow Left: move west.
@@ -43,6 +44,8 @@ Gameplay (the default keys; since Phase 13 the player can rebind these nine, see
 - S: action slot 3.
 - D: action slot 4.
 - Space: open/close inventory.
+- E: interact with the nearby object the prompt names, such as opening a chest (Phase 14,
+  section 15d).
 - Escape: pause/back/cancel as appropriate.
 - Enter: confirm menu/inventory selection; on the GAME OVER screen, retry the current floor.
 
@@ -64,6 +67,8 @@ the Inventory key and the slot keys, whatever they are bound to since Phase 13):
   row; while it waits for a key, the next key press is that key (Escape cancels);
 - in a pause-menu question: Escape means No;
 - on the GAME OVER screen: Enter retries; Escape and Space do nothing.
+- the Interact key (E by default, Phase 14) only works during play: in every menu, in Settings and
+  at GAME OVER it does nothing (section 15d).
 At most one of the action menu, the pause menu and the GAME OVER screen is ever up.
 
 Carl's facing direction is determined by his most recent non-zero movement direction.
@@ -202,8 +207,9 @@ Inventory contents:
 - Consumables have a quantity, shown in the menu and the HUD (for example "x2"). A consumable
   whose quantity reaches 0 leaves the inventory. (Consumables so far: the Small Health Potion
   and, since Phase 12, the Blast Bomb.)
-- Items are found as pickups in levels. Carl collects one by walking over it; there is no
-  interaction key. Donut and enemies never collect pickups.
+- Items are found as pickups in levels. Carl collects one by walking over it; pickups need no
+  key. Donut and enemies never collect pickups. (The Interact key, Phase 14, is for objects such
+  as chests, section 15d; a chest's loot is still ordinary pickups.)
 - Since Phase 12 an enemy can also **drop** an item when it dies. The drop is set per enemy
   placed in a level (an item and a quantity) and is always the same: no chances, rarities or
   loot tables. It appears as an ordinary pickup where the enemy died, and Carl still has to walk
@@ -300,11 +306,11 @@ All three prototype dungeon floors should be manually authored scenes/layouts.
 General progression:
 Surface -> Floor 1 -> Floor 2 -> Floor 3 -> Prototype Complete screen.
 
-Playable progression since Phase 12: Surface -> Floor 1 -> Floor 2 -> Floor 3 -> Floor 4 -> Floor 5
--> Floor 6 -> Floor 7. Floor 3 has stairs down to Floor 4, Floor 4 down to Floor 5, Floor 5 down to
-Floor 6 and Floor 6 down to Floor 7, all manually authored combat-test floors (sections 14a to
-14d); Floor 7 has no exit yet. The Floor 3 Guardian and the Prototype Complete screen are still to
-come.
+Playable progression since Phase 14: Surface -> Floor 1 -> Floor 2 -> Floor 3 -> Floor 4 -> Floor 5
+-> Floor 6 -> Floor 7 -> Floor 8. Floor 3 has stairs down to Floor 4, Floor 4 down to Floor 5,
+Floor 5 down to Floor 6, Floor 6 down to Floor 7 and (Phase 14) Floor 7 down to Floor 8, all
+manually authored test floors (sections 14a to 14e); Floor 8 has no exit yet. The Floor 3 Guardian
+and the Prototype Complete screen are still to come.
 
 Progression is downward only. Once Carl descends, he can never return to the Surface or to a
 shallower floor. Levels have no stairs, exits or triggers that lead back up. This is a design
@@ -470,8 +476,19 @@ corner.
 A walled area-damage test room (stable id `floor_07`, 36 × 20 tiles) with four enemies: two
 Gelatinous Blobs standing together (one Blast Bomb reaches both), a third Gelatinous Blob just
 behind a thin wall (inside the blast's reach from the wall's other face, but shielded by it), and
-a Spitting Blob in the east, with a pillar for cover. Nothing is scripted. Floor 7 has no exit yet
-(no Floor 8), and nothing leads back up to Floor 6.
+a Spitting Blob in the east, with a pillar for cover. Nothing is scripted. Nothing leads back up to
+Floor 6.
+Since Phase 14 Floor 7 also holds a **treasure chest** (section 15d) in its south-west part, away
+from the blast test geometry, holding Small Health Potion x1 and Blast Bomb x2, and its only exit
+is the stairs down to Floor 8 in the far south-east corner.
+
+## 14e. Floor 8 — Storeroom (canonical since Phase 14)
+
+A walled test room (stable id `floor_08`, 36 × 20 tiles) where items carried down from Floor 7 (the
+chest's loot, for example) are part of the checkpoint. A partition wall, a pillar and a small block
+shape the paths; one Gelatinous Blob and one Spitting Blob wait beyond the partition. Carl and Donut
+arrive in the north-west. Nothing is scripted. Floor 8 has no exit yet (no Floor 9), and nothing
+leads back up to Floor 7.
 
 ## 15. Saving/checkpoints
 
@@ -501,6 +518,12 @@ Initial save design:
   again, and no dropped pickup lies there until it dies again. Bombs Carl carries into Floor 7
   are part of the Floor 7 checkpoint, with their slot; a Floor 7 retry after throwing them gives
   them back, as for potions.
+  Chest loot (Phase 14) follows the same rule. Floor 7's checkpoint is made before its chest is
+  opened: a retry, Return to Title or quitting before Floor 8 gives back a closed chest, no loot
+  lying around, and the inventory Carl had on entering (loot collected since is taken back, its
+  slot emptied or refilled as for any item). Opening it again drops exactly its contents once more,
+  so nothing is ever duplicated. Only what Carl actually carries down the stairs is in Floor 8's
+  checkpoint: loot left lying on Floor 7 is not.
 
 Persistent save (canonical since Phase 5):
 - There is one save slot, holding one floor-entry checkpoint: the floor Carl last entered,
@@ -540,6 +563,9 @@ Persistent save (canonical since Phase 5):
 - Phase 13 keeps **version 3**: key bindings are application settings in their own file
   (section 15c), never in the save, and the save's slot assignments are unchanged (the four
   logical slots `action_w` to `action_d`).
+- Phase 14 keeps **version 3**: Floor 8 is one more floor id, chest loot Carl carries is ordinary
+  inventory, and whether a chest is open is never saved (the floor-entry checkpoint is made before
+  it can be opened). The Interact key is a setting (section 15c).
 - No mid-floor saving, multiple save slots or cloud saves in the prototype.
 
 Current-run state (what survives level changes during one playthrough, held in memory) is
@@ -603,12 +629,13 @@ Persisted state should eventually include at least:
 - **Settings** is on the title screen (Continue, New Game, Settings, Quit Game) and in the pause
   menu (Resume, Settings, Return to Title, Quit Game). Both open the same Settings screen. From the
   title no run is needed; from the pause menu the game stays paused the whole time.
-- The Settings screen has one section, **Controls**: the nine rebindable gameplay controls with
+- The Settings screen has one section, **Controls**: the ten rebindable gameplay controls with
   their current keys, then **Reset to Defaults** and **Back**. Up/Down choose, Enter changes the
   selected control (or chooses Reset/Back), Escape goes back.
-- The nine rebindable controls and their canonical defaults: Move Up = Up Arrow, Move Down = Down
+- The ten rebindable controls and their canonical defaults: Move Up = Up Arrow, Move Down = Down
   Arrow, Move Left = Left Arrow, Move Right = Right Arrow, Action Slot W = W, Action Slot A = A,
-  Action Slot S = S, Action Slot D = D, Inventory = Space. Nothing else is rebindable.
+  Action Slot S = S, Action Slot D = D, Inventory = Space, and (Phase 14) Interact = E. Nothing else
+  is rebindable.
 - **Fixed menu keys:** Up/Down Arrow (previous/next row), Left/Right Arrow (No/Yes in questions),
   Enter (confirm; GAME OVER retry), Escape (back, cancel, pause). They never change, so no binding
   can make a menu unusable.
@@ -617,28 +644,65 @@ Persisted state should eventually include at least:
   way does nothing else: it never triggers the gameplay action or moves a menu selection.
 - **One key per control, all different.** A key already used by another control is refused
   ("Q is already assigned to Action Slot W."): both bindings stay as they were; nothing is unbound or
-  swapped. This covers movement, slots and Inventory together.
+  swapped. This covers movement, slots, Inventory and Interact together ("E is already assigned to
+  Interact.").
 - **Reserved keys:** Escape and Enter can never be bound. Only ordinary single keys can be: letters,
   digits, Space and punctuation, Tab, Backspace, Insert, Delete, Home, End, Page Up/Down, the arrow
   keys and the keypad's digits and operators. Modifier keys on their own (Shift, Ctrl, Alt),
   lock keys, function keys and media keys are refused; there are no chords such as Ctrl+Q.
 - **Reset to Defaults** asks first ("Reset all controls to defaults?", No selected). Yes restores the
-  nine defaults, applies them at once and saves them. It changes nothing else: not the save, the
+  ten defaults, applies them at once and saves them. It changes nothing else: not the save, the
   inventory, the floor, HP or what each slot holds.
 - **Bindings are application settings, not run state.** They are kept in their own file,
   `user://settings.json` in the game's own folder, beside the save, with its own format version
-  (`settings_version: 1`, separate from the save's version 3). New Game, Continue, Return to Title,
+  (`settings_version: 2` since Phase 14, which added Interact; it was 1 in Phase 13; separate from the
+  save's version 3). New Game, Continue, Return to Title,
   a retry and deleting or replacing the save never change them; changing them never rewrites the
   save. They are loaded when the game starts, before the title screen appears, and written only when
-  a binding changes or Reset to Defaults is confirmed.
-- **A settings file that cannot be used** (corrupt, another version, a duplicate or reserved key, a
-  missing control, an unknown key) is ignored as a whole: the defaults apply, the title and the
+  a binding changes or Reset to Defaults is confirmed, or once after an older file was upgraded.
+- **Upgrading a Phase 13 settings file (Phase 14):** a valid version 1 file keeps all nine of the
+  player's keys; Interact gets E, or, if the player already put a control on E, the first key of E, F,
+  R, T, G, Y, H, U, V, B, N, M, 5, 6, 7, 8, 9, 0 that no control uses (the player's own keys are never
+  moved). The file is then rewritten as version 2 (checked before it replaces the old one), so this
+  happens once. An invalid version 1 file is treated like any unusable file.
+- **A settings file that cannot be used** (corrupt, an unknown version such as a newer game's, a
+  duplicate or reserved key, a missing control, an unknown key) is ignored as a whole: the defaults apply, the title and the
   Settings screen say "Control settings could not be loaded. Defaults restored.", and the game and a
   valid save work normally. The next change replaces the file.
 - **Every key shown to the player is the current binding:** the HUD's slot bar ("Q: Slingshot"), its
-  hint ("Tab: action menu"), the action menu's slot column, "(on Q)" and help line, and the signs
-  that name keys (the Surface's "Arrow keys to move", Floor 1's "W/A/S/D use the actions ...").
+  hint ("Tab: action menu"), the action menu's slot column, "(on Q)" and help line, the signs that
+  name keys (the Surface's "Arrow keys to move", Floor 1's "W/A/S/D use the actions ...") and (Phase
+  14) the interaction prompt ("E: Open Chest").
 - Keyboard only: no controller, mouse, audio, graphics, language or accessibility settings yet.
+
+## 15d. Interaction and treasure chests (canonical since Phase 14)
+
+- **Interact** (E by default, rebindable) uses the object the interaction prompt names. Objects that
+  can be used this way are "interactables"; the treasure chest is the first. Pickups are not: they
+  are still collected by walking over them.
+- **Range:** an interactable counts when its centre is within **56 px** (less than two tiles) of
+  Carl's centre and no wall is between them. Carl does not have to touch it.
+- **Several nearby:** the nearest one is shown and used; one key press uses exactly one. Two at
+  practically the same distance (less than 0.5 px apart) always give the same one (the one placed
+  earlier in the level).
+- **Prompt:** "<Interact key>: <what it does>" in small text above the object, for example "E: Open
+  Chest", or "Q: Open Chest" when Interact is on Q. It disappears when nothing is in range, when the
+  object can no longer be used (an open chest), while any menu or the Settings screen is open, at
+  GAME OVER and when Carl is down.
+- **Only during play:** the Interact key does nothing in the action menu, the pause menu, Settings
+  (key capture included) or at GAME OVER, and a key pressed there or held while the game resumes
+  never uses anything; only a new press does.
+- **Treasure chest:** closed at first ("Open Chest"). Opening it shows it open and puts its contents
+  on the floor near it as ordinary pickups, one per entry (for example "Potion x1" and "Blast Bomb
+  x2"), always at the same free spots (clear of walls, in the chest's room, never on Carl or on each
+  other). Opening it gives Carl nothing by itself: he walks over the pickups to collect them, and
+  Donut, enemies and projectiles never do. An open chest cannot be opened again on that visit of the
+  floor. There is no lock, key or random loot: each placed chest lists its contents (stable item ids
+  and quantities); an entry that is not a known item, or has a quantity the chest cannot hold, is
+  left out.
+- **Saving:** a chest's state is never saved (section 15): the floor-entry checkpoint comes first,
+  so a retry, Return to Title or Continue always finds the chest closed and its loot not yet given.
+- Chests are solid: Carl, Donut and the enemies walk around them, and projectiles stop at them.
 
 ## 16. HUD
 
@@ -686,7 +750,7 @@ Do not implement unless the user later expands scope:
 - randomized item affixes
 - advanced lighting/rendering
 - voice acting
-- floors 8–20 (Floor 4 was added in Phase 7, Floor 5 in Phase 8, Floor 6 in Phase 9 and Floor 7
-  in Phase 12 as combat-test floors)
+- floors 9–20 (Floor 4 was added in Phase 7, Floor 5 in Phase 8, Floor 6 in Phase 9, Floor 7
+  in Phase 12 and Floor 8 in Phase 14 as test floors)
 - achievements
 - mod support

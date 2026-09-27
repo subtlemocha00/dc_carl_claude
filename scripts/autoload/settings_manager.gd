@@ -1,11 +1,13 @@
 extends Node
 ## Autoloaded as SettingsManager (Phase 13). The player's application settings, which today
-## means only the keyboard bindings of the nine gameplay controls (ControlBindings.ACTIONS):
+## means only the keyboard bindings of the ten gameplay controls (ControlBindings.ACTIONS; the
+## tenth, Interact, since Phase 14):
 ## - the current bindings, one physical key per control, all different;
 ## - applying them to the InputMap, so gameplay code (which only asks for actions) follows them;
 ## - loading them when the game starts, before the title screen appears;
 ## - writing them to their own file, user://settings.json, whenever a binding changes or Reset
-##   to Defaults is confirmed (never on a key press in play);
+##   to Defaults is confirmed, and once after a version 1 file was migrated (never on a key press
+##   in play);
 ## - Reset to Defaults (ControlBindings.DEFAULT_KEYS).
 ##
 ## Settings are not run state. SaveManager's save (the checkpoint: floor, HP, items and what each
@@ -13,20 +15,27 @@ extends Node
 ## Continue, Return to Title and deleting the save leave the bindings alone, and changing a
 ## binding never touches GameState: a slot keeps its action when its key changes.
 ##
-## The file has its own version, independent of the save's:
-##     {"settings_version": 1,
+## The file has its own version, independent of the save's (version 2 since Phase 14):
+##     {"settings_version": 2,
 ##      "keyboard": {"move_up": "I", "move_down": "K", "move_left": "J", "move_right": "L",
 ##                   "action_w": "1", "action_a": "2", "action_s": "3", "action_d": "4",
-##                   "inventory_toggle": "Tab"}}
+##                   "inventory_toggle": "Tab", "interact": "E"}}
 ## Keys are stored by name (ControlBindings.get_key_name()), controls by their action name.
 ## "keyboard" is its own block so another kind of binding could be added beside it later.
 ##
-## A settings file is untrusted input. Unless it is valid JSON with settings_version 1 and a
-## "keyboard" block naming exactly the nine controls, each with a key a control may use
-## (ControlBindings.get_key_problem()) and no key used twice, it is ignored as a whole: the
-## defaults are applied, load_failed is set (the title and the Settings screen say so), and the
-## file is left as it is until the next change replaces it. It never stops the game, and it
-## never affects the save.
+## Version 1 (Phase 13) is the same without "interact". A valid version 1 file is migrated when it
+## is loaded (_migrate_version_1()): its nine bindings are kept exactly, Interact gets the first key
+## of INTERACT_MIGRATION_KEYS that none of them uses (E, unless the player already put a control on
+## E), and the result is written back at once as version 2 with the safe write below, so a file is
+## migrated only once. Nothing is written unless the version 1 file was valid.
+##
+## A settings file is untrusted input. Unless it is valid JSON with settings_version 2 and a
+## "keyboard" block naming exactly the ten controls (or settings_version 1 and exactly the nine
+## version 1 controls), each with a key a control may use (ControlBindings.get_key_problem()) and
+## no key used twice, it is ignored as a whole: the defaults are applied, load_failed is set (the
+## title and the Settings screen say so), and the file is left as it is until the next change
+## replaces it. A version this game does not know (3, say, from a newer game) is treated the same
+## way. It never stops the game, and it never affects the save.
 ##
 ## Test and tool runs can never touch the player's settings (the same rule as SaveManager). A run
 ## started with a script as its main loop (godot -s <script>) may only use files inside
@@ -38,8 +47,21 @@ extends Node
 ## Emitted after the bindings changed (a new binding, Reset to Defaults, or a load).
 signal bindings_changed
 
-## The settings format written by this version (unrelated to SaveManager.SAVE_VERSION).
-const SETTINGS_VERSION := 1
+## The settings format written by this version (unrelated to SaveManager.SAVE_VERSION). Version 1
+## (Phase 13) bound nine controls; version 2 (Phase 14) adds interact.
+const SETTINGS_VERSION := 2
+## The controls a version 1 file binds: every control except interact.
+const VERSION_1_ACTIONS: Array[StringName] = [
+	&"move_up", &"move_down", &"move_left", &"move_right",
+	&"action_w", &"action_a", &"action_s", &"action_d",
+	&"inventory_toggle",
+]
+## The keys Interact may get when a version 1 file is migrated, in order of preference: the first
+## one none of the file's nine controls uses. A player's own binding is never moved to make room.
+const INTERACT_MIGRATION_KEYS: Array[Key] = [
+	KEY_E, KEY_F, KEY_R, KEY_T, KEY_G, KEY_Y, KEY_H, KEY_U, KEY_V, KEY_B, KEY_N, KEY_M,
+	KEY_5, KEY_6, KEY_7, KEY_8, KEY_9, KEY_0,
+]
 const DEFAULT_SETTINGS_PATH := "user://settings.json"
 ## The only place test and tool runs may keep settings files (the tests' save folder).
 const TEST_SETTINGS_FOLDER := "user://test_saves/"
@@ -57,6 +79,8 @@ var last_error := ""
 ## True when the last change could not be written to the settings file (it still applies to
 ## this session).
 var last_save_failed := false
+## 1 when the last load migrated a version 1 file (and wrote it back as version 2), 0 otherwise.
+var migrated_from_version := 0
 
 var _bindings: Dictionary[StringName, Key] = {}
 
@@ -133,6 +157,7 @@ func reset_to_defaults() -> bool:
 func load_settings() -> bool:
 	last_error = ""
 	load_failed = false
+	migrated_from_version = 0
 	if not _check_settings_path_allowed():
 		_use_bindings(ControlBindings.DEFAULT_KEYS)
 		return false
@@ -143,6 +168,12 @@ func load_settings() -> bool:
 	var bindings := _read_file(path)
 	_use_bindings(ControlBindings.DEFAULT_KEYS if bindings.is_empty() else bindings)
 	load_failed = bindings.is_empty()
+	# A migrated version 1 file is written back at once as version 2 (the safe write), so it is
+	# migrated only once. If that write fails, the migrated bindings still apply for this session,
+	# the version 1 file stays exactly as it was, and the next start migrates it again (with the
+	# same result).
+	if migrated_from_version != 0:
+		save_settings()
 	return not load_failed
 
 
@@ -206,8 +237,8 @@ func encode() -> Dictionary:
 	return {"settings_version": SETTINGS_VERSION, "keyboard": keyboard}
 
 
-## The bindings in settings data, or {} (with the reason in last_error) if the data cannot be
-## used. `data` itself is never changed.
+## The bindings in settings data (version 2, or version 1 migrated to version 2), or {} (with the
+## reason in last_error) if the data cannot be used. `data` itself is never changed.
 func decode(data: Variant) -> Dictionary[StringName, Key]:
 	if not data is Dictionary:
 		return _reject("the settings are not a JSON object")
@@ -217,16 +248,26 @@ func decode(data: Variant) -> Dictionary[StringName, Key]:
 	var version: Variant = data.get("settings_version")
 	if not (version is int or (version is float and is_finite(version) and version == floorf(version))):
 		return _reject("settings_version is missing or not a whole number")
-	if int(version) != SETTINGS_VERSION:
-		return _reject("settings_version %d is not supported (this game reads version %d)" % [int(version), SETTINGS_VERSION])
+	if int(version) != 1 and int(version) != SETTINGS_VERSION:
+		return _reject("settings_version %d is not supported (this game reads versions 1 and %d)" % [int(version), SETTINGS_VERSION])
 	var keyboard: Variant = data.get("keyboard")
 	if not keyboard is Dictionary:
 		return _reject("keyboard is missing or not an object")
+	if int(version) == 1:
+		# Checked by the Phase 13 rules (exactly the nine controls it knew), then migrated.
+		var old := _decode_keyboard(keyboard, VERSION_1_ACTIONS)
+		return old if old.is_empty() else _migrate_version_1(old)
+	return _decode_keyboard(keyboard, ControlBindings.ACTIONS)
+
+
+## The "keyboard" block, which must bind exactly `actions`, each to a key a control may use, no key
+## twice. {} (with the reason in last_error) otherwise.
+func _decode_keyboard(keyboard: Dictionary, actions: Array[StringName]) -> Dictionary[StringName, Key]:
 	for action: Variant in keyboard:
-		if not action is String or StringName(action) not in ControlBindings.ACTIONS:
+		if not action is String or StringName(action) not in actions:
 			return _reject("keyboard names an unknown control %s" % JSON.stringify(action))
 	var bindings: Dictionary[StringName, Key] = {}
-	for action in ControlBindings.ACTIONS:
+	for action in actions:
 		if not keyboard.has(String(action)):
 			return _reject("keyboard has no key for %s" % action)
 		var key_name: Variant = keyboard[String(action)]
@@ -241,6 +282,22 @@ func decode(data: Variant) -> Dictionary[StringName, Key]:
 			return _reject("%s is bound to both %s and %s" % [key_name, holder, action])
 		bindings[action] = key
 	return bindings
+
+
+## Version 1 -> 2: the nine version 1 bindings stay exactly as they were, and interact gets the
+## first key of INTERACT_MIGRATION_KEYS that none of them uses. With nine keys taken and eighteen to
+## choose from, one is always free; if none were, the file would be rejected as a whole (the
+## defaults apply), never partly applied.
+func _migrate_version_1(old: Dictionary[StringName, Key]) -> Dictionary[StringName, Key]:
+	var used := old.values()
+	for key in INTERACT_MIGRATION_KEYS:
+		if key in used or not ControlBindings.get_key_problem(key).is_empty():
+			continue
+		var bindings: Dictionary[StringName, Key] = {}
+		for action in ControlBindings.ACTIONS:
+			bindings[action] = key if action == &"interact" else old[action]
+		return bindings
+	return _reject("a version 1 file left no key free for Interact")
 
 
 ## Makes `bindings` the current ones and puts each control's key in the InputMap: its keyboard
@@ -274,7 +331,10 @@ func _read_file(path: String) -> Dictionary[StringName, Key]:
 	var json := JSON.new()
 	if json.parse(text) != OK:
 		return _reject("the settings file is not valid JSON (line %d: %s)" % [json.get_error_line(), json.get_error_message()])
-	return decode(json.data)
+	var bindings := decode(json.data)
+	if not bindings.is_empty() and int(json.data.get("settings_version")) == 1:
+		migrated_from_version = 1
+	return bindings
 
 
 ## The settings file a run starts with: user://settings.json in the game; in a test or tool run

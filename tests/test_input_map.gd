@@ -1,7 +1,8 @@
 extends SceneTree
 ## Sanity check for the game's InputMap actions (GAME_SPEC.md section 4).
-## Phase 13: the nine gameplay controls below are the defaults the player can rebind in Settings
-## (they must equal ControlBindings.DEFAULT_KEYS, so no settings file means exactly these keys).
+## Phase 13: the gameplay controls below are the defaults the player can rebind in Settings, ten
+## since Phase 14 added interact on E (they must equal ControlBindings.DEFAULT_KEYS, so no settings
+## file means exactly these keys).
 ## The menus have their own fixed actions, menu_up/down/left/right on the arrow keys, which share the
 ## arrows with the default movement keys on purpose (a menu never moves Carl, and play never moves a
 ## menu selection) and are never rebound, like ui_confirm_game (Enter) and pause_back (Escape).
@@ -24,6 +25,7 @@ const EXPECTED_BINDINGS: Dictionary = {
 	&"action_s": KEY_S,
 	&"action_d": KEY_D,
 	&"inventory_toggle": KEY_SPACE,
+	&"interact": KEY_E,
 	&"ui_confirm_game": KEY_ENTER,
 	&"pause_back": KEY_ESCAPE,
 }
@@ -48,8 +50,8 @@ func _initialize() -> void:
 		elif _get_bound_keys(action) != [MENU_BINDINGS[action]]:
 			failures.append("'%s' must be bound to %s only, not %s." % [action, OS.get_keycode_string(MENU_BINDINGS[action]), _get_bound_keys(action)])
 	# The rebindable controls and their defaults (Phase 13).
-	if ControlBindings.ACTIONS.size() != 9:
-		failures.append("There must be nine rebindable controls, not %d." % ControlBindings.ACTIONS.size())
+	if ControlBindings.ACTIONS.size() != 10 or ControlBindings.ACTIONS[9] != &"interact":
+		failures.append("There must be ten rebindable controls, the tenth Interact, not %s." % ControlBindings.ACTIONS)
 	for action in ControlBindings.ACTIONS:
 		if ControlBindings.DEFAULT_KEYS.get(action) != EXPECTED_BINDINGS.get(action):
 			failures.append("The default key of '%s' is not %s." % [action, OS.get_keycode_string(EXPECTED_BINDINGS.get(action, KEY_NONE))])

@@ -1,9 +1,9 @@
 class_name ControlBindings
 extends RefCounted
-## The gameplay controls the player can rebind (Phase 13): which they are, their default keys,
-## which keys they may use, and how a key is named on screen.
+## The gameplay controls the player can rebind (Phase 13; Interact since Phase 14): which they are,
+## their default keys, which keys they may use, and how a key is named on screen.
 ##
-## A control is an InputMap action (move_up, action_w, inventory_toggle, ...). Gameplay code only
+## A control is an InputMap action (move_up, action_w, inventory_toggle, interact, ...). Gameplay code only
 ## ever asks for actions, never for keys, so rebinding a control changes which physical key
 ## triggers the action and nothing else. In particular an action slot (action_w, the "W slot")
 ## keeps what it holds when its key changes: slot contents are run state (GameState, the save),
@@ -20,11 +20,12 @@ extends RefCounted
 ## SettingsManager calls it on the whole group whenever a binding changes.
 const HINT_GROUP := &"control_hints"
 
-## Every rebindable control, in the order the Settings screen lists them.
+## Every rebindable control, in the order the Settings screen lists them. Phase 14 added
+## interact, the tenth (settings files of version 1 name only the first nine, see SettingsManager).
 const ACTIONS: Array[StringName] = [
 	&"move_up", &"move_down", &"move_left", &"move_right",
 	&"action_w", &"action_a", &"action_s", &"action_d",
-	&"inventory_toggle",
+	&"inventory_toggle", &"interact",
 ]
 
 ## The name of each control on the Settings screen and in messages.
@@ -38,10 +39,12 @@ const DISPLAY_NAMES: Dictionary[StringName, String] = {
 	&"action_s": "Action Slot S",
 	&"action_d": "Action Slot D",
 	&"inventory_toggle": "Inventory",
+	&"interact": "Interact",
 }
 
 ## The canonical bindings, which Reset to Defaults restores. They are also the bindings in
-## project.godot, so a game with no settings file behaves exactly as before Phase 13.
+## project.godot, so a game with no settings file behaves exactly as before Phase 13 (with E for
+## Interact since Phase 14).
 const DEFAULT_KEYS: Dictionary[StringName, Key] = {
 	&"move_up": KEY_UP,
 	&"move_down": KEY_DOWN,
@@ -52,6 +55,7 @@ const DEFAULT_KEYS: Dictionary[StringName, Key] = {
 	&"action_s": KEY_S,
 	&"action_d": KEY_D,
 	&"inventory_toggle": KEY_SPACE,
+	&"interact": KEY_E,
 }
 
 ## Keys that belong to the menus and pausing, never to a control.

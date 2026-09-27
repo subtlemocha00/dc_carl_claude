@@ -1,7 +1,8 @@
 extends "res://tests/support/game_test.gd"
 ## Phase 12 end-to-end run: Floor 6's Blast Bomb drop and Floor 7, through the real title screen
 ## and levels, on this test's own save file:
-## - Every level's exits lead one floor down (Floor 6's to Floor 7); Floor 7 has none; floor_07 is
+## - Every level's exits lead one floor down (Floor 6's to Floor 7; Floor 7's to Floor 8 and Floor 8
+##   none since Phase 14); floor_07 is
 ##   registered as "Floor 7".
 ## - A. Continue on a real Phase 11 save (tests/fixtures/phase11_save_v3_floor_06.json: version 3,
 ##   Floor 6, Carl 80, Donut 40, Slingshot W, a potion on A, the Bat on S, no bombs) opens Floor 6
@@ -17,7 +18,8 @@ extends "res://tests/support/game_test.gd"
 ##   bombs, the blob alive).
 ## - E. A bomb thrown at the Backstop blob takes exactly 20 and leaves 1; the stairs lead to
 ##   Floor 7: spawn, Donut, sign, HUD "A: Blast Bomb x1", four enemies (three Gelatinous Blobs, a
-##   Spitting Blob), the pair within one blast, the shielded blob behind its wall, no exits, no
+##   Spitting Blob), the pair within one blast, the shielded blob behind its wall, only the stairs
+##   down to Floor 8 (Phase 14), no
 ##   loop; the Floor 7 checkpoint holds the bomb (x1) and A = Blast Bomb, in memory and on disk
 ##   (still version 3, the same seven fields).
 ## - F. The last bomb, thrown at the pair: both lose exactly 20; 0 left, A empty, the HUD and the
@@ -40,6 +42,7 @@ const FLOOR_4_PATH := "res://scenes/levels/floor_04.tscn"
 const FLOOR_5_PATH := "res://scenes/levels/floor_05.tscn"
 const FLOOR_6_PATH := "res://scenes/levels/floor_06.tscn"
 const FLOOR_7_PATH := "res://scenes/levels/floor_07.tscn"
+const FLOOR_8_PATH := "res://scenes/levels/floor_08.tscn"
 const BLOB_PATH := "res://scenes/enemies/gelatinous_blob.tscn"
 const SPITTER_PATH := "res://scenes/enemies/spitting_blob.tscn"
 const PHASE_11_SAVE := "res://tests/fixtures/phase11_save_v3_floor_06.json"
@@ -84,11 +87,11 @@ func _run_checks() -> void:
 
 
 func _check_downward_only() -> void:
-	print("-- Every exit leads one floor down; Floor 7 has none")
+	print("-- Every exit leads one floor down; Floor 8 has none (Phase 14)")
 	var expected := {
 		SURFACE_PATH: [FLOOR_1_PATH], FLOOR_1_PATH: [FLOOR_2_PATH], FLOOR_2_PATH: [FLOOR_3_PATH],
 		FLOOR_3_PATH: [FLOOR_4_PATH], FLOOR_4_PATH: [FLOOR_5_PATH], FLOOR_5_PATH: [FLOOR_6_PATH],
-		FLOOR_6_PATH: [FLOOR_7_PATH], FLOOR_7_PATH: [],
+		FLOOR_6_PATH: [FLOOR_7_PATH], FLOOR_7_PATH: [FLOOR_8_PATH], FLOOR_8_PATH: [],
 	}
 	for level_path: String in expected:
 		var level: Node = (load(level_path) as PackedScene).instantiate()
@@ -271,7 +274,8 @@ func _check_floor_7_arrival() -> bool:
 	check(blast_point.distance_to(shielded.global_position) < 72.0
 			and not level.get_world_2d().direct_space_state.intersect_ray(ray).is_empty(),
 			"the shielded blob is inside 72 px of the blast wall's west face, with the wall in between")
-	check(_destinations(level).is_empty(), "Floor 7 has no exits: nothing leads back up to Floor 6")
+	check(_destinations(level) == [FLOOR_8_PATH], "Floor 7's only exit (Phase 14) leads down to Floor 8: nothing leads back up to Floor 6",
+			str(_destinations(level)))
 	var entry: FloorEntry = state.floor_entry
 	check(entry.scene_path == FLOOR_7_PATH and entry.inventory["quantities"].get(BOMB.id) == 1
 			and entry.action_slots.get(A) == BOMB, "Floor 7's entry state holds one bomb, with A = Blast Bomb")

@@ -1,6 +1,6 @@
 extends Control
 ## The Settings screen (Phase 13), shared by the title screen and the pause menu: each has one as
-## a child and opens it from its Settings row. It has one section, Controls: the nine gameplay
+## a child and opens it from its Settings row. It has one section, Controls: the ten gameplay
 ## controls (ControlBindings.ACTIONS) with their current keys, then Reset to Defaults and Back.
 ## - Up/Down choose a row, Enter changes it, Escape (or Back) closes the screen (closed is
 ##   emitted and the menu underneath carries on).
@@ -36,7 +36,7 @@ const ROW_FONT_SIZE := 22
 const RESET_ROW_TEXT := "Reset to Defaults"
 const BACK_ROW_TEXT := "Back"
 
-## The highlighted row: 0 to 8 are the controls, then Reset to Defaults, then Back.
+## The highlighted row: 0 to 9 are the controls (Interact is 9), then Reset to Defaults, then Back.
 var _selected := 0
 ## The control waiting for its new key, or &"" when not waiting.
 var _capturing: StringName = &""

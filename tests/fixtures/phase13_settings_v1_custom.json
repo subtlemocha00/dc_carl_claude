@@ -1,0 +1,14 @@
+{
+	"keyboard": {
+		"action_a": "2",
+		"action_d": "4",
+		"action_s": "3",
+		"action_w": "1",
+		"inventory_toggle": "Tab",
+		"move_down": "K",
+		"move_left": "J",
+		"move_right": "L",
+		"move_up": "I"
+	},
+	"settings_version": 1
+}

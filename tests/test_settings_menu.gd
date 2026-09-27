@@ -2,16 +2,18 @@ extends "res://tests/support/game_test.gd"
 ## Phase 13: the Settings screen, driven by key events through Godot's input pipeline, on this
 ## test's own settings and save files.
 ## - Title: Settings is offered (New Game, Settings, Quit Game without a save; Continue first with
-##   one); Enter opens the screen with no run started; it lists the nine controls and their keys,
-##   then Reset to Defaults and Back; Up/Down go round; Escape and Back return to the title with
+##   one); Enter opens the screen with no run started; it lists the ten controls (Interact on E
+##   last, Phase 14) and their keys, then Reset to Defaults and Back; Up/Down go round; Escape and
+##   Back return to the title with
 ##   Settings still selected.
 ## - Key capture: Enter on a control waits ("Press a key for ...", its key shown as "..."); the next
 ##   key becomes its binding and is written; Escape cancels, changing nothing and leaving the screen
 ##   open; the key press that was captured (and its key repeat) never also moves the selection.
 ## - Refusals, with their messages and nothing changed: a key another control uses (slot vs
-##   Inventory, movement vs slot), Enter, Shift on its own.
+##   Inventory, movement vs slot; Phase 14: a slot vs Interact's E, Interact vs a slot's key), Enter,
+##   Shift on its own. Interact can be moved to a free key (R) like any control.
 ## - Reset to Defaults asks first with No selected; No (and Escape) keep the custom keys; Yes
-##   restores the nine defaults, applies and writes them.
+##   restores the ten defaults (Interact on E again), applies and writes them.
 ## - Pause: Settings is the pause menu's second row; opening it keeps the game paused (gameplay
 ##   time, enemies, Donut, a flying stone, a cooldown and Donut's recovery countdown all stay
 ##   frozen); Action Slot D (Fists) moved from D to F while paused: the F press that chose it and D
@@ -37,11 +39,12 @@ const ROW_SLOT_A := 5
 const ROW_SLOT_S := 6
 const ROW_SLOT_D := 7
 const ROW_INVENTORY := 8
-const ROW_RESET := 9
-const ROW_BACK := 10
+const ROW_INTERACT := 9
+const ROW_RESET := 10
+const ROW_BACK := 11
 const DEFAULT_ROWS := ["> Move Up|Up", "   Move Down|Down", "   Move Left|Left", "   Move Right|Right",
 		"   Action Slot W|W", "   Action Slot A|A", "   Action Slot S|S", "   Action Slot D|D", "   Inventory|Space",
-		"   Reset to Defaults", "   Back"]
+		"   Interact|E", "   Reset to Defaults", "   Back"]
 
 
 ## Counts physics ticks of play. It is an ordinary gameplay node in the level, so it stops
@@ -82,11 +85,11 @@ func _check_title_settings() -> void:
 	check(settings.is_open() and settings.visible, "Enter opens the Settings screen")
 	check(current_scene.scene_file_path == _title_path and game_state().floor_entry == null and not save_manager().has_save_file(),
 			"no run is started for it: still the title, no floor entry, no save")
-	check(_settings_rows() == DEFAULT_ROWS, "it lists the nine controls with their keys, then Reset to Defaults and Back, Move Up selected",
+	check(_settings_rows() == DEFAULT_ROWS, "it lists the ten controls with their keys (Interact E last), then Reset to Defaults and Back, Move Up selected",
 			str(_settings_rows()))
 	check(settings.get_node("%SettingsPanel/Layout/Title").text == "Settings" and settings.get_node("%SettingsPanel/Layout/SectionLabel").text == "Controls",
 			"its one section is Controls")
-	for i in 10:
+	for i in 11:
 		await tap_key(KEY_DOWN)
 	check(settings.get_selected_row() == ROW_BACK and _settings_rows()[ROW_BACK] == "> Back", "Down goes through to Back")
 	await tap_key(KEY_DOWN)
@@ -118,7 +121,8 @@ func _check_capture() -> void:
 			"Q becomes Action Slot W's key, and the list shows it", str(_settings_rows()[4]))
 	check(settings.get_message() == "Action Slot W is now Q." and settings.get_selected_row() == 4, "a message says so, and the selection stays")
 	var saved: Variant = JSON.parse_string(FileAccess.get_file_as_string(settings_manager().settings_path))
-	check(saved is Dictionary and saved.get("settings_version") == 1.0 and saved.get("keyboard", {}).get("action_w") == "Q",
+	check(saved is Dictionary and saved.get("settings_version") == 2.0 and saved.get("keyboard", {}).get("action_w") == "Q"
+			and saved.get("keyboard", {}).get("interact") == "E",
 			"the change is written to the settings file at once", str(saved))
 	await tap_key(KEY_ENTER)
 	check(settings.get_capturing_action() == &"action_w", "Enter waits again")
@@ -177,7 +181,26 @@ func _check_refusals() -> void:
 	await tap_key(KEY_SHIFT)
 	check(settings.get_message() == "Shift cannot be used for a control." and ControlBindings.get_key(&"action_d") == KEY_D,
 			"Shift on its own is refused", settings.get_message())
+	# Phase 14: Interact is in the same pool of keys.
+	await _select_row(ROW_SLOT_A)
+	await tap_key(KEY_ENTER)
+	await tap_key(KEY_E)
+	check(settings.get_message() == "E is already assigned to Interact." and ControlBindings.get_key(&"action_a") == KEY_A
+			and ControlBindings.get_key(&"interact") == KEY_E, "Action Slot A -> E is refused: E belongs to Interact", settings.get_message())
+	await _select_row(ROW_INTERACT)
+	await tap_key(KEY_ENTER)
+	await tap_key(KEY_Q)
+	check(settings.get_message() == "Q is already assigned to Action Slot W." and ControlBindings.get_key(&"interact") == KEY_E
+			and _settings_rows()[ROW_INTERACT] == "> Interact|E", "Interact -> Q is refused: Q belongs to Action Slot W", settings.get_message())
 	check(FileAccess.get_file_as_string(settings_manager().settings_path) == file_text, "refusals write nothing")
+	await tap_key(KEY_ENTER)
+	check(settings.get_capturing_action() == &"interact" and settings.get_message() == "Press a key for Interact   (Esc: cancel)",
+			"Enter on Interact waits for a key", settings.get_message())
+	await tap_key(KEY_R)
+	check(ControlBindings.get_key(&"interact") == KEY_R and settings.get_message() == "Interact is now R." and _settings_rows()[ROW_INTERACT] == "> Interact|R",
+			"Interact can be moved to a free key, R", settings.get_message())
+	var saved: Variant = JSON.parse_string(FileAccess.get_file_as_string(settings_manager().settings_path))
+	check(saved is Dictionary and saved.get("keyboard", {}).get("interact") == "R", "and it is written", str(saved))
 
 
 func _check_reset() -> void:
@@ -199,13 +222,15 @@ func _check_reset() -> void:
 	await tap_key(KEY_ENTER)
 	await tap_key(KEY_UP)
 	await tap_key(KEY_ENTER)
-	check(settings_manager().is_default() and settings.get_message() == "All controls are back to their defaults.", "Yes restores the nine defaults")
+	check(settings_manager().is_default() and settings.get_message() == "All controls are back to their defaults.", "Yes restores the ten defaults")
+	check(ControlBindings.get_key(&"interact") == KEY_E, "Interact is on E again")
 	var rows := _settings_rows()
-	check(rows.slice(0, 9) == DEFAULT_ROWS.slice(0, 9).map(func(row: String) -> String: return row.replace("> ", "   ")),
+	check(rows.slice(0, 10) == DEFAULT_ROWS.slice(0, 10).map(func(row: String) -> String: return row.replace("> ", "   ")),
 			"the list shows them at once", str(rows))
 	var saved: Variant = JSON.parse_string(FileAccess.get_file_as_string(settings_manager().settings_path))
-	check(saved is Dictionary and saved.get("keyboard", {}).get("action_w") == "W" and saved.get("keyboard", {}).get("move_down") == "Down",
-			"and the settings file has them", str(saved))
+	check(saved is Dictionary and saved.get("keyboard", {}).get("action_w") == "W" and saved.get("keyboard", {}).get("move_down") == "Down"
+			and saved.get("keyboard", {}).get("interact") == "E" and saved.get("keyboard", {}).size() == 10,
+			"and the settings file has all ten", str(saved))
 	await tap_key(KEY_ESCAPE)
 	check(not settings.is_open() and current_scene.scene_file_path == _title_path, "Escape: back on the title")
 

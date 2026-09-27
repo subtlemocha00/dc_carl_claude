@@ -1,7 +1,7 @@
 extends "res://tests/support/game_test.gd"
-## Phase 5-12 SaveManager checks, on this test's own save file (never the player's):
+## Phase 5-14 SaveManager checks, on this test's own save file (never the player's):
 ## - the registries: every floor and action id maps back to itself, the known floors are
-##   exactly surface and floor_01 to floor_07 (Phase 12), and the known actions are Fists, the
+##   exactly surface and floor_01 to floor_08 (Phase 14), and the known actions are Fists, the
 ##   potion, the Slingshot, (Phase 9) the Baseball Bat and (Phase 12) the Blast Bomb;
 ## - a checkpoint is written as JSON (save_version 3, Phase 8) with stable ids only, and loads
 ##   back unchanged, Donut's HP included; a Floor 3 checkpoint keeps the owned Slingshot in
@@ -16,6 +16,8 @@ extends "res://tests/support/game_test.gd"
 ##   exactly the same fields: the bomb is one more "inventory" quantity. It loads back with 1 bomb
 ##   on A. Bad bomb data (in owned_items, negative, fractional, a string, above 999, look-alike
 ##   ids) is rejected; a bomb slot with no bombs (0 or missing) is emptied, the rest kept;
+## - Phase 14: a Floor 8 checkpoint (a potion on W and three bombs on A, as carried down from
+##   Floor 7's chest) is still save_version 3 with the same seven fields, and loads back;
 ## - untrusted data is rejected without a crash or an engine error: malformed JSON, wrong
 ##   root type, unsupported or missing version, missing fields, unknown floor (or a scene
 ##   path instead of an id), bad HP, bad Donut data (missing, not an object, negative, above
@@ -46,6 +48,7 @@ const FLOOR_4_PATH := "res://scenes/levels/floor_04.tscn"
 const FLOOR_5_PATH := "res://scenes/levels/floor_05.tscn"
 const FLOOR_6_PATH := "res://scenes/levels/floor_06.tscn"
 const FLOOR_7_PATH := "res://scenes/levels/floor_07.tscn"
+const FLOOR_8_PATH := "res://scenes/levels/floor_08.tscn"
 
 
 func _initialize() -> void:
@@ -81,8 +84,8 @@ func _check_registries() -> void:
 		check(ResourceLoader.exists(scene_path) and FloorRegistry.get_floor_id(scene_path) == floor_id,
 				"floor '%s' maps to an existing scene and back" % floor_id)
 	check(FloorRegistry.get_scene_path(&"floor_99") == "" and not FloorRegistry.has_floor(&"floor_99"), "an unknown floor has no scene")
-	check(FloorRegistry.FLOORS.keys() == [&"surface", &"floor_01", &"floor_02", &"floor_03", &"floor_04", &"floor_05", &"floor_06", &"floor_07"],
-			"the known floors are surface and floor_01 to floor_07", str(FloorRegistry.FLOORS.keys()))
+	check(FloorRegistry.FLOORS.keys() == [&"surface", &"floor_01", &"floor_02", &"floor_03", &"floor_04", &"floor_05", &"floor_06", &"floor_07", &"floor_08"],
+			"the known floors are surface and floor_01 to floor_08", str(FloorRegistry.FLOORS.keys()))
 	check(FloorRegistry.get_display_name(&"floor_04") == "Floor 4", "floor_04 is shown as 'Floor 4'")
 	check(FloorRegistry.get_display_name(&"floor_05") == "Floor 5" and FloorRegistry.get_scene_path(&"floor_05") == FLOOR_5_PATH,
 			"floor_05 is shown as 'Floor 5' and opens floor_05.tscn")
@@ -90,7 +93,9 @@ func _check_registries() -> void:
 			"floor_06 (Phase 9) is shown as 'Floor 6' and opens floor_06.tscn")
 	check(FloorRegistry.get_display_name(&"floor_07") == "Floor 7" and FloorRegistry.get_scene_path(&"floor_07") == FLOOR_7_PATH,
 			"floor_07 (Phase 12) is shown as 'Floor 7' and opens floor_07.tscn")
-	check(not FloorRegistry.has_floor(&"floor_08"), "there is no floor_08")
+	check(FloorRegistry.get_display_name(&"floor_08") == "Floor 8" and FloorRegistry.get_scene_path(&"floor_08") == FLOOR_8_PATH,
+			"floor_08 (Phase 14) is shown as 'Floor 8' and opens floor_08.tscn")
+	check(not FloorRegistry.has_floor(&"floor_09"), "there is no floor_09")
 
 
 func _check_round_trip() -> void:
@@ -216,6 +221,27 @@ func _check_round_trip() -> void:
 			and loaded.action_slots == {ActionSlots.SLOT_W: SLINGSHOT, ActionSlots.SLOT_A: BOMB, ActionSlots.SLOT_S: BAT, ActionSlots.SLOT_D: FISTS},
 			"it loads back as Floor 7 with 1 bomb on A (and the potion, the Slingshot, the Bat)", saves.last_error)
 
+	print("-- A Floor 8 checkpoint (Phase 14: still save_version 3)")
+	var floor_8 := _floor_7_checkpoint()
+	floor_8.scene_path = FLOOR_8_PATH
+	var carried := Inventory.new()
+	carried.reset([FISTS])
+	carried.add(SLINGSHOT, 1)
+	carried.add(BAT, 1)
+	carried.add(POTION, 1)
+	carried.add(BOMB, 3)
+	floor_8.inventory = carried.get_snapshot()
+	floor_8.action_slots = {ActionSlots.SLOT_W: POTION, ActionSlots.SLOT_A: BOMB, ActionSlots.SLOT_S: BAT, ActionSlots.SLOT_D: FISTS}
+	var floor_8_data: Dictionary = saves.encode(floor_8)
+	check(floor_8_data.keys() == floor_3_data.keys() and floor_8_data["save_version"] == 3 and floor_8_data["floor_id"] == "floor_08"
+			and floor_8_data["inventory"] == {"small_health_potion": 1, "blast_bomb": 3},
+			"a Floor 8 checkpoint has the same seven fields, save_version 3, potion 1 and bombs 3", str(floor_8_data))
+	check(saves.save_checkpoint(floor_8), "the Floor 8 checkpoint is saved")
+	loaded = saves.load_checkpoint()
+	check(loaded != null and loaded.scene_path == FLOOR_8_PATH and _quantity(loaded, BOMB) == 3 and _quantity(loaded, POTION) == 1
+			and loaded.action_slots == {ActionSlots.SLOT_W: POTION, ActionSlots.SLOT_A: BOMB, ActionSlots.SLOT_S: BAT, ActionSlots.SLOT_D: FISTS},
+			"it loads back as Floor 8 with the potion on W and 3 bombs on A", saves.last_error)
+
 	var surface := _floor_2_checkpoint()
 	surface.scene_path = FloorRegistry.get_scene_path(&"surface")
 	saves.save_checkpoint(surface)
@@ -240,7 +266,7 @@ func _check_rejected_data() -> void:
 		"no save_version": func(d: Dictionary) -> void: d.erase("save_version"),
 		"no floor_id": func(d: Dictionary) -> void: d.erase("floor_id"),
 		"an unknown floor": func(d: Dictionary) -> void: d["floor_id"] = "floor_99",
-		"floor_08, which does not exist": func(d: Dictionary) -> void: d["floor_id"] = "floor_08",
+		"floor_09, which does not exist": func(d: Dictionary) -> void: d["floor_id"] = "floor_09",
 		"a scene path instead of a floor id": func(d: Dictionary) -> void: d["floor_id"] = FLOOR_2_PATH,
 		"no carl": func(d: Dictionary) -> void: d.erase("carl"),
 		"HP as a string": func(d: Dictionary) -> void: d["carl"]["health"] = "90",
