@@ -1,0 +1,66 @@
+[gd_scene format=3 uid="uid://bod9t6434l6el"]
+
+[ext_resource type="Script" uid="uid://bo9bydc73ftpi" path="res://scripts/props/lever.gd" id="1_lever"]
+[ext_resource type="Script" uid="uid://dghusj2sy082" path="res://scripts/interaction/interactable.gd" id="2_interactable"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_lever"]
+size = Vector2(22, 14)
+
+[node name="Lever" type="StaticBody2D"]
+collision_mask = 0
+script = ExtResource("1_lever")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+position = Vector2(0, 3)
+shape = SubResource("RectangleShape2D_lever")
+
+[node name="Shadow" type="Polygon2D" parent="."]
+color = Color(0, 0, 0, 0.3)
+polygon = PackedVector2Array(-12, 9, 12, 9, 10, 13, -10, 13)
+
+[node name="BaseOutline" type="Polygon2D" parent="."]
+color = Color(0.12, 0.12, 0.14, 1)
+polygon = PackedVector2Array(-12, -4, 12, -4, 12, 10, -12, 10)
+
+[node name="Base" type="Polygon2D" parent="."]
+color = Color(0.42, 0.43, 0.47, 1)
+polygon = PackedVector2Array(-10, -2, 10, -2, 10, 8, -10, 8)
+
+[node name="Slot" type="Polygon2D" parent="."]
+color = Color(0.1, 0.1, 0.12, 1)
+polygon = PackedVector2Array(-7, 1, 7, 1, 7, 4, -7, 4)
+
+[node name="InactiveLook" type="Node2D" parent="."]
+
+[node name="Handle" type="Polygon2D" parent="InactiveLook"]
+color = Color(0.72, 0.72, 0.76, 1)
+polygon = PackedVector2Array(1.5, 3, -6.5, -14.8, -9.5, -13.2, -1.5, 3)
+
+[node name="KnobOutline" type="Polygon2D" parent="InactiveLook"]
+color = Color(0.2, 0.04, 0.03, 1)
+polygon = PackedVector2Array(-3.5, -14, -4.1, -11.75, -5.75, -10.1, -8, -9.5, -10.25, -10.1, -11.9, -11.75, -12.5, -14, -11.9, -16.25, -10.25, -17.9, -8, -18.5, -5.75, -17.9, -4.1, -16.25)
+
+[node name="Knob" type="Polygon2D" parent="InactiveLook"]
+color = Color(0.86, 0.2, 0.16, 1)
+polygon = PackedVector2Array(-4.5, -14, -4.97, -12.25, -6.25, -10.97, -8, -10.5, -9.75, -10.97, -11.03, -12.25, -11.5, -14, -11.03, -15.75, -9.75, -17.03, -8, -17.5, -6.25, -17.03, -4.97, -15.75)
+
+[node name="ActiveLook" type="Node2D" parent="."]
+visible = false
+
+[node name="Handle" type="Polygon2D" parent="ActiveLook"]
+color = Color(0.72, 0.72, 0.76, 1)
+polygon = PackedVector2Array(-1.5, 3, 6.5, -14.8, 9.5, -13.2, 1.5, 3)
+
+[node name="KnobOutline" type="Polygon2D" parent="ActiveLook"]
+color = Color(0.03, 0.18, 0.05, 1)
+polygon = PackedVector2Array(12.5, -14, 11.9, -11.75, 10.25, -10.1, 8, -9.5, 5.75, -10.1, 4.1, -11.75, 3.5, -14, 4.1, -16.25, 5.75, -17.9, 8, -18.5, 10.25, -17.9, 11.9, -16.25)
+
+[node name="Knob" type="Polygon2D" parent="ActiveLook"]
+color = Color(0.3, 0.86, 0.34, 1)
+polygon = PackedVector2Array(11.5, -14, 11.03, -12.25, 9.75, -10.97, 8, -10.5, 6.25, -10.97, 4.97, -12.25, 4.5, -14, 4.97, -15.75, 6.25, -17.03, 8, -17.5, 9.75, -17.03, 11.03, -15.75)
+
+[node name="Interactable" type="Node2D" parent="."]
+script = ExtResource("2_interactable")
+prompt_text = "Pull Lever"
+one_shot = true
+prompt_offset = Vector2(0, -22)

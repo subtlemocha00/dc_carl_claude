@@ -1,0 +1,15 @@
+{
+	"keyboard": {
+		"action_a": "A",
+		"action_d": "D",
+		"action_s": "S",
+		"action_w": "W",
+		"interact": "Q",
+		"inventory_toggle": "Space",
+		"move_down": "Down",
+		"move_left": "Left",
+		"move_right": "Right",
+		"move_up": "Up"
+	},
+	"settings_version": 2
+}

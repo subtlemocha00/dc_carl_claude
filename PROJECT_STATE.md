@@ -7,8 +7,10 @@ Godot 4.7.2 stable (Standard build, not .NET)
 GDScript
 
 ## Current phase
-Phase 14 — Generic Interaction System, Loot Chests, Settings v2 and Floor 8: **complete, awaiting
-human review**.
+Phase 15 — Levers, Controlled Doors, Optional Mechanisms and Floor 9: **complete, awaiting human
+review**.
+- Phase 14 — Generic Interaction System, Loot Chests, Settings v2 and Floor 8: complete (commit
+  `f72c739`).
 - Phase 13 — Persistent Control Rebinding and Settings Menu: complete (commit `25e15bf`).
 - Phase 12 — Enemy Loot Drops, Blast Bombs, Area Damage and Floor 7: complete (commit `b471ffe`).
 - Phase 11 — Project Data Isolation, Windows ANGLE Stability and Title-Screen Quit: complete
@@ -29,7 +31,7 @@ human review**.
 - Phase 1 — First Traversal Slice: complete (commit `3cb8854`).
 - Phase 0 — Project Foundation: complete (commit `37b2c87`).
 
-There are no `PHASE_02_*.md` to `PHASE_14_*.md` files. Phases 2–14 came from the owner's
+There are no `PHASE_02_*.md` to `PHASE_15_*.md` files. Phases 2–15 came from the owner's
 prompts. Their acceptance criteria are recorded in `ACCEPTANCE_TESTS.md`.
 
 ## Canonical design decisions (do not reintroduce the old behaviour)
@@ -454,6 +456,72 @@ Phase 14 decisions (also written into `GAME_SPEC.md` §4, §8, §10, §14d, §14
   - an interactable's `one_shot` flag gives the chest its "never twice" guarantee generically;
   - Floor 8 is named "Storeroom" and uses the same 36 × 20 size and spawn points as Floors 5–7.
 
+Phase 15 decisions (also written into `GAME_SPEC.md` §4, §10, §14e, §14f, §15, §15e and §18):
+- **Lever** (`scenes/props/lever.tscn`, `Lever`, `scripts/props/lever.gd`): a StaticBody2D on
+  `world` (a 22 × 14 box) with an `Interactable` child ("Pull Lever", `one_shot`, prompt 22 px above
+  it) and two looks: `InactiveLook` (handle leaning left, red knob) and `ActiveLook` (handle leaning
+  right, green knob). On `interacted` it sets `_is_active`, swaps the looks and emits `activated`
+  once. The one-shot Interactable turns itself off, so the prompt goes and it can never be pulled
+  again in that live level; there is no toggle. Its code names no floor, door, stairs, chest,
+  inventory, GameState, SaveManager or node path.
+- **Controlled Door** (`scenes/props/controlled_door.tscn`, `ControlledDoor`,
+  `scripts/props/controlled_door.gd`): a StaticBody2D on `world` (a 64 × 32 box: a two-tile gap in a
+  one-tile wall; rotate it 90° for a vertical wall) with `ClosedLook` (a barred iron slab with a red
+  light) and `OpenLook` (only the frame posts, a threshold and a green light). No Interactable:
+  Carl cannot open it. `open()` sets `_is_open`, swaps the looks, switches its collision shape off
+  (`set_deferred("disabled", true)`, safe from any callback) and emits `opened`; later calls do
+  nothing. `is_open()`, `is_blocking()`. It never closes, and opening hurts and pushes no one.
+- **Collision:** nothing special-cases the door. Closed, it is one more solid body on `world`, so
+  Carl, Donut and the enemies are stopped by physics, projectiles stop at it (their ray hits
+  `world`), a Blast Bomb explodes in front of it and the blast is shielded (`AreaDamage` blocks on
+  `world`), line of sight and interaction rays stop at it. Open, its shape is disabled and all of
+  that passes.
+- **Lever → Door connection:** in the level scene, an editor-made signal connection
+  `[connection signal="activated" from="NavigationRegion2D/Props/SideRoomLever" to="Doors/SideRoomDoor" method="open"]`.
+  No autoload, event bus, global channel, mechanism id or exported path was added: the mechanism
+  belongs to the level scene, which already owns both nodes, and Godot's own scene connections are
+  the simplest local wiring. The autoloads are still GameState, SaveManager and SettingsManager.
+- **Navigation:** the lever and the chest are under `NavigationRegion2D/Props` (carved out of the
+  mesh like the Phase 14 chest). The door is deliberately **outside** the region (a `Doors` node at
+  the level root), so the mesh baked at load includes the doorway and Donut (and walk_to in tests)
+  can path through once it opens. Nothing is rebaked at run time. That is safe because the door
+  closes a **dead end**: the side room has no other opening and nothing lives in it, so no path
+  Donut or an enemy follows leads through the doorway while it is closed.
+- **Floor 8 side room** (south-west corner, tiles 1–7 × 13–18, x 32–256, y 416–608): walls on row
+  12 (x 0–288) and column 8 (x 256–288), the doorway at column 8, rows 15–16 (y 480–544), filled
+  by `Doors/SideRoomDoor` at (272, 512), rotated 90°. `NavigationRegion2D/Props/SideRoomLever` at
+  (304, 432) just outside it, east of its wall; `NavigationRegion2D/Props/SideRoomChest` (the
+  Phase 14 `treasure_chest.tscn`) at (144, 456) inside it, `contents`
+  `{small_health_potion: 1, blast_bomb: 1}`, loot into the new `Pickups` node (at (104, 528) and
+  (184, 528)). The old south-west block (x 256–320, y 448–512) was removed for the side room's wall.
+- **Stairs are never gated:** Floor 8's stairs to Floor 9 are at (1072, 560), in the main room's
+  far south-east corner ("Down to Floor 9"; `Signs/PrototypeNote` became `Signs/StairsHint`, and
+  `Signs/SideRoomSign` "Side room: the lever opens its door." was added). `stairs.gd` is unchanged:
+  it looks at Carl's body and the paused tree only.
+- **Floor 9** (`floor_09`, "Floor 9 - Lower Hall", 36 × 20 tiles): a wall segment, a wall in the
+  south-east, a pillar and a block; a Gelatinous Blob at (640, 400) and a Spitting Blob at
+  (1008, 256); no interactable; no exits. One `FloorRegistry` line.
+- **Checkpoints:** nothing new. The lever, the door, the chest and its loot are scene state, so a
+  retry, Return to Title, Continue or a relaunch rebuilds them as authored (lever up, door closed,
+  chest closed, no loot) with the floor-entry inventory; only what Carl carries down is in Floor 9's
+  checkpoint. Pulling, opening and collecting never save.
+- **The save stays version 3 and the settings stay version 2** (Floor 9 is one more floor id; no
+  new setting).
+- **Phase 15 choices the prompt left open** (the narrowest fit with the existing code):
+  - the lever is a solid floor lever (like the chest) rather than a wall decoration, placed under
+    `NavigationRegion2D/Props`;
+  - the connection is a scene signal connection (the first of the prompt's options) rather than an
+    exported NodePath, so neither script holds a reference to the other;
+  - the door's collision is switched off with a deferred `disabled`, so `is_blocking()` turns false
+    at the end of the frame the lever is pulled;
+  - the door is a fixed 64 × 32 slab (rotatable); other sizes would be another scene or a later
+    export;
+  - the side room reuses Floor 8's south-west corner, the stairs its south-east corner (as on Floor
+    7); Floor 9 is named "Lower Hall" and uses the usual size and spawn points;
+  - the tests start two Floor 8 runs from a real save written by the Phase 14 game
+    (`tests/fixtures/phase14_save_v3_floor_08.json`) and check a real Phase 14 settings file
+    (`phase14_settings_v2_interact_q.json`).
+
 ## Implemented
 - **Title screen** (main scene):
   - **Continue** (available only when the save loads) resumes the saved floor checkpoint;
@@ -531,6 +599,13 @@ Phase 14 decisions (also written into `GAME_SPEC.md` §4, §8, §10, §14d, §14
   (`TreasureChest`): a solid placeholder chest (brown box, gold bands and latch; open: the lid raised
   and a dark inside) with an Interactable ("Open Chest", one_shot). Opening it drops its `contents`
   (item id → quantity) as ordinary pickups beside it. See Architecture > Interaction.
+- **Lever (Phase 15):** `scenes/props/lever.tscn` + `scripts/props/lever.gd` (`Lever`): a solid
+  placeholder floor lever (grey base; handle left with a red knob, pulled: right with a green knob)
+  with an Interactable ("Pull Lever", one_shot). Pulled once, it emits `activated`. See Architecture >
+  Levers and controlled doors.
+- **Controlled Door (Phase 15):** `scenes/props/controlled_door.tscn` + `scripts/props/controlled_door.gd`
+  (`ControlledDoor`): a solid iron door (bars, a red light) that `open()` turns into an empty frame
+  (posts, threshold, a green light) with no collision, for good. Not interactable.
 - **Item pickup:** `scenes/props/item_pickup.tscn` (`ItemPickup` since Phase 12), a reusable Area2D.
   It bobs gently and shows its item's icon (the Slingshot, the Bat, the Blast Bomb) or, without an
   icon, a pink diamond (the potion), and a label from `ActionDefinition.get_label()`: "Potion x2",
@@ -658,7 +733,26 @@ Phase 14 decisions (also written into `GAME_SPEC.md` §4, §8, §10, §14d, §14
   - the signs "Floor 8 - Storeroom", `Signs/Hint` "Whatever you carry down the stairs is part of
     this floor's checkpoint." and `Signs/PrototypeNote` "Prototype: the way further down is not built
     yet.", HUD, menu and pause menu;
-  - **no exits**: no way up, and no Floor 9.
+  - **no exits**: no way up, and no Floor 9 (until Phase 15);
+  - **Phase 15:** the south-west block is gone; instead an **optional side room** in the south-west
+    corner (x 32–256, y 416–608) behind a **Controlled Door** (`Doors/SideRoomDoor`, vertical, at
+    (272, 512)) with a **Lever** just outside (`NavigationRegion2D/Props/SideRoomLever`, (304, 432))
+    and the **side-room chest** inside (`NavigationRegion2D/Props/SideRoomChest`, (144, 456): Small
+    Health Potion x1 and Blast Bomb x1, dropped into the new `Pickups` node); the lever's `activated`
+    opens the door (a connection in the scene). **Stairs down to Floor 9** at (1072, 560) in the main
+    room ("Down to Floor 9", `Signs/StairsSign`); `Signs/PrototypeNote` became `Signs/StairsHint`
+    "The stairs down to Floor 9 are in the far south-east corner."; `Signs/SideRoomSign` "Side room:
+    the lever opens its door.". The stairs work whether or not the side room was used. No stairs back
+    up.
+- **Floor 9 (Phase 15,** `scenes/levels/floor_09.tscn`**, "Lower Hall", 36×20 tiles, 1152×640 px):**
+  - Carl arrives at (176, 176), Donut at (176, 232);
+  - a wall segment (x 256–512, y 224–256), a wall in the south-east (x 768–800, y 320–544), a pillar
+    (x 896–960, y 128–192) and a block (x 384–448, y 416–480);
+  - a **Gelatinous Blob** at (640, 400) and a **Spitting Blob** at (1008, 256);
+  - the signs "Floor 9 - Lower Hall", `Signs/Hint` "Only what you carried down the stairs came with
+    you." and `Signs/PrototypeNote` "Prototype: the way further down is not built yet.", HUD, menu
+    and pause menu;
+  - no interactable; **no exits**: no way up, and no Floor 10.
 - **Stairs** (`scenes/props/stairs.tscn`): stairs **down**. They load `destination_scene_path`
   and ignore Carl for the first 2 physics frames of a level (no transition loops). **Phase 10:**
   they never change level once the game is frozen (Carl killed in the tick he reached them).
@@ -684,12 +778,13 @@ Phase 14 decisions (also written into `GAME_SPEC.md` §4, §8, §10, §14d, §14
 
 Not implemented (later phases): gamepad/controller or mouse bindings, key chords, audio, graphics,
 resolution, fullscreen, language or accessibility settings, locked chests, chest keys, random or
-rarity loot, NPCs, dialogue, quests, switches, levers, doors, Donut controls, commands, slots or
+rarity loot, NPCs, dialogue, quests, toggle switches, keys or keycards, closing or auto-closing
+doors, doors Carl opens himself, traps, moving platforms, Donut controls, commands, slots or
 equipment, Donut items or
 healing, a revive key, permanent Donut death, ammunition, more weapons, weapon upgrades or
 durability, equipment slots or stats, critical hits, status effects, knockback on anything but
 the Bat (explosions included), random loot tables, drop chances, rarity, currency, crafting,
-destructible walls, Floor 9, other enemy types (Dungeon Rat, Crawler, Dungeon Brute), bosses (Floor Guardian), the
+destructible walls, Floor 10, other enemy types (Dungeon Rat, Crawler, Dungeon Brute), bosses (Floor Guardian), the
 prototype-complete screen, stairs that open only after goals or events, countdown timers,
 shops/economy, multiple save slots, mid-floor or cloud saving, save-anywhere.
 
@@ -708,7 +803,7 @@ restores):
 | `action_s`         | Action Slot S | S           | Uses the S slot (empty in a new game). In the action menu: put the selection in the S slot |
 | `action_d`         | Action Slot D | D           | Uses the D slot (**Fists** in a new game). In the action menu: put the selection in the D slot |
 | `inventory_toggle` | Inventory     | Space       | Opens / closes the action menu (not over GAME OVER or the pause menu) |
-| `interact` (Phase 14) | Interact   | E           | Uses the nearby object the prompt names ("E: Open Chest"); nothing in menus, Settings or at GAME OVER |
+| `interact` (Phase 14) | Interact   | E           | Uses the nearby object the prompt names ("E: Open Chest", Phase 15: "E: Pull Lever"); nothing in menus, Settings or at GAME OVER |
 
 Fixed menu and system keys (never rebindable):
 
@@ -777,7 +872,9 @@ scenes/enemies/spitting_blob.tscn               Spitting Blob (Phase 7): Health,
 scenes/props/stairs.tscn                        Reusable stairs down
 scenes/props/item_pickup.tscn                   Reusable world pickup (item + quantity; icon or default gem)
 scenes/props/treasure_chest.tscn                The Treasure Chest (Phase 14): solid body, closed/open looks, an Interactable
-scenes/levels/surface.tscn, floor_01.tscn … floor_08.tscn   The nine levels (floor_04: Phase 7; floor_05: Phase 8; floor_06: Phase 9; floor_07: Phase 12; floor_08: Phase 14)
+scenes/props/lever.tscn                         The one-shot Lever (Phase 15): solid body, inactive/active looks, an Interactable
+scenes/props/controlled_door.tscn               The Controlled Door (Phase 15): solid 64 x 32 body, closed/open looks, no Interactable
+scenes/levels/surface.tscn, floor_01.tscn … floor_09.tscn   The ten levels (floor_04: Phase 7; floor_05: Phase 8; floor_06: Phase 9; floor_07: Phase 12; floor_08: Phase 14; floor_09: Phase 15)
 scripts/autoload/game_state.gd                  GameState: the current run's state
 scripts/autoload/save_manager.gd                SaveManager: the one save file (encode, validate, migrate, safe write, load, delete)
 scripts/autoload/settings_manager.gd            SettingsManager (Phase 13): the control bindings (defaults, validation, InputMap, settings.json, reset)
@@ -785,6 +882,8 @@ scripts/settings/control_bindings.gd            class ControlBindings (Phase 13)
 scripts/interaction/interactable.gd             class Interactable (Phase 14): what makes an object usable with the Interact key (prompt text, enabled, one_shot, interacted)
 scripts/interaction/interaction_controller.gd   class InteractionController (Phase 14): Carl's side: nearest Interactable in range, the prompt, the key press
 scripts/props/treasure_chest.gd                 class TreasureChest (Phase 14): opens once, drops its contents (item id -> quantity) as pickups
+scripts/props/lever.gd                          class Lever (Phase 15): pulled once through its Interactable, emits `activated`
+scripts/props/controlled_door.gd                class ControlledDoor (Phase 15): closed and solid until open(), then open for good
 scripts/state/floor_entry.gd                    class FloorEntry: a floor checkpoint (Carl's and Donut's HP, inventory snapshot, slot layout)
 scripts/actions/action_registry.gd              class ActionRegistry: action id -> ActionDefinition (for loading saves)
 scripts/levels/floor_registry.gd                class FloorRegistry: floor id -> scene and name (the only floors a save can open)
@@ -816,7 +915,7 @@ scripts/levels/level_navigation.gd              Bakes a level's navigation mesh 
 scripts/props/item_pickup.gd                    class ItemPickup (Phase 12 name): walk-over pickup, gives its item to Carl once; placed or dropped
 scripts/<actors|enemies|props|ui>/*.gd          One script per scene that needs one
 tests/                                          Test scripts (not part of the game), see Tests
-tests/fixtures/                                 Real save files from earlier phases: two save_version 1 (Phase 5), two save_version 2 (Phase 6), one save_version 2 (Phase 7, Floor 4), one save_version 3 (Phase 8, Floor 5) and one save_version 3 (Phase 11, Floor 6; Phase 12); and (Phase 14) two real Phase 13 settings files (settings_version 1), written by the Phase 13 game's SettingsManager: phase13_settings_v1_custom.json (I/K/J/L, 1/2/3/4, Tab) and phase13_settings_v1_e_taken.json (the same but E and F on the W and A slots)
+tests/fixtures/                                 Real save files from earlier phases: two save_version 1 (Phase 5), two save_version 2 (Phase 6), one save_version 2 (Phase 7, Floor 4), one save_version 3 (Phase 8, Floor 5) and one save_version 3 (Phase 11, Floor 6; Phase 12); and (Phase 14) two real Phase 13 settings files (settings_version 1), written by the Phase 13 game's SettingsManager: phase13_settings_v1_custom.json (I/K/J/L, 1/2/3/4, Tab) and phase13_settings_v1_e_taken.json (the same but E and F on the W and A slots); and (Phase 15) two written by the Phase 14 game (commit f72c739): phase14_save_v3_floor_08.json (entering Floor 8: Carl 80, Donut 40, Slingshot W, 1 bomb A, Bat S) and phase14_settings_v2_interact_q.json (settings_version 2, Interact on Q)
 ```
 
 Every level scene uses this layout:
@@ -824,7 +923,8 @@ Every level scene uses this layout:
 <LevelRoot> (Node2D, level.gd)   exports: carl, donut, hud, action_menu
 ├── NavigationRegion2D   level_navigation.gd; NavigationPolygon outline = level bounds
 │   ├── Terrain          TileMapLayer with the shared TileSet
-│   └── (Props)          solid props, e.g. TreasureChest (Phase 14): cut out of the navigation mesh
+│   └── (Props)          solid props, e.g. TreasureChest (Phase 14), Lever (Phase 15): cut out of the navigation mesh
+├── (Doors)              ControlledDoors (Phase 15), OUTSIDE the region: the mesh keeps their doorways
 ├── Signs                world-space Labels
 ├── Stairs               (optional) stairs.tscn leading DOWN to the next level
 ├── Pickups              (optional) item_pickup.tscn instances (item + quantity); a chest's loot lands here
@@ -838,6 +938,7 @@ Every level scene uses this layout:
 ├── HUD                  hud.tscn instance
 ├── ActionMenu           action_menu.tscn instance
 └── (PauseMenu)          pause_menu.tscn, added by Level._ready() (Phase 10; not in the scene file)
+(connections)            e.g. a Lever's `activated` -> a ControlledDoor's `open` (Phase 15), made in the editor
 ```
 **To add a floor:** duplicate `floor_08.tscn` (or another floor), then:
 1. Repaint Terrain and resize the NavigationPolygon outline.
@@ -845,8 +946,8 @@ Every level scene uses this layout:
    root's `carl` and `donut` (enemies need no wiring: they hunt the `party` group).
 3. Add pickups and stairs down, if any.
 4. Point the previous floor's stairs down at the new file. Never add stairs back up.
-5. Add one line to `FloorRegistry`, so the floor can be saved and continued. (Floors 4, 5, 6, 7
-   and 8 needed nothing else: no level or title code, and no save version change.)
+5. Add one line to `FloorRegistry`, so the floor can be saved and continued. (Floors 4 to 9
+   needed nothing else: no level or title code, and no save version change.)
 
 **To place a treasure chest** (Phase 14; data only):
 1. In the level, add a `Node2D` named `Props` under `NavigationRegion2D` (if there is none) and a
@@ -869,8 +970,25 @@ Nothing else: no save change (the chest is rebuilt closed on every load), no Car
    (locked, say) extend `interactable.gd` and override `can_interact()`.
 That is all: Carl's InteractionController finds it (the `interactables` group), shows "<key>: <prompt>"
 when it is the nearest within 56 px, and calls it on the Interact key press. Carl's script, the
-controller, the HUD, the menus and the save do not change. (Phase 14 builds only the chest: no
-switches, doors, NPCs or dialogue yet, and interaction is not used to lock stairs.)
+controller, the HUD, the menus and the save do not change. (Phase 14 built the chest this way and
+Phase 15 the lever; there are still no NPCs or dialogue, and interaction never locks stairs.)
+
+**To add a lever that opens a door** (Phase 15; no code):
+1. Leave a gap in a wall for the door: two tiles wide in a one-tile-thick wall. The door must close
+   off a **dead end** (a side room with no other opening, nothing living inside), because the
+   navigation mesh is baked once with the doorway open.
+2. Add a `Node2D` named `Doors` at the level root (if there is none; **not** under
+   `NavigationRegion2D`) and instance `scenes/props/controlled_door.tscn` in it, centred on the gap
+   (set `rotation` to 90° for a gap in a vertical wall).
+3. Instance `scenes/props/lever.tscn` under `NavigationRegion2D/Props` (create `Props` if needed),
+   where Carl can reach it without passing the door.
+4. Select the lever, open the **Node** dock > **Signals**, double-click `activated()`, pick the door
+   and the method `open`. (The scene file then holds
+   `[connection signal="activated" from="…/YourLever" to="Doors/YourDoor" method="open"]`.)
+5. Optionally put a chest behind it ("To place a treasure chest"). Do not put the stairs behind it:
+   progression never depends on a lever.
+Nothing else: Carl, the controller, both scripts, the save and the settings stay as they are. A
+lever may be connected to several doors (or a door to several levers): each connection is one line.
 
 **To add an enemy:** make a scene whose root script `extends Enemy` (scripts/enemies/enemy.gd),
 with the children Enemy expects (Health, Hurtbox on `enemy_hurtbox`, CollisionShape2D on
@@ -1311,6 +1429,28 @@ The first explicit world interaction, kept to one reusable contract and one cont
   chest closed, its loot not made) and restores the floor-entry inventory (anything collected from it
   taken back), so a chest can never give its loot twice. Its open state is never saved.
 
+### Levers and controlled doors (Phase 15, `scripts/props/lever.gd`, `scripts/props/controlled_door.gd`)
+`Carl's InteractionController -> the Lever's Interactable -> interacted -> Lever -> activated
+-> (a connection in the level scene) -> ControlledDoor.open()`.
+- **`Lever`** (StaticBody2D on `world`, mask none; `lever.tscn`): `InactiveLook`, `ActiveLook`,
+  base polygons, a 22 × 14 box and an `Interactable` ("Pull Lever", `one_shot`, `prompt_offset`
+  (0, −22)). `_on_interacted()` (guarded by `_is_active`) swaps the looks and emits `activated`;
+  `is_active()`. It is the Interactable's parent, so the controller's wall ray ignores its own body,
+  and its interaction range, prompt, tie-breaking, modal safety and key are the Phase 14 ones
+  unchanged.
+- **`ControlledDoor`** (StaticBody2D on `world`, mask none; `controlled_door.tscn`): `ClosedLook`,
+  `OpenLook`, a 64 × 32 `CollisionShape2D`. `open()` (guarded by `_is_open`): the shape's `disabled`
+  set deferred, the looks swapped, `opened` emitted. `is_open()`, `is_blocking()` (the shape is
+  active). There is no `close()`.
+- **The connection** is the level's: a `[connection]` in the level scene (Floor 8:
+  `SideRoomLever.activated` → `SideRoomDoor.open`). Neither script refers to the other, to a level,
+  or to a node path; no autoload is involved.
+- **Navigation:** the door lives outside `NavigationRegion2D` (see Scene structure), so the doorway
+  is in the mesh baked at load; `level_navigation.gd` is unchanged and nothing rebakes. Closed, it
+  simply blocks bodies; since it closes a dead end, no path leads through it while it is closed.
+- **Checkpoints:** nothing records levers or doors. A retry, Return to Title, Continue or relaunch
+  reloads the level: the lever up, the door closed and solid, the chest behind it closed.
+
 ### Action menu — unchanged in Phase 6 (keys: Phase 13)
 - The Inventory key (Space by default) opens it only while the game is not paused (never over
   GAME OVER). It pauses the scene tree; the Inventory key or Escape closes it. Paused stones stay
@@ -1458,7 +1598,7 @@ The first explicit world interaction, kept to one reusable contract and one cont
   It **sanitizes** slots instead of rejecting the save: an unknown action id, an action
   Carl would not have (a potion with quantity 0, a Slingshot he does not own), or an action
   named twice leaves that slot empty. `ActionSlots.fill_empty_slots()` decides this.
-- **Registries:** `FloorRegistry` (`surface`, `floor_01` … `floor_08`) and
+- **Registries:** `FloorRegistry` (`surface`, `floor_01` … `floor_09`) and
   `ActionRegistry` (`fists`, `small_health_potion`, `slingshot`, `baseball_bat`, `blast_bomb`) are the
   whitelists that turn saved ids back into scenes and resources.
 - **Title flow:** Continue calls `load_checkpoint()` again, then `GameState.continue_from()`,
@@ -1661,7 +1801,7 @@ Names are set in Project Settings > Layer Names > 2D Physics.
 
 | Layer | Name             | Used by                                    | Mask (collides with / detects)           |
 |-------|------------------|--------------------------------------------|------------------------------------------|
-| 1     | `world`          | Wall/barrier tiles (TileSet physics layer) | none (static)                            |
+| 1     | `world`          | Wall/barrier tiles (TileSet physics layer); treasure chests (Phase 14), levers and closed Controlled Doors (Phase 15) | none (static); an open door's shape is disabled |
 | 2     | `player`         | Carl's body                                | 1 `world`, 4 `enemy`                     |
 | 3     | `companion`      | Donut's body                               | 1 `world` only                           |
 | 4     | `enemy`          | Enemy bodies (both blobs)                  | 1 `world`, 2 `player`, 4 `enemy`         |
@@ -1696,6 +1836,18 @@ Consequences:
   a wall (layer 1) between its centre and an enemy's shields that enemy.
   Enemies see through everything but walls, exactly where their globs can fly.
 - Navigation baking reads only layer 1.
+
+## Earlier behaviour changed in Phase 15
+1. **Floor 8 has an exit** (stairs down to Floor 9), a side room (a lever, a door, a chest), `Props`,
+   `Doors` and `Pickups` nodes; its south-west block is gone; `Signs/PrototypeNote` became
+   `Signs/StairsHint`, and it gained `Signs/SideRoomSign` and `Signs/StairsSign`.
+   `test_floor_04_run.gd` to `test_floor_07_run.gd` now expect Floor 8's only exit to lead to Floor 9
+   and Floor 9 to have none; `test_floor_08_run.gd` expects ten floors (no `floor_10`), Floor 8's
+   stairs to Floor 9 and its one closed chest; `test_windowed_resolutions.gd` checks
+   `Signs/StairsHint`.
+2. **`floor_09` exists.** `test_save_manager.gd` lists ten floors and rejects `floor_10` (instead of
+   `floor_09`) as unknown. `test_pause_menu.gd` visits every registered floor, Floor 9 included.
+3. Version in Project Settings: `0.15.0` (`test_project_setup.gd`).
 
 ## Earlier behaviour changed in Phase 14
 1. **Floor 7 has an exit** (stairs down to Floor 8), a treasure chest and a `Pickups` node; its note
@@ -1851,7 +2003,7 @@ code or on any engine ERROR/WARNING in its output, except an error the test prov
 and checked (it prints `EXPECTED ERROR: <text>`, which excuses exactly one `ERROR: <text>` line;
 only `test_save_isolation.gd` does this). A test that ends before reaching `finish()` (for
 example because the game quit its process) fails with exit code 1 (Phase 11). Tests with "windowed" in their name get a real window,
-which opens briefly. The full run takes about 18 minutes (38 test files). Each test file can
+which opens briefly. The full run takes about 20 minutes (41 test files). Each test file can
 also be run on its own; the first lines of each file give the command.
 
 | Test file                               | Covers |
@@ -1859,7 +2011,10 @@ also be run on its own; the first lines of each file give the command.
 | `test_input_map.gd` (Phase 0, 13, 14)   | Every action bound to its key; no key shared between gameplay/system actions; **the fixed `menu_*` actions on the arrows only; the ten rebindable controls' defaults (Interact E, the tenth, Phase 14) equal `ControlBindings.DEFAULT_KEYS`; no menu key is rebindable** |
 | `test_interaction.gd` (Phase 14)        | Arenas with a real Carl and test Interactables (no chest), keys through the input pipeline: the controller (56 px, walls block) and a hidden prompt; nothing in range: no prompt, E does nothing; one in range: "E: Test Thing" centred above it, E uses it with Carl as the interactor, 56 px counts and 57 px does not, walking away hides it; several: the nearest shown and used, one press uses one; ties go to the one earlier in the tree (and follow a reorder), 0.3 px nearer is a tie, 1 px nearer wins, stable over ticks; disabled and used one_shot ones skipped; a wall hides one, the object's own solid body does not; E held for a second uses it once, key repeat nothing; Interact on Q: "Q: ...", E dead, Q works, "BracketLeft: ...", Reset gives E back; paused: no prompt, E nothing, E held through the resume nothing, the next press works; Carl down: nothing |
 | `test_treasure_chest.gd` (Phase 14)     | Arenas, a real Carl and the chest scene: solid on `world`, one_shot "Open Chest", no contents of its own; closed at first, "E: Open Chest" next to it, none from 100 px; E opens it (open look, `opened` once, prompt gone), the inventory unchanged then and half a second later, two ItemPickups (Potion x1, Blast Bomb x2 with the bomb icon) at (−40, 72) and (40, 72) in `loot_parent`; E again and `interact()` do nothing; Donut, a Gelatinous and a Spitting Blob standing on the loot and a stone and a bomb flying over it take nothing, Carl walking over them gets exactly 1 and 2, once; Slingshot + Bat + Potion x3 give three pickups in order at the first three spots, nothing owned yet; unknown ids, a look-alike, a resource path, an empty id, 0, −1, 1000 and a reusable x2 are each reported and left out (valid entries kept; 999 potions fine), no crash; a wall below sends the loot above, spots beyond a thin wall are skipped, a boxed-in chest drops on itself, reported as an error; opened from the farthest reachable points toward the loot, nothing lands on Carl; a chest removed in the frame it opened drops nothing |
-| `test_floor_08_run.gd` (Phase 14)       | Real title, levels and menus from a Floor 7 checkpoint (Carl 80, Donut 40, Slingshot W, 1 bomb A, Bat S) (98 checks): `floor_08` the ninth floor, no `floor_09`, every exit one floor down to Floor 8, which has none; Floor 7's one chest under NavigationRegion2D with {potion 1, bomb 2} into Pickups; Continue: closed chest, no loot, no prompt at the spawn; at the chest ("E: Open Chest"): E in the action menu, E held while it closes, E in the pause menu and on the Settings list do nothing (prompt hidden), Interact captured as Q in Settings (neither the Q nor the Escapes open it), "Q: Open Chest", E dead, GAME OVER (Q and E nothing), retry (closed, still Q), Q opens it; two pickups below it, no inventory change, collected exactly (potion 1, bombs 3), menu and HUD, no reopening, nothing saved; two deaths: closed, no loot, entry items, enemies as authored, one set again each time; Return to Title + Continue: closed, entry items; only the potion carried to Floor 8: checkpoint and save potion 1, bomb 1; both carried (potion put on W in the menu): Floor 8 arrival, HUD, two enemies, no exits, checkpoint in memory and on disk (version 3, seven fields), no loop; Floor 8 enemies notice Carl, a bomb hits the blob, the potion heals; a retry restores potion 1 / bombs 3 / slots / HP; Continue with Interact on Q: items kept, key still Q, neither file holds the other's data |
+| `test_floor_08_run.gd` (Phase 14, 15)   | **Phase 15: ten floors, no `floor_10`, Floor 8's only exit to Floor 9, which has none; Floor 8 has its one closed side-room chest.** Real title, levels and menus from a Floor 7 checkpoint (Carl 80, Donut 40, Slingshot W, 1 bomb A, Bat S) (99 checks): `floor_08` the ninth floor, every exit one floor down; Floor 7's one chest under NavigationRegion2D with {potion 1, bomb 2} into Pickups; Continue: closed chest, no loot, no prompt at the spawn; at the chest ("E: Open Chest"): E in the action menu, E held while it closes, E in the pause menu and on the Settings list do nothing (prompt hidden), Interact captured as Q in Settings (neither the Q nor the Escapes open it), "Q: Open Chest", E dead, GAME OVER (Q and E nothing), retry (closed, still Q), Q opens it; two pickups below it, no inventory change, collected exactly (potion 1, bombs 3), menu and HUD, no reopening, nothing saved; two deaths: closed, no loot, entry items, enemies as authored, one set again each time; Return to Title + Continue: closed, entry items; only the potion carried to Floor 8: checkpoint and save potion 1, bomb 1; both carried (potion put on W in the menu): Floor 8 arrival, HUD, two enemies, no exits, checkpoint in memory and on disk (version 3, seven fields), no loop; Floor 8 enemies notice Carl, a bomb hits the blob, the potion heals; a retry restores potion 1 / bombs 3 / slots / HP; Continue with Interact on Q: items kept, key still Q, neither file holds the other's data |
+| `test_lever_door.gd` (Phase 15)         | (96 checks) Arenas, a real Carl (and Donut, a blob, stones, bombs), keys through the input pipeline: the Lever is solid on `world` with a one_shot "Pull Lever" Interactable, starts inactive, "E: Pull Lever"; E pulls it (active look, `activated` once, Interactable off, prompt gone); E again, E held, key repeat and interact() nothing more; stays pulled; no error unconnected. Interact on Q: "Q: Pull Lever", E dead, Q pulls, the settings file (version 2) holds Q and reloads as Q. The Door: closed look, solid on `world`, no Interactable; Carl stops in front of it; a stone stops at it and a Blast Bomb explodes there, the blob 40 px behind unhurt (the blast shielded). A lever connected to its open(): the open look, `opened` once, no collision (no `world` ray hit), nobody hurt; a stone and a bomb fly through and hit the blob behind; Carl walks through and back; open() twice harmless; still open a second later. A navigation arena: Donut cannot follow Carl past the closed door, and follows him through once it opens. Architecture: the Lever's and the Door's code (comments aside) use no `get_node`, `/root`, `get_tree`, NodePath, floor, door/lever, stairs, chest, inventory, GameState or SaveManager; Carl, the controller, Interactable and the stairs name no lever or door; the autoloads are still the three. Several interactables (lever, chest, plain): nearest first, one press one object, the pulled lever skipped, then the chest, then the plain one; ties lever/plain: tree order, 0.3 px still a tie, 1 px wins, stable. Paused: no prompt, E nothing, held through the resume nothing, next press pulls; Carl down: nothing |
+| `test_side_room_run.gd` (Phase 15)      | (80 checks) Real title, levels and menus from a Floor 8 checkpoint (Carl 80, Donut 40, Slingshot W, 1 bomb A, Bat S): as authored, one Lever under NavigationRegion2D/Props outside the side room, one vertical Door in its doorway under `Doors` (outside the region), one Phase 14 chest inside with {potion 1, bomb 1} into Pickups, the lever's `activated` connected (persistent, editor-made) to the door's `open` and nothing else, the side room's walls closed but for the doorway (tile check), the stairs to Floor 9 outside it and storing only their destination; Continue: lever inactive, door closed and solid, chest closed, no loot, no prompt, Carl cannot walk through the door; at the lever ("E: Pull Lever"): E in the action menu, E held while it closes, E in the pause menu, at its Return to Title question and on the Settings list do nothing, Interact captured as Q (neither Q nor the Escapes pull it), "Q: Pull Lever", E dead, GAME OVER (Q and E nothing), retry (inactive, closed, still Q); Q pulls it: active, door open and not solid, prompt gone; Q again nothing, the door opened once; Carl walks in through the doorway and Donut follows; "Q: Open Chest", Q opens it: Potion x1 and Blast Bomb x1 below it inside the room, no inventory change, Donut takes nothing; collected exactly (potion 1, bombs 2), HUD; nothing saved; two deaths: lever inactive, door closed and solid, chest closed, no loot, entry items, Carl 80, Donut 40, enemies as authored, one set again each time; Return to Title + Continue: the same |
+| `test_floor_09_run.gd` (Phase 15)       | (73 checks) `floor_09` the tenth floor "Floor 9", no `floor_10`; every exit one floor down to Floor 9, which has none; the stairs' code names no lever, door, chest, enemy, inventory, GameState, is_active or is_open. From the real Phase 14 Floor 8 save: the skip path (lever, door, chest untouched; Carl walks from the spawn point to the stairs along the navigation route; on the stairs the lever was inactive and the door closed and solid) opens Floor 9 whose checkpoint and save (version 3) hold exactly the entry items; only the potion collected: Floor 9 gains the potion only; both collected (potion on W): arrival (spawn, Donut, camera, sign, HUD, a Gelatinous and a Spitting Blob, no lever/door/chest/loot, no exits, no loop), the checkpoint in memory and on disk (seven fields, potion 1, bombs 2); Floor 9 plays (the blob notices Carl, a bomb takes 20, the Spitting Blob notices the party, the potion heals); retry restores potion 1, bombs 2, slots, HP, enemies; Return to Title: the title describes Floor 9, Continue opens it with the carried items. Compatibility: save 3, settings 2; real v1, v2, v3 (Phase 11) and Phase 14 v3 saves decode; a v3 Floor 9 save loads; a `floor_10` save is refused; the real Phase 14 settings file (v2, Interact Q) loads as it is, unrewritten, and the lever says "Q: Pull Lever", E nothing, Q pulls it |
 | `test_settings_manager.gd` (Phase 13, 14) | (333 checks) **Phase 14: settings format 2 with ten controls; Interact in the refusals ("F is already assigned to Interact.", Interact on a slot's key, Tab, Escape); 33 kinds of bad file (version 3 and 999, a version 2 file without Interact, a version 1 file naming Interact or with a duplicate); the migration: the two real Phase 13 files keep their nine keys and get E / R, are rewritten as version 2 (no `.tmp`), the next load reads them as they are; E on movement gives F, the first nine fallback keys taken gives B, twice the same, all ten unique; invalid version 1 files give the defaults untouched; a failed write-back applies the keys and keeps the version 1 file (then the next load writes it); a leftover version 1 `.tmp` migrates; no key free gives up; the save untouched.** Phase 13: SettingsManager on its own test file: the nine defaults (each the only key event of its action) and the fixed menu keys; isolation (the player's `user://settings.json`, `test_saves/../`, look-alikes refused with errors, nothing touched; a stray file proves it first); a binding applies at once (old key dead, new key live, a held key released), emits once, refreshes hints, writes `settings_version` 1 + `keyboard` only, no `.tmp` left; all nine rebound; 17 refusals (conflicts across movement/slots/Inventory with their messages, Escape, Enter, keypad Enter, Shift, Ctrl, Alt, Meta, Caps Lock, F1, F10, volume, none) change nothing; loading a valid file, no file, a leftover `.tmp`; **27 kinds of bad file** each give the defaults with `load_failed`, the file untouched, the next change replacing it; a failed write keeps the old file; Reset to Defaults; **independence**: key changes leave the slots, inventory and save file (text and time) alone, the save is still version 3 with 7 fields and no bindings, New Game/end of run/deleting the save keep the bindings |
 | `test_settings_menu.gd` (Phase 13, 14)  | **Phase 14: the list has ten controls (Interact E last) + Reset + Back; Action Slot A → E refused ("E is already assigned to Interact."), Interact → Q refused (Action Slot W's), Interact captured as R and written; the file is version 2; Reset restores all ten.** Real title and Floor 6, keys through the input pipeline: Settings on the title (no run started), the list of controls + Reset + Back, wrapping, Escape/Back back to Settings selected, nothing written; capture (prompt, "...", Q applied and written, message, selection kept), Escape cancels, a captured Down (and its key repeat) does not move the selection; refusals (Inventory → Q, Action Slot A → I, Enter, Shift) with messages; Reset (No selected, No/Escape keep, Yes restores, list and file updated); **pause**: Settings second row, game stays paused (time, Carl, blob, Donut, a flying stone, a cooldown, Donut's countdown frozen) while Action Slot D moves to F, the F and D pressed there punch nobody, Fists stay in the D slot, HUD "F: Fists", Escape back to the paused menu, after Resume D does nothing and F punches, F held through Resume gives no free punch, Escape still pauses, Reset from the pause menu, the save untouched |
 | `test_rebinding_run.gd` (Phase 13)      | Real title/levels from a Floor 7 checkpoint (Slingshot W, potions A, bombs S, Bat D): all nine rebound by keys on the title (save untouched); Continue: same slots, HUD "1: Slingshot   2: Potion x2   3: Blast Bomb x2   4: Baseball Bat" + "Tab: action menu"; I/K/J/L move exactly like the arrows did, arrows and W/A/S/D do not; W/A/S/D use nothing, 1/2/3/4 fire, heal, throw, swing; Space opens nothing, Tab opens/closes, Escape closes; menu names 1/2/3/4/Tab, arrows move its selection (K does not), literal W assigns nothing, 4 puts Fists in the D slot and 4 punches; pause > Settings W → Q, Q fires at once; Return to Title keeps the keys, Continue plays with them; New Game keeps them (Surface sign "I/J/K/L to move", Floor 1 sign "Q/2/3/4 ... Tab"); Reset to Defaults in play updates HUD and sign at once, arrows move again, run and save untouched |
@@ -1872,12 +2027,12 @@ also be run on its own; the first lines of each file give the command.
 | `test_floor_loop.gd` (Phase 2, 3)       | Title → new game; reassignment; HP and slots carried to Floor 1; no transition loop; nothing on Floor 1 leads up; real fight and defeat; GAME OVER waits; retry with entry HP; stairs ignore an arrival on top of them |
 | `test_inventory.gd` (Phase 4)           | Inventory rules, slots follow the inventory, potion use through a slot, one potion per press, menu quantities, pickups (Donut/enemy can't take them, two collectors) |
 | `test_inventory_run.gd` (Phase 4, 5)    | Real potions run through Floor 1 → Floor 2 with retries; Floor 2's only exit leads down (Phase 6) |
-| `test_save_manager.gd` (Phase 5–14)     | Registries (**9 floors since Phase 14, `floor_08` shown as "Floor 8", no `floor_09`; a Floor 8 checkpoint (potion on W, 3 bombs on A) is still version 3 with seven fields and loads back;** `floor_07` shown as "Floor 7"; the 5 actions, `baseball_bat` reusable and assignable, `blast_bomb` consumable and assignable, look-alike ids unknown**); **Phase 12: a Floor 7 checkpoint with 1 bomb on A is still version 3 with the same 7 fields, `inventory` {"small_health_potion": 1, "blast_bomb": 1}, and loads back with A = Blast Bomb; the bomb in owned_items, negative/fractional/string/null/above-999 bomb quantities and look-alike ids (`Blast_Bomb`, `blast_bombs`, `blast_bomb `) are rejected; a bomb slot with no bombs (missing or 0) is emptied, kept with 2, one slot only**; **version 3 JSON with `donut`** (and owned_items); Floor 3, 4 and 5 checkpoints with the Slingshot on W and Donut's HP round-trip; **Donut at 0 (downed) round-trips**; a checkpoint has exactly the 7 fields; **Phase 9: a Floor 6 checkpoint owning the Slingshot and the Bat (on S) is still version 3 with the same 7 fields, `owned_items` ["slingshot", "baseball_bat"], and loads back with S = Baseball Bat; a Bat with a quantity, the Bat listed twice, an unknown owned id next to it are rejected; a Bat slot without the Bat is emptied, kept with it**; 55 kinds of bad data rejected with the file untouched (incl. versions 4/999, `floor_06`, **14 kinds of bad Donut data: missing, null, a number, a list, no health/max, a string, -1, above her maximum, fractional, max 0, max above 1000**, Slingshot with a quantity, bad owned_items); slots sanitized; Donut 0 and exactly 60 accepted; delete; interrupted-save recovery |
+| `test_save_manager.gd` (Phase 5–15)     | Registries (**10 floors since Phase 15, `floor_09` shown as "Floor 9", no `floor_10` (a `floor_10` save rejected);** `floor_08` (Phase 14) shown as "Floor 8"; a Floor 8 checkpoint (potion on W, 3 bombs on A) is still version 3 with seven fields and loads back;** `floor_07` shown as "Floor 7"; the 5 actions, `baseball_bat` reusable and assignable, `blast_bomb` consumable and assignable, look-alike ids unknown**); **Phase 12: a Floor 7 checkpoint with 1 bomb on A is still version 3 with the same 7 fields, `inventory` {"small_health_potion": 1, "blast_bomb": 1}, and loads back with A = Blast Bomb; the bomb in owned_items, negative/fractional/string/null/above-999 bomb quantities and look-alike ids (`Blast_Bomb`, `blast_bombs`, `blast_bomb `) are rejected; a bomb slot with no bombs (missing or 0) is emptied, kept with 2, one slot only**; **version 3 JSON with `donut`** (and owned_items); Floor 3, 4 and 5 checkpoints with the Slingshot on W and Donut's HP round-trip; **Donut at 0 (downed) round-trips**; a checkpoint has exactly the 7 fields; **Phase 9: a Floor 6 checkpoint owning the Slingshot and the Bat (on S) is still version 3 with the same 7 fields, `owned_items` ["slingshot", "baseball_bat"], and loads back with S = Baseball Bat; a Bat with a quantity, the Bat listed twice, an unknown owned id next to it are rejected; a Bat slot without the Bat is emptied, kept with it**; 55 kinds of bad data rejected with the file untouched (incl. versions 4/999, `floor_06`, **14 kinds of bad Donut data: missing, null, a number, a list, no health/max, a string, -1, above her maximum, fractional, max 0, max above 1000**, Slingshot with a quantity, bad owned_items); slots sanitized; Donut 0 and exactly 60 accepted; delete; interrupted-save recovery |
 | `test_save_game.gd` (Phase 5, 6, 8)     | Real title + levels: checkpoints (save_version 3, Donut 60 / 60), Continue, deaths, New Game confirmation, corrupt/unsupported saves |
 | `test_save_migration.gd` (Phase 6–12)   | The two real Phase 5 fixtures (version 1), the two real Phase 6 fixtures and **the real Phase 7 Floor 4 fixture** (version 2) load with their floor, HP, items and slots and **Donut at 60 / 60**, the files untouched, and are written back with the same values as version 3 plus Donut; a v1 Slingshot slot is emptied, a v1 `owned_items` ignored, a v1 Slingshot quantity rejected; 13 kinds of malformed v1 data rejected; v2 loads (a `donut` in a v2 file is ignored), v2 without owned_items rejected; **v3 loads with its own Donut HP, v3 without `donut` rejected**; versions 0/4/999/-1 rejected; title → Continue on the v1 Floor 2 save and **on the Phase 7 Floor 4 save** open those floors with their state and Donut at 60 / 60, and the files become version 3; the migrated game plays on; **Phase 9: the real Phase 8 Floor 5 save (version 3, no Bat) loads unchanged and is written back identically; no migrated v1/v2 fixture owns the Bat; a v1 file naming the Bat in owned_items and on W owns no Bat and W is emptied**; **Phase 12: the real Phase 11 Floor 6 save (`phase11_save_v3_floor_06.json`: version 3, Carl 80, Donut 40, Slingshot W, potion A, Bat S) loads unchanged with no bombs and is written back identically; no v1, v2 or Phase 8 fixture has bombs** |
 | `test_slingshot.gd` (Phase 6, 8)        | Ownership model (innate/reusable/consumable, owned once, never removed, snapshots, new run clears it); slots; pickup; firing in four directions; exactly 10 damage, 3 hits kill a blob; one target only; flies through a dying blob; hits a blob that steps onto it; stops at a wall face; 320 px / 40 ticks; never hurts Carl, **nor Donut, whose real Hurtbox is in the line of fire (60 / 60, Phase 8)**; no pickup, no stairs; point blank; cooldown; menu; HUD and menu labels |
 | `test_slingshot_run.gd` (Phase 6–8)     | Real run: New Game clears a previous Slingshot; Surface → Floor 1 → Floor 2 → Floor 3, nothing leads up (Floor 3's only exit leads down to Floor 4); Floor 2 entry has no Slingshot (run, entry state, disk: version 3, Donut 60 / 60); collect + W doesn't save; two Floor 2 deaths take it back; quit before Floor 3 → Continue without it; three stones kill the Floor 2 blob; Floor 3 arrival, the Floor 3 checkpoint owns it with W = Slingshot; a stone stops at Floor 3's wall tiles; two Floor 3 deaths keep it; Continue opens Floor 3 and it fires; New Game clears it |
-| `test_windowed_resolutions.gd` (Phase 2–14) | (333 checks) **Phase 14: Floor 7's `Signs/StairsHint`; the Settings screen with ten controls; Floor 7's closed chest and "E: Open Chest" on screen, fitting, clear of the HUD and above the chest; no prompt under the pause menu; "BracketLeft: Open Chest" fits; the open chest, its two loot pickups (icon/gem and labels, texts not overlapping) and no prompt; after collecting, the slot bar and the menu's potion and bomb rows fit; Floor 8's three signs, each at 1280×720, 640×360 and 1024×768.** At 1280×720, 640×360, 1024×768: HUD with `W: Slingshot   A: Potion x2` **and "Donut HP: 0 / 60 - DOWNED" fully on screen, its text fitting, clear of Carl's HP and the slot bar**, GAME OVER panel, action menu, camera; Floor 2's Slingshot pickup; Floor 3's signs clear of the HUD; a flying stone; Floor 4's three signs clear of the HUD; the two blobs, a glob and a stone on screen together; **Floor 5's three signs clear of the HUD; a downed Donut's DOWNED label drawn on screen, clear of the HUD; Donut's colour unlike both blobs'**; **Phase 9: the slot bar `W: Slingshot   A: Potion x2   S: Baseball Bat   D: Fists` on screen with its text fitting; "Baseball Bat   (on S)" in the menu; Floor 5's Hint and its Bat pickup (icon and label) on screen and clear of the HUD; Floor 6's three signs clear of the HUD; a blob drawn on screen while the Bat knocks it back**; **Phase 10: the HUD hint "Space: action menu     Esc: pause" on screen and fitting; the pause menu above the HUD and action menu, on screen and centred with its rows fitting; both questions on screen and centred with the warning, No and Yes fitting; the title after Return to Title on screen with the Floor 6 checkpoint**; **Phase 11: the renderer the window really uses (Compatibility; on Windows `opengl3_angle`, printed with the adapter); the title's Quit Game row on screen at each size, the three rows stacked above the save line, and Quit Game selected on screen**; **Phase 12: Floor 6's `Signs/StairsHint` clear of the HUD; the dropped Blast Bomb x2 pickup (icon and label) on screen; Floor 7's three signs on screen, fitting and clear of the HUD; the longest slot bar `W: Baseball Bat   A: Potion x2   S: Blast Bomb x12   D: Slingshot` on screen with its text fitting, and its menu row; a thrown bomb drawn on screen in flight, frozen under the pause menu and still drawn, and its explosion drawn; once, one explosion on the pair: both hit, all on screen; the pause menu and Return to Title now on Floor 7**; the title screen (with a Floor 7 save, and broken) and its confirmation. Prints SKIP and passes when run headless; **Phase 13 (289 checks): the Settings screen from the pause menu (nine rows with keys, Reset, Back, the message) on screen, centred and fitting at each size, with the capture prompt and a "BracketLeft is already assigned to Action Slot W." conflict; the Reset question; with 1/2/3/4 and Tab the HUD slot bar and hint and the action menu's slot column, "(on 1)" row and help line fit at each size; the pause menu's and title's four rows; the title's settings-error line** |
+| `test_windowed_resolutions.gd` (Phase 2–15) | (383 checks) **Phase 15: Floor 8's `Signs/StairsHint`; at the side room the inactive lever, the closed door, the side-room sign and "E: Pull Lever" on screen (fitting, clear of the HUD and the sign, above the lever), no prompt under the pause menu; pulled: the active lever and the open door, no prompt; inside: the closed chest and "E: Open Chest", then the open chest and its two loot labels (not overlapping); Floor 9's three signs; each at 1280×720, 640×360 and 1024×768.** **Phase 14: Floor 7's `Signs/StairsHint`; the Settings screen with ten controls; Floor 7's closed chest and "E: Open Chest" on screen, fitting, clear of the HUD and above the chest; no prompt under the pause menu; "BracketLeft: Open Chest" fits; the open chest, its two loot pickups (icon/gem and labels, texts not overlapping) and no prompt; after collecting, the slot bar and the menu's potion and bomb rows fit; Floor 8's three signs, each at 1280×720, 640×360 and 1024×768.** At 1280×720, 640×360, 1024×768: HUD with `W: Slingshot   A: Potion x2` **and "Donut HP: 0 / 60 - DOWNED" fully on screen, its text fitting, clear of Carl's HP and the slot bar**, GAME OVER panel, action menu, camera; Floor 2's Slingshot pickup; Floor 3's signs clear of the HUD; a flying stone; Floor 4's three signs clear of the HUD; the two blobs, a glob and a stone on screen together; **Floor 5's three signs clear of the HUD; a downed Donut's DOWNED label drawn on screen, clear of the HUD; Donut's colour unlike both blobs'**; **Phase 9: the slot bar `W: Slingshot   A: Potion x2   S: Baseball Bat   D: Fists` on screen with its text fitting; "Baseball Bat   (on S)" in the menu; Floor 5's Hint and its Bat pickup (icon and label) on screen and clear of the HUD; Floor 6's three signs clear of the HUD; a blob drawn on screen while the Bat knocks it back**; **Phase 10: the HUD hint "Space: action menu     Esc: pause" on screen and fitting; the pause menu above the HUD and action menu, on screen and centred with its rows fitting; both questions on screen and centred with the warning, No and Yes fitting; the title after Return to Title on screen with the Floor 6 checkpoint**; **Phase 11: the renderer the window really uses (Compatibility; on Windows `opengl3_angle`, printed with the adapter); the title's Quit Game row on screen at each size, the three rows stacked above the save line, and Quit Game selected on screen**; **Phase 12: Floor 6's `Signs/StairsHint` clear of the HUD; the dropped Blast Bomb x2 pickup (icon and label) on screen; Floor 7's three signs on screen, fitting and clear of the HUD; the longest slot bar `W: Baseball Bat   A: Potion x2   S: Blast Bomb x12   D: Slingshot` on screen with its text fitting, and its menu row; a thrown bomb drawn on screen in flight, frozen under the pause menu and still drawn, and its explosion drawn; once, one explosion on the pair: both hit, all on screen; the pause menu and Return to Title now on Floor 7**; the title screen (with a Floor 7 save, and broken) and its confirmation. Prints SKIP and passes when run headless; **Phase 13 (289 checks): the Settings screen from the pause menu (nine rows with keys, Reset, Back, the message) on screen, centred and fitting at each size, with the capture prompt and a "BracketLeft is already assigned to Action Slot W." conflict; the Reset question; with 1/2/3/4 and Tab the HUD slot bar and hint and the action menu's slot column, "(on 1)" row and help line fit at each size; the pause menu's and title's four rows; the title's settings-error line** |
 | `test_enemy_navigation.gd` (Phase 7, 8) | Arenas with a real baked navigation mesh, each waiting until the map holds exactly its mesh: the Blob waits beyond 220 px, notices Carl behind a wall, gives up beyond 320 px; it follows a route around a wall to Carl (its own path bends round the wall's end), never overlaps the wall, never stalls, reaches him and hurts him every 0.8 s; with no way around it stops beside the wall without jittering; the Spitting Blob with Carl hidden walks around the wall and spits only once it sees him; **Phase 8: with Carl far away, a blob picks Donut behind the wall, walks around it without overlapping it, reaches her and hurts her 10 every 0.8 s (60 → 30)** |
 | `test_spitting_blob.gd` (Phase 7, 8)    | Arenas (Carl the only party member): its numbers; waits beyond 360 px, closes in and spits at 320 px, holds at 280 px, backs off to 180 px, gives up beyond 480 px; touching it never hurts; a wall stops it spitting, stepping into sight or removing the wall makes it spit at once; a glob takes exactly 10 HP once; walls stop globs; a glob flies past stairs, a pickup, another Spitting Blob and a Gelatinous Blob and hits Carl, hurting none of them nor its own blob, even when made to target enemies; 384 px / 96 ticks; 5 globs exactly 90 ticks apart, no burst; three stones kill it; Fists by facing; the menu freezes everything, no free glob, stone or burst |
 | `test_donut.gd` (Phase 8)               | Arenas: a new run (also after one where she was downed) gives Donut 60 / 60; Health 60, Hurtbox on `player_hurtbox`, the `party` group, Scratch's numbers; an enemy's touch takes 10 every 0.8 s; HP never below 0; Carl's point-blank punch and a stone through her never hurt her; Scratch never hurts Carl or Donut and never fires with no enemy near; exactly 10 per scratch, exactly 60 ticks apart, three kill a blob, none on a dead one; an enemy 38 px away is scratched, 46 px is not; the nearest of two only; she stays by Carl and follows him, never toward an enemy; downed at 0: HUD "0 / 60 - DOWNED" in another colour, grey, on her side, DOWNED label, cannot be hit; no following, no scratching, a touch finds nothing, nothing paused; she gets up on her 360th downed tick (not at 359) with exactly 30 / 60, looks normal, catches up with Carl, scratches again; 5 s of menu do not count toward the 6 s; GAME OVER (the tree pause) and a downed Carl hold her countdown |
@@ -1888,10 +2043,10 @@ also be run on its own; the first lines of each file give the command.
 | `test_blast_bomb.gd` (Phase 12)         | Arenas (122 checks): the bomb's data (consumable, own icon; ProjectileLauncher 1.0 s; Projectile 220 px/s, 240 px, 0 impact damage, stopped by enemies and walls; DetonateOnStop; AreaDamage 20, 72 px, enemy_hurtbox, walls shield; registered); a new run has none (also after one that had 3 on S); not assignable at 0; "Blast Bomb x2"; W/A/S/D one at a time; the slot empties at 0 and it is assignable again after more; snapshots never duplicate; thrown right/up/left/down from Carl's centre, one per tap, each spending exactly one; one per 10-tick press; holding S throws at 0, 60 and 120 ticks; taps no faster; a press half a second after a throw spends nothing; ready again exactly 60 ticks after a throw; none at 0; in the open exactly 240 px in 66 ticks, one explosion where it stopped, never again; a wall stops it at its face and the blob 52 px behind the wall is unhurt; an enemy stops it and loses exactly 20 once; a second `detonate()` does nothing; one explosion: a Gelatinous and a Spitting Blob each lose exactly 20 once, a second kills both, a dying one is not hit, four around it each lose 20; reach: a blob 84 px away is hit, 88 px is not; explosions at Carl's and Donut's centres and a bomb against a wall 50 px away hurt and move neither; no push, nothing moves; wall shielding: 60 px behind a wall nothing, 60 px in the open 20, wall removed 20; the flash shows 0.35 s then goes; a tree pause freezes a bomb in flight (still lands 240 px away) and a flash; the menu: S throws nothing, closing it with S held throws nothing, one throw after, no burst; Carl down + frozen: nothing thrown; HUD `S: Blast Bomb x2` → x1 → `S: —`, menu rows follow; **loot drop**: nothing while the enemy lives, its death gives nothing, one pickup exactly where it died ("Blast Bomb x2", bomb icon, in the blob's parent), it stays after the blob fades, Donut and two enemies on it and a stone and a bomb over it take nothing, Carl walking over it gets exactly 2 once, two collectors get 2 in all, a death announced twice drops once, a Spitting Blob drops too, a bomb kill drops too; the Bat (20, 80 px push) and a stone (10, no push) unchanged |
 | `test_floor_07_run.gd` (Phase 12)       | Real run from the real Phase 11 save (118 checks): every exit leads one floor down, Floor 6's to Floor 7, Floor 7 none, `floor_07` registered as "Floor 7"; Continue → Floor 6 with no bombs, the checkpoint written back identical to the Phase 11 file, the loot blob carrying Blast Bomb x2, no drop lying there; the Bat kills it: no bombs from the death, one "Blast Bomb x2" pickup where it died, walking over it gives exactly 2, the menu lists it, A assigns it, HUD `A: Blast Bomb x2`, the save unchanged; two Floor 6 deaths: no bombs, A back to the potion, nothing duplicated, the blob alive at its spawn with its drop unused, no pickup; pause > Return to Title > Yes, then Continue: no bombs, the blob alive; a bomb at the Backstop blob: exactly 20, x1 left; the stairs → Floor 7: spawn, Donut, camera, sign, HUD `A: Blast Bomb x1`, three Gelatinous Blobs and a Spitting Blob as authored, the pair within one blast, the shielded blob within 72 px of the wall's face with the wall in between, no exits, the checkpoint in memory and on disk (version 3, seven fields, blast_bomb 1, A = blast_bomb) and loaded back, no loop; the last bomb at the pair: both lose exactly 20, unmoved, Carl and Donut unhurt, 0 left, A empty, the menu without it; a Floor 7 death: the bomb back on A, the pair at 30; a bomb against the blast wall explodes at its face within 72 px of the blob behind it, which takes nothing; quit and Continue: Floor 7 with the bomb on A, which hits the pair; New Game: no bombs, only Fists, the Surface checkpoint without bombs |
 | `test_save_isolation.gd` (Phase 8)      | The save guard: in a test run the player's save path, look-alike paths (`user://test_saves/../savegame.json`, `user://test_saves_old/...`), the `.tmp` beside it and other files are refused, test-folder paths allowed; a stray file outside the folder is neither written, loaded nor deleted, each refusal reported; then, pointed at the player's save, SaveManager finds and loads nothing and refuses to write, and a level starting in that state cannot save its checkpoint; the player's save (if any) keeps its modification time; the test's own file still works |
-| `test_pause_menu.gd` (Phase 10, 13)         | Real levels, keys through the input pipeline: every level (every registered floor: the Surface and Floors 1–8 since Phase 14) has exactly one pause menu, Escape opens it (Resume selected, rows, no focus), gameplay ticks stop, Escape and Enter on Resume resume, the save untouched; Up/Down wrap, Resume selected on reopening; paused Carl cannot move, turn, punch, fire, swing, drink or reassign; a key held while resuming gives no free action, then D/W/S/A work; Donut stops mid-stride; a blob touching Carl while Donut scratches it: nothing happens for 180 paused ticks, then the next scratch is exactly 60 and the next touch exactly 48 ticks of play after the last; the Spitting Blob's glob freezes in flight, nothing is spat for 180 ticks, globs exactly 90 ticks of play apart; a stone freezes then flies on, no extra stone; a Bat push freezes unfinished, then completes exactly 80 px; Donut gets up after exactly 360 ticks of play with or without a 180-tick pause (her countdown holds); Space/Escape between the two menus (echo included, same-frame key pairs): never both open, paused exactly when one is open; GAME OVER: Escape/Space open nothing, everything frozen, Enter retries, the pause menu works after; stairs and a pickup do nothing while paused and work after; **the lifecycle fix: stairs + death in one tick keep GAME OVER on the floor with a loadable checkpoint, then retry and stairs work**; **Phase 13: four rows, Settings second, Down goes through all four** |
+| `test_pause_menu.gd` (Phase 10, 13)         | Real levels, keys through the input pipeline: every level (every registered floor: the Surface and Floors 1–9 since Phase 15) has exactly one pause menu, Escape opens it (Resume selected, rows, no focus), gameplay ticks stop, Escape and Enter on Resume resume, the save untouched; Up/Down wrap, Resume selected on reopening; paused Carl cannot move, turn, punch, fire, swing, drink or reassign; a key held while resuming gives no free action, then D/W/S/A work; Donut stops mid-stride; a blob touching Carl while Donut scratches it: nothing happens for 180 paused ticks, then the next scratch is exactly 60 and the next touch exactly 48 ticks of play after the last; the Spitting Blob's glob freezes in flight, nothing is spat for 180 ticks, globs exactly 90 ticks of play apart; a stone freezes then flies on, no extra stone; a Bat push freezes unfinished, then completes exactly 80 px; Donut gets up after exactly 360 ticks of play with or without a 180-tick pause (her countdown holds); Space/Escape between the two menus (echo included, same-frame key pairs): never both open, paused exactly when one is open; GAME OVER: Escape/Space open nothing, everything frozen, Enter retries, the pause menu works after; stairs and a pickup do nothing while paused and work after; **the lifecycle fix: stairs + death in one tick keep GAME OVER on the floor with a loadable checkpoint, then retry and stairs work**; **Phase 13: four rows, Settings second, Down goes through all four** |
 | `test_return_to_title.gd` (Phase 10, 13)    | Real title and Floor 6 from a seeded checkpoint (Carl 80, Donut 40, potion on A, Slingshot W, Bat S): the question's text, No selected, Escape and No go back to the paused menu, Down/Up toggle Yes/No, the live floor untouched (Carl 60, Donut 10, no potion, stone flying on); Yes: the title in the same process, unpaused, the level freed, no Carl/Donut/enemy/projectile left, the save byte-identical and not rewritten, the title says HP 80 (not 60), GameState holds no run; Continue restores everything (HP, items, slots, the killed blob back, 30 HP each, no projectiles); **Continue reads the disk: a different checkpoint written while the title is up and a stale run planted in GameState → Continue opens the disk's Carl 55 / Donut 25**; 5 Continue → play → Return cycles with identical node and connection counts (one Carl, Donut, HUD, action menu, pause menu, 3 enemies); New Game after returning asks (No keeps the save), Yes gives the canonical Surface run and checkpoint; the save is version 3 with its seven fields; a Phase 5 v1 and a Phase 6 v2 save load after returning, Continue twice each, the file becomes version 3; **Phase 13: Return to Title is the third row** |
 | `test_quit_game.gd` (Phase 10, 13)          | Real process exits: a seeded Floor 6 checkpoint, then `tests/support/quit_game_child.gd` in its own Godot process: Continue, live changes (Carl 60, Donut 10, no potion, a kill, a stone), pause > Quit Game (the warning, No selected, Escape and No cancel, Yes quits): exit code 0, no engine error or crash marker, the save byte-identical and last written on floor entry; the same with the window's close request; after each, this process's title and Continue restore the checkpoint; the helper refuses (exit 2, nothing run) the player's save path, a `test_saves/../` path and no path, and the player's save keeps its modification time; **Phase 13: the child reaches Return to Title / Quit Game past Settings** |
-| `test_project_setup.gd` (Phase 11–14)  | **Phase 14: version 0.14.0, settings format 2, the save still 3.** Project settings in a real process: Use Custom User Dir on, Custom User Dir Name `DC CARL`; `OS.get_user_data_dir()` = app-data folder + `DC CARL` (printed), not `Godot/app_userdata/...`; `user://savegame.json` resolves inside it; no game script names an absolute or per-user path; the test guard refuses the player's save (also through `test_saves/../`), this test's own file is in `test_saves/` inside the new folder; the Compatibility renderer, `driver.windows` = `opengl3_angle`, the other platforms' drivers and both fallbacks at Godot's defaults, `project.godot`'s only driver line; version 0.12.0 (Phase 12); save format 3; **Phase 13: version 0.13.0, settings format 1, `user://settings.json` in the DC CARL folder and refused in a test run, this test's own settings file, the autoloads exactly GameState, SaveManager, SettingsManager** |
+| `test_project_setup.gd` (Phase 11–15)  | **Phase 15: version 0.15.0; the save still 3, the settings still 2.** Phase 14: settings format 2. Project settings in a real process: Use Custom User Dir on, Custom User Dir Name `DC CARL`; `OS.get_user_data_dir()` = app-data folder + `DC CARL` (printed), not `Godot/app_userdata/...`; `user://savegame.json` resolves inside it; no game script names an absolute or per-user path; the test guard refuses the player's save (also through `test_saves/../`), this test's own file is in `test_saves/` inside the new folder; the Compatibility renderer, `driver.windows` = `opengl3_angle`, the other platforms' drivers and both fallbacks at Godot's defaults, `project.godot`'s only driver line; version 0.12.0 (Phase 12); save format 3; **Phase 13: version 0.13.0, settings format 1, `user://settings.json` in the DC CARL folder and refused in a test run, this test's own settings file, the autoloads exactly GameState, SaveManager, SettingsManager** |
 | `test_title_quit.gd` (Phase 11, 13)         | Real title screen, keys through the input pipeline: no save → Continue greyed, New Game selected, Quit Game offered, Up/Down go round New Game and Quit Game only; a Floor 6 save → Continue selected, Up/Down round all three; New Game's question (No selected, its Up/Down leave the menu alone, Escape back, save untouched); an unloadable save → New Game selected, Quit Game offered, New Game still asks; Floor 6 > Return to Title → Quit Game selectable, then Continue restores the checkpoint. Real process exits (`quit_game_child.gd`): Quit Game on the title with no save (exit 0, no file created), with the save (exit 0, byte-identical, not rewritten), and after Return to Title (exit 0, the checkpoint, last written on floor entry); each pressed with Quit Game selected and GameState the title's cleared run; **Phase 13: four rows (Settings third) with and without a save and after Return to Title** |
 | `test_floor_04_run.gd` (Phase 7–9, 12)  | Real run from a real Phase 6 Floor 3 save: title → Continue → Floor 3 (the same checkpoint saved again as version 3 with Donut 60 / 60); every level's exits lead one floor down, **Floor 4's only exit to Floor 5**, Floor 5's to Floor 6 (Phase 9), Floor 6's to Floor 7 and Floor 7 none (Phase 12); Floor 3 → Floor 4 arrival and checkpoint (version 3); the Blob walks around wall A and three punches kill it; the Spitting Blob walks around wall B, spits only in sight, the menu freezes it and its glob; globs take Carl to 0 HP, GAME OVER waits; retry restores everything; GAME OVER with a glob in flight freezes it; three stones kill the Spitting Blob; quit and Continue on Floor 4; New Game starts clean (Donut 60 / 60). Donut is present and fights along throughout |
 
@@ -1907,107 +2062,128 @@ refuses anything else in a test run. `tests/support/settings_child.gd` (the chil
 save or settings paths outside that folder (except in its `production` mode, which exists to show
 SettingsManager refusing the player's file at startup).
 
-## Validation performed (Phase 14)
-All runs used Godot 4.7.2.stable.official on the Phase 13 machine: Windows 10 (user `Komputer`), an
-NVIDIA GeForce GTX 750 Ti (driver 32.0.15.6094). (Phase 13's validation record is in
-`PROJECT_STATE.md` at commit `25e15bf`, Phase 12's at `b471ffe`.) Everything that could write a save
+## Validation performed (Phase 15)
+All runs used Godot 4.7.2.stable.official on the same machine as Phases 13–14: Windows 10 (user
+`Komputer`), an NVIDIA GeForce GTX 750 Ti (driver 32.0.15.6094). (Phase 14's validation record is in
+`PROJECT_STATE.md` at commit `f72c739`, Phase 13's at `25e15bf`.) Everything that could write a save
 or a settings file ran either as a guarded test (`-s`, its own files in `user://test_saves/`) or in a
 scratch copy of the project whose only differences were its own `custom_user_dir_name` (and, for the
-played sessions, a scratch-only driver autoload): `dc_carl_p14_play`, `dc_carl_p14_mutation`,
-`dc_carl_p14_fixture`.
-- **Baseline before changes:** HEAD `25e15bf` = `origin/main`. The tree had one unintended change, the
-  Godot editor moving `config/features` one line down in `project.godot` (no setting changed); it was
-  restored with `git checkout` before anything else. The unmodified Phase 13 suite passed **35 of 35**
-  (909 s). The normal entry point (title screen, real window, no script, 240 frames) exited 0 on
+played sessions, a scratch-only driver autoload): `dc_carl_p15_play`, `dc_carl_p15_mutation`,
+`dc_carl_p15_fixture`.
+- **Baseline before changes:** HEAD `f72c739` = `origin/main`. The tree had one unintended change, the
+  Godot editor moving `config/features` one line down in `project.godot` again (no setting changed);
+  it was restored with `git checkout` first. The unmodified Phase 14 suite passed **38 of 38**
+  (16 min 10 s). The normal entry point (title screen, real window, no script, 240 frames) exited 0 on
   "OpenGL ES 3.0 (ANGLE 2.1.1) … ANGLE (NVIDIA, NVIDIA GeForce GTX 750 Ti Direct3D11 …)":
   **`opengl3_angle`**; it created no settings file and left the player's save unchanged (same hash).
-  (The class cache was current; one `--import` after adding the new scripts registered
-  `Interactable`, `InteractionController` and `TreasureChest`.)
-- **Real Phase 13 settings fixtures:** `tests/fixtures/phase13_settings_v1_custom.json` and
-  `phase13_settings_v1_e_taken.json` were written by the Phase 13 code itself (`git archive 25e15bf`
-  into a scratch folder with its own user-data folder `dc_carl_p14_fixture`, a scratch script calling
-  its `SettingsManager.set_binding()`), so they are genuine version 1 files.
-- **Test suite:** `run_all.gd` on the Phase 14 code first gave **36 of 38**: `test_treasure_chest.gd`
-  provoked a `push_warning` (the boxed-in chest), which `run_all.gd` rightly does not excuse (the
-  chest now reports that level mistake as an error, which the test takes and checks), and
-  `test_rebinding_run.gd` reached Reset to Defaults by a row number that Interact had shifted (it now
-  uses the row after the controls). Both then passed on their own, and the final tree passed **38 of 38** (960 s). New:
-  `test_interaction.gd`, `test_treasure_chest.gd`, `test_floor_08_run.gd` (98 checks). The settings
-  manager test makes 333 checks, the restart test 110, the windowed test (real window, ANGLE) 333.
-- **Mutation checks** (`dc_carl_p14_mutation`, its own user-data folder; a scratch harness applied
+  The class cache was current; one `--import` after adding the new scripts registered `Lever` and
+  `ControlledDoor`.
+- **Real Phase 14 fixtures:** `tests/fixtures/phase14_save_v3_floor_08.json` and
+  `phase14_settings_v2_interact_q.json` were written by the Phase 14 code itself (`git archive f72c739`
+  into a scratch folder with its own user-data folder `dc_carl_p15_fixture`; a scratch script set up a
+  run and entered Floor 8, whose `Level._ready()` saved the checkpoint, then called
+  `SettingsManager.set_binding(&"interact", KEY_Q)`).
+- **Test suite:** `run_all.gd` on the final Phase 15 code: **41 of 41** (16 min 50 s). New: `test_lever_door.gd` (96
+  checks), `test_side_room_run.gd` (80), `test_floor_09_run.gd` (73); the windowed test now makes 383
+  checks. (A first full run, before a comment-only change to `controlled_door.gd` and three added
+  checks in `test_side_room_run.gd`, also passed 41 of 41, in 16 min 49 s.)
+- **Mutation checks** (`dc_carl_p15_mutation`, its own user-data folder; a scratch harness applied
   each mutation, ran its tests headless, compared exit code, FAIL lines and engine errors with an
   unmutated run of the same copy, and restored the files from a pristine copy, checked identical
   afterwards; `test_project_setup.gd` reports its two folder-name failures in any copy, which the
-  baseline subtracts). **All 15 caught:** Interact hard-coded to E after rebinding (interaction,
-  floor_08_run, settings_restart); the prompt hard-coded to E (interaction, floor_08_run,
-  settings_restart); the v1 migration resetting the custom keys (settings_manager, settings_restart);
-  the v1 migration stealing E from an existing binding (settings_manager, settings_restart); duplicate
-  bindings allowed (settings_manager, settings_menu); the chest granting the inventory directly
-  (treasure_chest, floor_08_run); the chest opening twice (treasure_chest, floor_08_run); Donut
-  collecting chest loot (treasure_chest); a Floor 7 retry keeping the chest open (floor_08_run); a
-  retry keeping collected chest loot (floor_08_run); uncollected loot granted on the way to Floor 8
-  (floor_08_run); Floor 8 missing from the registry (save_manager, floor_08_run); Floor 8 with stairs
-  back up (floor_08_run, floor_07_run); the save schema bumped to 4 (project_setup, save_manager,
-  floor_08_run); tests using the production settings file with the guard opened (settings_manager,
-  project_setup).
-- **Real gameplay, real processes** (`dc_carl_p14_play`: the normal title screen as main scene, real
+  baseline subtracts). **All 20 caught:** the lever activating twice (lever_door, side_room_run); its
+  prompt staying after activation (lever_door, side_room_run); the lever checking a literal E
+  (lever_door, side_room_run, floor_09_run); the door starting open (lever_door, side_room_run); a
+  closed door without collision (lever_door, side_room_run); the door not removing its collision
+  (lever_door, side_room_run); the door closing again (lever_door); the lever opening a hard-coded
+  Floor 8 path (lever_door); one key press using the lever and the chest (lever_door, interaction);
+  a Floor 8 retry leaving the lever active, leaving the door open, or keeping the optional loot
+  (side_room_run each); Return to Title keeping the mechanism state (side_room_run); Floor 8's stairs
+  requiring the lever, or the chest (floor_09_run each); `floor_09` missing from the registry
+  (floor_09_run, save_manager); Floor 9 with stairs back up (floor_09_run, floor_07_run); the save
+  schema bumped to 4 (project_setup, save_manager, floor_09_run); the settings schema bumped to 3
+  (project_setup, settings_manager, floor_09_run); tests using the production save and settings files
+  with both guards opened (save_isolation, project_setup, settings_manager).
+- **Real gameplay, real processes** (`dc_carl_p15_play`: the normal title screen as main scene, real
   windows, key events through Godot's input pipeline pressing whichever keys are bound, movement
-  included; no `--rendering-driver` argument: every run reported `opengl3_angle`; every run ended
-  through the game's own Quit Game with exit code 0; no engine error, warning or crash in any log):
-  - *rebind_q* (32 checks), from the real Phase 11 Floor 6 save and no settings file: the title's
-    Settings lists Interact = E; Enter on Interact, Q: "Interact is now Q."; Continue; Floor 6 played
-    to its stairs (top corridor, then the east side, real enemies) and Floor 7 reached (entry: 1
-    potion, no bombs, HP 80). At the chest the prompt says **"Q: Open Chest"**; the pause menu hides
-    it, and Q and E there do nothing; Q in the action menu does nothing; **E does nothing; Q opens the
-    chest once**: two pickups, no inventory change; Q again nothing; walking over them: potion +1,
-    bombs +2. Carl walked into the pair and died: GAME OVER, E and Q did nothing; Enter: the chest
-    closed, no loot, the entry items. Opened again (exactly one set), collected; pause > Return to
-    Title > Yes: the title describes the Floor 7 checkpoint; Continue: the chest closed, no loot, the
-    entry items. Opened, collected, the stairs: **Floor 8 with potion 2 and bombs 2** (the chest's loot
-    carried down), Carl and Donut, no stairs, a Gelatinous and a Spitting Blob; the blob noticed the
-    party and took Slingshot damage. (The driver's first attempt required the blob to target Carl
-    himself and failed there, the blob already gone, most likely scratched to death by Donut after
-    choosing her: ordinary targeting. The check was corrected to "a party member" and the whole
-    scenario re-run from a fresh folder; the numbers above are from that run.)
-  - *default_e* (8 checks), a fresh folder with the same save and no settings: "E: Open Chest", E
-    opens it, loot collected, Floor 8; the save on disk is the Floor 8 checkpoint, version 3, with
-    `"small_health_potion": 2, "blast_bomb": 2`. Quit Game on Floor 8.
-  - *continue_f8* (13 checks), a **new process** on that folder: the title describes the Floor 8
-    checkpoint; Settings > Interact = Q (the save untouched); Continue: Floor 8 with potion 2 and
-    bombs 2, Carl 80, Donut 40, the same slots; Interact still Q; `settings.json` version 2 with Q, the
-    save without bindings; the save's hash is the same before and after (Continue re-saves the same
-    checkpoint).
-  - *migrate_custom* (9 checks): the real Phase 13 file (I/K/J/L, 1/2/3/4, Tab) as `settings.json`:
-    at startup I/K/J/L, 1/2/3/4, Tab and **Interact E**, `migrated_from_version` 1, no settings
-    message; `settings.json` is now version 2 with ten keys; the Settings screen lists
-    `I|K|J|L|1|2|3|4|Tab|E`; Continue, Floor 6 played with I/J/K/L to Floor 7; the prompt "E: Open
-    Chest"; Q does nothing, E opens it.
-  - *migrate_e_taken* (9 checks): the real Phase 13 file with E and F on the W and A slots: Interact
-    **R**, E and F kept on the W and A slots, all unique; version 2 written; the Settings screen lists
-    `I|K|J|L|E|F|3|4|Tab|R`; the HUD reads "E: Slingshot   F: Potion x1 ..."; on Floor 7 "R: Open
-    Chest"; E (the W slot: a stone) does not open it, R does.
-  - *restart_e_taken* (2 checks), a **new process**: Interact R, `migrated_from_version` 0, the Settings
-    screen unchanged, and `settings.json` byte-identical (not rewritten).
+  included; no `--rendering-driver` argument: every run reported `opengl3_angle` and version 0.15.0;
+  every run ended through the game's own Quit Game with exit code 0; no engine error, warning or crash
+  in any log). Each scenario marked *fresh* started from a folder holding only the real Phase 14 Floor
+  8 save (Carl 80, Donut 40, Slingshot W, 1 bomb A, Bat S), with no settings file:
+  - *mechanism_e* (22 checks, fresh): Continue → Floor 8: lever inactive, door closed and solid, chest
+    closed, no loot; the stairs lead to Floor 9 outside the side room, and the navigation route from
+    the spawn point to them never enters it. Walking to the lever: **"E: Pull Lever"**; Escape hides it,
+    E in the pause menu does nothing; **E pulls it**: active look, the door opens (not solid), no
+    prompt; E again: nothing (the door opened once). Carl walks through the doorway into the side room,
+    **Donut follows him in**; "E: Open Chest", E: "Potion x1" and "Blast Bomb x1" lie there, no
+    inventory change; walking over them: potion +1, bomb +1. Floor 8 combat: the blob notices the
+    party and takes 30 (Slingshot and Bat). Walking to the stairs: **Floor 9 with potion 1, bombs 2**
+    (what Carl carried), the save the Floor 9 checkpoint (version 3); Floor 9 has no stairs. Floor 9
+    combat: the blob notices the party, a bomb is thrown (1 left) and the blob takes damage (10: that
+    run's bomb landed wide, the Slingshot hit; the bomb's exact 20 is checked by
+    `test_floor_09_run.gd`). (The driver's first attempt stopped at two driver mistakes, not game
+    faults: its loot loop read a pickup Carl had already walked over, and its Floor 9 throw aimed at
+    where the blob no longer was. Both were fixed and the whole scenario re-run from a fresh folder;
+    the numbers above are from that run.)
+  - *skip* (6 checks, fresh), the **mandatory skip path**: the lever, the door and the chest never
+    touched; Carl walks from the spawn point to the stairs; Floor 9 opens; at the moment he stepped on
+    the stairs the lever was inactive, the door closed and solid and the chest closed; Floor 9 has
+    exactly the Floor 8 entry items and the save is the Floor 9 checkpoint (`blast_bomb: 1`).
+  - *retry_title* (18 checks, fresh): lever, door, chest, both pickups collected; Carl down (the driver
+    applied the damage): GAME OVER, E does nothing; Enter: **lever inactive, door closed and solid,
+    chest closed, no loot, the entry items and HP**; used again: exactly one set; pause > Return to
+    Title > Yes: the title describes the Floor 8 checkpoint; Continue: the same rollback; used a third
+    time, then Quit Game on Floor 8.
+  - *relaunch_f8* (4 checks), a **new process** on that folder: the title describes the Floor 8
+    checkpoint; Continue: lever inactive, door closed, chest closed, no loot, no potion, one bomb,
+    Carl 80, Donut 40.
+  - *rebind_q* (12 checks, fresh): the title's Settings lists Interact = E; captured as Q; Continue;
+    at the lever **"Q: Pull Lever"**, E does nothing, Q pulls it and the door opens; the side-room
+    chest says "Q: Open Chest", E does nothing, Q opens it; collected (potion 1, bombs 2); the stairs:
+    Floor 9 with potion 1 and bombs 2; the save is Floor 9, version 3, with no key bindings (Donut had
+    taken a hit on Floor 8: 30 / 60 in the checkpoint).
+  - *restart_q* (7 checks), a **new process**: Interact Q (not migrated); the title describes the Floor
+    9 checkpoint; `settings.json` is version 2 with Q and no run data; Continue: Floor 9 with potion 1,
+    bombs 2, the Slingshot and the Bat, Carl 80 and Donut 30 as checkpointed, the slots as carried
+    ("W: Slingshot   A: Blast Bomb x2 ..."); the save file byte-identical afterwards. (Its first run
+    expected Donut 40 — a driver mistake, as the checkpoint said 30 — and was re-run with the check
+    reading the checkpoint.)
 - **Visual check under ANGLE** (the sessions' screenshots at 1280×720, 640×360 and 1024×768,
-  inspected, plus the windowed test's layout checks): the title; the Settings screen with the Interact
-  row (default E, Q after capture, migrated E and R); the prompt "Q: Open Chest", "E: Open Chest" and
-  "R: Open Chest" above the closed chest; the open chest with "Potion x1" and "Blast Bomb x2" below it;
-  the pause menu over the chest with no prompt; the HUD ("A: Potion x2") and the action menu ("Blast
-  Bomb x2   (no slot)") after collecting; Floor 8 with its signs. Everything is drawn and inside its
-  panel; at 640×360 the text is small but legible, as before. The prompt sits over Carl when he
-  stands right above the chest (see Known issues).
+  inspected, plus the windowed test's layout checks): the inactive lever (red knob) with "E: Pull
+  Lever" and "Q: Pull Lever" above it, the closed door (barred slab, red light) and the side-room
+  sign; the pause menu near the lever with no prompt; the pulled lever (green knob) and the open door
+  (only its frame); inside the side room the closed chest with "E: Open Chest", then the open chest
+  with "Potion x1" and "Blast Bomb x1" (labels apart); the menu after collecting; Floor 9 with its
+  signs, and Floor 9 combat. Everything is drawn and inside the window; at 640×360 the text is small
+  but legible, as before. Donut sometimes stands over the side-room sign (she follows Carl).
 - **Save and settings locations, before and after** (read-only snapshots):
-  - *production folder* `%APPDATA%\DC CARL\`: it now holds the player's own `savegame.json` (372
-    bytes, written 2026-09-26 19:58, before this phase started) and no `settings.json`; the save's
-    SHA-256 is identical at the end, and no `settings.json` was created; `test_saves/` is empty at the
-    end. The one normal launch only read;
-  - *old shared folder* `%APPDATA%\Godot\app_userdata\Carl & Donut Dungeon Prototype\`: every file's
-    hash, size and time identical at the end;
+  - *production folder* `%APPDATA%\DC CARL\`: the player's own `savegame.json` (399 bytes, last
+    written 2026-09-26 22:02, before this phase started) and no `settings.json`; the save's SHA-256 is identical
+    at the end, no `settings.json` was created, and `test_saves/` is empty at the end. The one normal
+    launch only read;
+  - *old shared folder* `%APPDATA%\Godot\app_userdata\Carl & Donut Dungeon Prototype\`: every
+    file's hash identical at the end;
   - *sibling project* `../dc_carl_codex`: `git status` and HEAD (`3e5b9de`) identical before and after;
-  - scratch saves and settings lived only in the `dc_carl_p14_*` folders.
+  - scratch saves and settings lived only in the `dc_carl_p15_*` folders.
 - No test file is left in `test_saves/`, and no save or settings file is tracked by Git.
 
 ## Known issues / limitations
+- **Levers and doors (Phase 15 placeholders and simplifications):**
+  - the lever and the door are drawn polygons (no sprite, animation or sound): the lever's handle
+    simply flips and its knob turns green; the door vanishes to its frame at once (no sliding);
+  - levers are one-shot and doors only open: there are no toggles, timers, closing, locked or
+    key-card doors, and Carl cannot open a door himself;
+  - the navigation mesh is baked once at load with every door's doorway open (doors live outside
+    `NavigationRegion2D`), and nothing rebakes. A door must therefore close off a dead end with
+    nobody inside; a door between two parts of a level that enemies travel between would let them
+    plan paths through it while it is closed (they would push against it). Floor 8's side room
+    follows the rule;
+  - a lever's range and line of sight are the Phase 14 ones (56 px, centre to centre, one ray), so a
+    lever in a corner can be pulled only from its open sides;
+  - with Carl standing right above the lever, its prompt is drawn over him (as for the chest);
+  - pulling a lever, an open door and the side room's loot are never saved (by design, the
+    floor-entry checkpoint): a retry or Continue puts them back;
+  - the door is one fixed size (64 × 32, two tiles).
 - **Interaction and chests (Phase 14 placeholders and simplifications):**
   - the chest is drawn polygons (closed: a brown box with gold bands and a latch; open: the lid raised
     and a dark inside): no sprite, animation, sound or particle, and the loot simply appears (no
@@ -2021,8 +2197,8 @@ played sessions, a scratch-only driver autoload): `dc_carl_p14_play`, `dc_carl_p
   - the prompt is hidden whenever the game is paused, so the pause menu screenshot never shows it;
   - the prompt sits just above the object, so with Carl standing right above a chest it is drawn over
     him (on top, with an outline: still readable; seen in the real-window run);
-  - only one interactable exists (the chest); the architecture allows more, but there are no NPCs,
-    switches, doors, shrines or dialogue, and interaction is not used to lock stairs or objectives;
+  - two kinds of interactable exist (the chest; since Phase 15 the lever); there are no NPCs,
+    shrines or dialogue, and interaction is never used to lock stairs or objectives;
   - an open chest cannot be reopened in that visit, but a retry, Return to Title or Continue closes it
     again, by design (the floor-entry checkpoint);
   - chest contents are checked when the chest opens: a misconfigured chest opens and drops only its
@@ -2206,7 +2382,7 @@ played sessions, a scratch-only driver autoload): `dc_carl_p14_play`, `dc_carl_p
     included); there is no separate aiming;
   - a projectile is a point (a ray), not a disc: it hits whatever its centre line touches;
   - projectiles are not saved: quitting mid-flight loses them (like everything mid-floor).
-- **Floors 3 to 8 are small test rooms.** Floor 8 has no exit ("Prototype: the way further down is
+- **Floors 3 to 9 are small test rooms.** Floor 9 has no exit ("Prototype: the way further down is
   not built yet."). The Floor Guardian, Dungeon Brute and prototype-complete
   exit (GAME_SPEC §14) are later work. Floor 5's penned blob goes for Donut as soon as she
   arrives (by design); a player who walks straight on leaves her to fight it alone.
@@ -2241,32 +2417,31 @@ played sessions, a scratch-only driver autoload): `dc_carl_p14_play`, `dc_carl_p
 
 ## Manual verification required
 Your save is `%APPDATA%\DC CARL\savegame.json` and your control settings are
-`%APPDATA%\DC CARL\settings.json` (created the first time you change a key). Nothing in Phase 14
+`%APPDATA%\DC CARL\settings.json` (created the first time you change a key). Nothing in Phase 15
 created or changed either: the tests use `user://test_saves/`, and every game-mode run used a scratch
-copy with its own folder. If you already have a Phase 13 `settings.json`, the first start of Phase 14
-upgrades it once to version 2 (your nine keys stay; Interact gets E, or the first free key of F, R, T,
-... if you had put something on E).
-1. Open the project in Godot 4.7.2 and let it import (four new scripts, two new scenes). The Output
+copy with its own folder. Phase 15 changes neither file format.
+1. Open the project in Godot 4.7.2 and let it import (two new scripts, three new scenes). The Output
    panel should show no errors, and the renderer line should still mention **ANGLE**.
-2. Run the game: **Settings** now lists ten controls, the last **Interact = E**. Try binding Action
-   Slot W to E: "E is already assigned to Interact.".
-3. Continue (or play down) to **Floor 7**. In the south-west, below the start, stands a brown chest.
-   Walk up to it: "E: Open Chest" appears above it. Press Escape (the prompt disappears while paused),
-   then Escape again.
-4. Press **E**: the chest opens and a potion and two Blast Bombs appear below it. Nothing is added
-   until you walk over them. E again does nothing.
-5. Die on Floor 7 (or pause > Return to Title > Continue): the chest is closed again and the items
-   you picked up are gone; open it again for exactly one set.
-6. Collect the loot and take the stairs in the far south-east corner to **Floor 8 - Storeroom**: the
-   HUD and the menu show the carried potion and bombs. Quit, start again, Continue: Floor 8 with the
-   same items.
-7. Optional: Settings > Interact > press Q. At the chest the prompt says "Q: Open Chest"; E does
-   nothing and Q opens it. Reset to Defaults puts it back on E.
+2. Continue (or play down) to **Floor 8 - Storeroom**. South of the start, a walled side room has a
+   grey iron door with a red light; next to the door stands a small lever with a red knob. The sign
+   above says "Side room: the lever opens its door.".
+3. Walk up to the lever: "E: Pull Lever". Press Escape (the prompt disappears while paused), then
+   Escape again. Press **E**: the handle flips, the knob turns green and the door opens (only its
+   frame is left). E again does nothing.
+4. Walk into the side room (Donut follows) and open the chest: a potion and a Blast Bomb appear
+   below it. Walk over them.
+5. Die on Floor 8 (or pause > Return to Title > Continue): the lever is up again, the door closed,
+   the chest closed and the items gone; do it again for exactly one set.
+6. Take the stairs in the far south-east corner to **Floor 9 - Lower Hall** (with or without the side
+   room: the stairs never need the lever). Quit, start again, Continue: Floor 9 with what you carried.
+7. Optional: Settings > Interact > press Q. At the lever the prompt says "Q: Pull Lever"; E does
+   nothing and Q pulls it. Reset to Defaults puts it back on E.
 
 ## Next phase
-Phase 15 is **not specified** here. Provide its prompt, with acceptance criteria, after Phase 14 is
-reviewed. (Locked chests, objective/event-locked stairs, timers, NPCs, dialogue, switches, doors and
-Floor 9 were deliberately not started; the interaction architecture is ready for them.)
+Phase 16 is **not specified** here. Provide its prompt, with acceptance criteria, after Phase 15 is
+reviewed. (Floor 10, objective/event-locked stairs, timers, quests, NPCs, dialogue, keys, locked
+chests, toggle switches and closing doors were deliberately not started; levers and doors are ready
+to be reused, see "To add a lever that opens a door".)
 
 Groundwork for later phases:
 - **Donut:** her numbers are exports on `donut.tscn` (`Health.max_health`, `down_time`,
@@ -2286,12 +2461,17 @@ Groundwork for later phases:
 - **More reactions:** `Knockback` + `KnockbackReceiver` are the pattern. Carl or Donut could be
   made pushable by giving them a receiver (and making their scripts respect it); an enemy attack
   could push by setting its own knockback numbers. Neither is done yet.
-- **More floors:** a new scene, stairs down from the previous floor (Floor 8 has none yet),
+- **More floors:** a new scene, stairs down from the previous floor (Floor 9 has none yet),
   and a line in `FloorRegistry`.
 - **More interactables:** see "To add another interactable" (an `Interactable` child and a handler;
   no Carl, controller or save change). Something that should stay changed after a retry or Continue
-  (a switch that stays pulled) would be new saved data (a save version bump), which Phase 14 avoided
-  on purpose.
+  (a switch that stays pulled) would be new saved data (a save version bump), which Phases 14 and 15
+  avoided on purpose.
+- **More mechanisms:** another Lever/Door pair is data only ("To add a lever that opens a door").
+  Objective-locked stairs would be a new condition on the stairs (Phase 15 deliberately left
+  `stairs.gd` alone). A door between two travelled areas would need a navigation rebake or a
+  navigation obstacle when it opens; a toggle or closing door would add `close()` and handle
+  bodies in the doorway.
 - **More chests:** place `treasure_chest.tscn` and set `contents` (see "To place a treasure chest").
   Locked chests would add a condition in an `Interactable` subclass; random loot would extend
   `TreasureChest.get_loot()`.

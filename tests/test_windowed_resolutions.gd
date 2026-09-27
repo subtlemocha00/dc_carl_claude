@@ -46,6 +46,12 @@ extends "res://tests/support/game_test.gd"
 ## screen at each size; after collecting them, the HUD's slot bar and the menu rows with the new
 ## quantities fit. At the end, Floor 8's three signs on screen, fitting and clear of the HUD, at
 ## each size.
+## Phase 15 adds, at each size, on Floor 8: its stairs hint (it replaced the prototype note); at the
+## side room, the inactive lever, the closed door, the side-room sign and the prompt "E: Pull Lever"
+## on screen, the prompt fitting, clear of the HUD and the sign and above the lever, and hidden under
+## the pause menu; once pulled, the active lever and the open door on screen with no prompt;
+## inside, the side-room chest's prompt, then the open chest and its two loot pickups (texts not
+## overlapping). Then Floor 9's three signs on screen, fitting and clear of the HUD.
 ##
 ## Run from the project folder (NOT headless; a game window opens briefly):
 ##     godot --path . -s res://tests/test_windowed_resolutions.gd
@@ -61,6 +67,7 @@ const FLOOR_5_PATH := "res://scenes/levels/floor_05.tscn"
 const FLOOR_6_PATH := "res://scenes/levels/floor_06.tscn"
 const FLOOR_7_PATH := "res://scenes/levels/floor_07.tscn"
 const FLOOR_8_PATH := "res://scenes/levels/floor_08.tscn"
+const FLOOR_9_PATH := "res://scenes/levels/floor_09.tscn"
 const POTION: ActionDefinition = preload("res://resources/actions/small_health_potion.tres")
 const SLINGSHOT: ActionDefinition = preload("res://resources/actions/slingshot.tres")
 const BAT: ActionDefinition = preload("res://resources/actions/baseball_bat.tres")
@@ -178,6 +185,8 @@ func _run_checks() -> void:
 	await _check_pause_menu()
 	await _check_title_screen()
 	await _check_floor_8()
+	await _check_side_room()
+	await _check_floor_9()
 	finish()
 
 
@@ -726,11 +735,128 @@ func _check_chest() -> void:
 	await wait_physics_frames(10)
 
 
-## Phase 14: Floor 8's three signs at each size, on screen, fitting and clear of the HUD.
+## Phase 14: Floor 8's three signs at each size, on screen, fitting and clear of the HUD (since
+## Phase 15 the stairs hint instead of the prototype note).
 func _check_floor_8() -> void:
 	game_state().start_new_run()
 	change_scene_to_file(FLOOR_8_PATH)
 	await wait_for_scene(FLOOR_8_PATH)
+	var level := current_scene
+	var hud := level.get_node("HUD")
+	var hud_rects: Array[Rect2] = []
+	for node_path: String in ["%HealthLabel", "%DonutHealthLabel", "%ActionSlotsLabel", "MenuHint"]:
+		hud_rects.append((hud.get_node(node_path) as Control).get_global_rect())
+	for window_size in WINDOW_SIZES:
+		DisplayServer.window_set_size(window_size)
+		await wait_physics_frames(10)
+		var label := "%dx%d" % [window_size.x, window_size.y]
+		var visible_rect := root.get_visible_rect()
+		for sign_path: String in ["Signs/FloorTitle", "Signs/Hint", "Signs/StairsHint"]:
+			var sign_label: Label = level.get_node(sign_path)
+			var sign_rect := _on_screen(sign_label)
+			check(visible_rect.encloses(sign_rect) and sign_label.get_minimum_size().x <= sign_label.size.x
+					and hud_rects.all(func(r: Rect2) -> bool: return not r.intersects(sign_rect)),
+					"%s: Floor 8's %s is on screen, fits and is clear of the HUD" % [label, sign_path.get_file()], str(sign_rect))
+	DisplayServer.window_set_size(WINDOW_SIZES[0])
+	await wait_physics_frames(10)
+
+
+## Phase 15: Floor 8's side room at each size: the lever, the door, the sign and the prompts, before
+## and after the lever is pulled, then the side-room chest and its loot.
+func _check_side_room() -> void:
+	var level := current_scene
+	var lever: Lever = level.get_node("NavigationRegion2D/Props/SideRoomLever")
+	var door: ControlledDoor = level.get_node("Doors/SideRoomDoor")
+	var chest: TreasureChest = level.get_node("NavigationRegion2D/Props/SideRoomChest")
+	var side_sign: Label = level.get_node("Signs/SideRoomSign")
+	var carl: CharacterBody2D = level.get_node("Actors/Carl")
+	var prompt: Label = (carl.get_node("InteractionController") as InteractionController).prompt_label
+	var pause: CanvasLayer = level.get_node("PauseMenu")
+	var hud := level.get_node("HUD")
+	var hud_rects: Array[Rect2] = []
+	for node_path: String in ["%HealthLabel", "%DonutHealthLabel", "%ActionSlotsLabel", "MenuHint"]:
+		hud_rects.append((hud.get_node(node_path) as Control).get_global_rect())
+	for enemy in level.get_node("Actors").get_children().filter(func(node: Node) -> bool: return node is Enemy):
+		enemy.detection_range = 0.0
+		enemy.chase_range = 0.0
+	carl.teleport_to(lever.global_position + Vector2(34, 0))
+	await wait_physics_frames(3)
+	for window_size in WINDOW_SIZES:
+		DisplayServer.window_set_size(window_size)
+		await wait_physics_frames(10)
+		var label := "%dx%d" % [window_size.x, window_size.y]
+		var visible_rect := root.get_visible_rect()
+		check(not lever.is_active() and lever.inactive_look.is_visible_in_tree() and visible_rect.has_point(_on_screen_point(lever.global_position)),
+				label + ": the inactive lever is drawn on screen")
+		check(door.closed_look.is_visible_in_tree() and visible_rect.has_point(_on_screen_point(door.global_position)),
+				label + ": the closed door is drawn on screen")
+		var sign_rect := _text_on_screen(side_sign)
+		check(visible_rect.encloses(sign_rect) and side_sign.get_minimum_size().x <= side_sign.size.x, label + ": the side-room sign is on screen and fits",
+				str(sign_rect))
+		var prompt_rect := _on_screen(prompt)
+		check(prompt.visible and prompt.text == "E: Pull Lever" and visible_rect.encloses(prompt_rect) and prompt.get_minimum_size().x <= prompt.size.x
+				and hud_rects.all(func(r: Rect2) -> bool: return not r.intersects(prompt_rect)) and not prompt_rect.intersects(sign_rect),
+				label + ": the prompt \"E: Pull Lever\" is on screen, fits and is clear of the HUD and the sign", str(prompt_rect))
+		check(prompt_rect.end.y <= _on_screen_point(lever.global_position).y, label + ": the prompt sits above the lever")
+		await tap_key(KEY_ESCAPE)
+		check(pause.is_open() and not prompt.visible, label + ": under the pause menu there is no prompt")
+		await tap_key(KEY_ESCAPE)
+		await wait_physics_frames(2)
+	DisplayServer.window_set_size(WINDOW_SIZES[0])
+	await wait_physics_frames(10)
+	await tap_key(KEY_E)
+	await wait_physics_frames(3)
+	check(lever.is_active() and door.is_open(), "E pulls the lever and the door opens")
+	for window_size in WINDOW_SIZES:
+		DisplayServer.window_set_size(window_size)
+		await wait_physics_frames(10)
+		var label := "%dx%d" % [window_size.x, window_size.y]
+		var visible_rect := root.get_visible_rect()
+		check(lever.active_look.is_visible_in_tree() and not lever.inactive_look.is_visible_in_tree()
+				and visible_rect.has_point(_on_screen_point(lever.global_position)) and not prompt.visible,
+				label + ": the pulled lever is drawn on screen, with no prompt")
+		check(door.open_look.is_visible_in_tree() and not door.closed_look.is_visible_in_tree() and visible_rect.has_point(_on_screen_point(door.global_position)),
+				label + ": the open door is drawn on screen")
+	DisplayServer.window_set_size(WINDOW_SIZES[0])
+	carl.teleport_to(chest.global_position + Vector2(0, 32))
+	await wait_physics_frames(10)
+	for window_size in WINDOW_SIZES:
+		DisplayServer.window_set_size(window_size)
+		await wait_physics_frames(10)
+		var label := "%dx%d" % [window_size.x, window_size.y]
+		var visible_rect := root.get_visible_rect()
+		var prompt_rect := _on_screen(prompt)
+		check(chest.get_node("ClosedLook").is_visible_in_tree() and visible_rect.has_point(_on_screen_point(chest.global_position))
+				and prompt.text == "E: Open Chest" and visible_rect.encloses(prompt_rect) and hud_rects.all(func(r: Rect2) -> bool: return not r.intersects(prompt_rect)),
+				label + ": in the side room, the closed chest and \"E: Open Chest\" are on screen", str(prompt_rect))
+	DisplayServer.window_set_size(WINDOW_SIZES[0])
+	await wait_physics_frames(10)
+	await tap_key(KEY_E)
+	await wait_physics_frames(3)
+	var loot: Array = level.get_node("Pickups").get_children().filter(func(node: Node) -> bool: return node is ItemPickup)
+	check(chest.is_open() and loot.size() == 2, "E opens the side-room chest: two pickups")
+	for window_size in WINDOW_SIZES:
+		DisplayServer.window_set_size(window_size)
+		await wait_physics_frames(10)
+		var label := "%dx%d" % [window_size.x, window_size.y]
+		var visible_rect := root.get_visible_rect()
+		check(chest.get_node("OpenLook").is_visible_in_tree() and not prompt.visible, label + ": the open side-room chest, with no prompt")
+		for pickup: ItemPickup in loot:
+			var pickup_label: Label = pickup.get_node("Label")
+			check(visible_rect.encloses(_on_screen(pickup_label)) and pickup_label.get_minimum_size().x <= pickup_label.size.x,
+					"%s: the side-room loot \"%s\" is on screen" % [label, pickup_label.text])
+		if loot.size() == 2:
+			var rects: Array = loot.map(func(pickup: ItemPickup) -> Rect2: return _text_on_screen(pickup.get_node("Label")))
+			check(not (rects[0] as Rect2).intersects(rects[1]), label + ": the two loot labels' texts do not overlap", str(rects))
+	DisplayServer.window_set_size(WINDOW_SIZES[0])
+	await wait_physics_frames(10)
+
+
+## Phase 15: Floor 9's three signs at each size, on screen, fitting and clear of the HUD.
+func _check_floor_9() -> void:
+	game_state().start_new_run()
+	change_scene_to_file(FLOOR_9_PATH)
+	await wait_for_scene(FLOOR_9_PATH)
 	var level := current_scene
 	var hud := level.get_node("HUD")
 	var hud_rects: Array[Rect2] = []
@@ -746,7 +872,7 @@ func _check_floor_8() -> void:
 			var sign_rect := _on_screen(sign_label)
 			check(visible_rect.encloses(sign_rect) and sign_label.get_minimum_size().x <= sign_label.size.x
 					and hud_rects.all(func(r: Rect2) -> bool: return not r.intersects(sign_rect)),
-					"%s: Floor 8's %s is on screen, fits and is clear of the HUD" % [label, sign_path.get_file()], str(sign_rect))
+					"%s: Floor 9's %s is on screen, fits and is clear of the HUD" % [label, sign_path.get_file()], str(sign_rect))
 	DisplayServer.window_set_size(WINDOW_SIZES[0])
 	await wait_physics_frames(10)
 

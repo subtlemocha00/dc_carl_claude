@@ -3,8 +3,9 @@ extends "res://tests/support/game_test.gd"
 ## through the real title screen, levels and menus, keys sent through Godot's input pipeline, on this
 ## test's own save and settings files. The run starts from a Floor 7 checkpoint (Carl 80, Donut 40,
 ## the Slingshot on W, one Blast Bomb on A, the Bat on S, Fists on D, no potion).
-## - A. floor_08 is registered as "Floor 8" (nine floors, no floor_09); every exit leads one floor
-##   down: Floor 7's to Floor 8, Floor 8 has none. Floor 7 has one chest, under its navigation
+## - A. floor_08 is registered as "Floor 8", the ninth floor (Phase 15 adds floor_09, no floor_10);
+##   every exit leads one floor down: Floor 7's to Floor 8, Floor 8's (Phase 15) to Floor 9, which
+##   has none. Floor 7 has one chest, under its navigation
 ##   region, holding Small Health Potion x1 and Blast Bomb x2, dropping into its Pickups node.
 ## - B. Continue opens Floor 7: the chest closed, no loot lying anywhere, no prompt at the spawn.
 ## - C. Modal safety at the chest, "E: Open Chest" shown: E does nothing while the action menu is
@@ -22,7 +23,8 @@ extends "res://tests/support/game_test.gd"
 ## - G. Collecting only the potion and taking the stairs: Floor 8's checkpoint has the potion and
 ##   one bomb, not the two left lying on Floor 7.
 ## - H. Collecting both (and putting the potion on W in the menu), then the stairs: Floor 8 arrival
-##   (Carl, Donut, camera, sign, HUD, a Gelatinous and a Spitting Blob, no exits, no loop), its
+##   (Carl, Donut, camera, sign, HUD, a Gelatinous and a Spitting Blob, only the stairs down to
+##   Floor 9 and its closed side-room chest since Phase 15, no loop), its
 ##   checkpoint in memory and on disk (still save_version 3, seven fields: potion 1, bombs 3, the
 ##   Slingshot and the Bat owned, W potion, A bombs, S Bat, D Fists).
 ## - I. Floor 8 plays: the blob and the Spitting Blob notice Carl, a bomb hurts the blob, the potion
@@ -40,6 +42,7 @@ const FLOOR_PATHS: Array[String] = [
 	"res://scenes/levels/surface.tscn", "res://scenes/levels/floor_01.tscn", "res://scenes/levels/floor_02.tscn",
 	"res://scenes/levels/floor_03.tscn", "res://scenes/levels/floor_04.tscn", "res://scenes/levels/floor_05.tscn",
 	"res://scenes/levels/floor_06.tscn", "res://scenes/levels/floor_07.tscn", "res://scenes/levels/floor_08.tscn",
+	"res://scenes/levels/floor_09.tscn",
 ]
 const FLOOR_7_PATH := "res://scenes/levels/floor_07.tscn"
 const FLOOR_8_PATH := "res://scenes/levels/floor_08.tscn"
@@ -77,10 +80,10 @@ func _run_checks() -> void:
 
 func _check_registry_and_exits() -> void:
 	print("-- A. floor_08 and the exits")
-	check(FloorRegistry.FLOORS.size() == 9 and FloorRegistry.has_floor(&"floor_08") and FloorRegistry.get_scene_path(&"floor_08") == FLOOR_8_PATH
+	check(FloorRegistry.FLOORS.keys()[8] == &"floor_08" and FloorRegistry.has_floor(&"floor_08") and FloorRegistry.get_scene_path(&"floor_08") == FLOOR_8_PATH
 			and FloorRegistry.get_display_name(&"floor_08") == "Floor 8" and FloorRegistry.get_floor_id(FLOOR_8_PATH) == &"floor_08",
 			"floor_08 is the ninth registered floor, shown as 'Floor 8'")
-	check(not FloorRegistry.has_floor(&"floor_09"), "there is no floor_09")
+	check(FloorRegistry.FLOORS.size() == 10 and not FloorRegistry.has_floor(&"floor_10"), "then floor_09 (Phase 15), and no floor_10")
 	for i in FLOOR_PATHS.size():
 		var level: Node = (load(FLOOR_PATHS[i]) as PackedScene).instantiate()
 		var expected: Array = [FLOOR_PATHS[i + 1]] if i + 1 < FLOOR_PATHS.size() else []
@@ -311,9 +314,10 @@ func _all_loot_to_floor_8() -> bool:
 	check(_hud_slots() == hud_carried and current_scene.get_node("HUD/%HealthLabel").text == "Carl HP: 80 / 100"
 			and current_scene.get_node("HUD/%DonutHealthLabel").text == "Donut HP: 40 / 60", "the HUD: the carried slots, Carl 80, Donut 40", _hud_slots())
 	check(_enemies(BLOB_PATH).size() == 1 and _enemies(SPITTER_PATH).size() == 1 and _enemies().size() == 2, "a Gelatinous Blob and a Spitting Blob")
-	check(_destinations(level).is_empty(), "no exits: nothing leads back up to Floor 7, and nothing further down")
-	check(level.find_children("*", "StaticBody2D", true, false).filter(func(node: Node) -> bool: return node is TreasureChest).is_empty()
-			and _all_pickups().is_empty(), "no chest and no loot on Floor 8")
+	check(_destinations(level) == ["res://scenes/levels/floor_09.tscn"], "only the stairs down to Floor 9 (Phase 15): nothing leads back up to Floor 7")
+	var chests := level.find_children("*", "StaticBody2D", true, false).filter(func(node: Node) -> bool: return node is TreasureChest)
+	check(chests.size() == 1 and not chests[0].is_open() and _all_pickups().is_empty(),
+			"Floor 8's one chest (Phase 15, in its side room) is closed, and no loot lies anywhere")
 	var state := game_state()
 	var entry: FloorEntry = state.floor_entry
 	check(entry.scene_path == FLOOR_8_PATH and entry.carl_health == ENTRY_CARL_HP and entry.donut_health == ENTRY_DONUT_HP

@@ -1,7 +1,7 @@
 extends "res://tests/support/game_test.gd"
 ## Phase 10 pause menu checks in the real levels, driven by key events through Godot's input
 ## pipeline:
-## - every level (every registered floor: the Surface and Floors 1-7) has exactly one pause
+## - every level (every registered floor: the Surface and Floors 1-9 since Phase 15) has exactly one pause
 ##   menu: Escape opens it with Resume selected and pauses the game; Escape, or Enter on Resume,
 ##   closes it; Up/Down move the
 ##   selection (wrapping), and it is back on Resume each time it opens; pausing never saves;

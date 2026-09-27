@@ -45,7 +45,7 @@ section 15c):
 - D: action slot 4.
 - Space: open/close inventory.
 - E: interact with the nearby object the prompt names, such as opening a chest (Phase 14,
-  section 15d).
+  section 15d) or pulling a lever (Phase 15, section 15e).
 - Escape: pause/back/cancel as appropriate.
 - Enter: confirm menu/inventory selection; on the GAME OVER screen, retry the current floor.
 
@@ -306,11 +306,14 @@ All three prototype dungeon floors should be manually authored scenes/layouts.
 General progression:
 Surface -> Floor 1 -> Floor 2 -> Floor 3 -> Prototype Complete screen.
 
-Playable progression since Phase 14: Surface -> Floor 1 -> Floor 2 -> Floor 3 -> Floor 4 -> Floor 5
--> Floor 6 -> Floor 7 -> Floor 8. Floor 3 has stairs down to Floor 4, Floor 4 down to Floor 5,
-Floor 5 down to Floor 6, Floor 6 down to Floor 7 and (Phase 14) Floor 7 down to Floor 8, all
-manually authored test floors (sections 14a to 14e); Floor 8 has no exit yet. The Floor 3 Guardian
-and the Prototype Complete screen are still to come.
+Playable progression since Phase 15: Surface -> Floor 1 -> Floor 2 -> Floor 3 -> Floor 4 -> Floor 5
+-> Floor 6 -> Floor 7 -> Floor 8 -> Floor 9. Floor 3 has stairs down to Floor 4, Floor 4 down to
+Floor 5, Floor 5 down to Floor 6, Floor 6 down to Floor 7, (Phase 14) Floor 7 down to Floor 8 and
+(Phase 15) Floor 8 down to Floor 9, all manually authored test floors (sections 14a to 14f); Floor 9
+has no exit yet. The Floor 3 Guardian and the Prototype Complete screen are still to come.
+
+Stairs are always usable. No stairs depend on a lever, a door, a chest, an enemy count, the
+inventory or anything else done on the floor (Phase 15): walking onto them is enough.
 
 Progression is downward only. Once Carl descends, he can never return to the Surface or to a
 shallower floor. Levels have no stairs, exits or triggers that lead back up. This is a design
@@ -485,10 +488,21 @@ is the stairs down to Floor 8 in the far south-east corner.
 ## 14e. Floor 8 — Storeroom (canonical since Phase 14)
 
 A walled test room (stable id `floor_08`, 36 × 20 tiles) where items carried down from Floor 7 (the
-chest's loot, for example) are part of the checkpoint. A partition wall, a pillar and a small block
-shape the paths; one Gelatinous Blob and one Spitting Blob wait beyond the partition. Carl and Donut
-arrive in the north-west. Nothing is scripted. Floor 8 has no exit yet (no Floor 9), and nothing
-leads back up to Floor 7.
+chest's loot, for example) are part of the checkpoint. A partition wall and a pillar (and, until
+Phase 15, a small block; since then the side room's walls) shape the paths; one Gelatinous Blob and one Spitting Blob wait beyond the partition. Carl and Donut
+arrive in the north-west. Nothing is scripted. Nothing leads back up to Floor 7.
+Since Phase 15 Floor 8 also has an **optional side room** in its south-west corner (section 15e):
+a Controlled Door closes its only doorway, and a Lever just outside it opens the door. Inside is a
+treasure chest holding Small Health Potion x1 and Blast Bomb x1. The side room is optional: the
+**stairs down to Floor 9**, in the far south-east corner of the main room, work whether or not the
+lever was pulled, the door opened or the chest opened.
+
+## 14f. Floor 9 — Lower Hall (canonical since Phase 15)
+
+A walled test room (stable id `floor_09`, 36 × 20 tiles) with a few walls, a pillar and a block,
+one Gelatinous Blob and one Spitting Blob. Carl and Donut arrive in the north-west with exactly
+what they carried down from Floor 8 (the Floor 9 checkpoint). Nothing is scripted and there is no
+interactable. Floor 9 has no exit yet (no Floor 10), and nothing leads back up to Floor 8.
 
 ## 15. Saving/checkpoints
 
@@ -524,6 +538,11 @@ Initial save design:
   slot emptied or refilled as for any item). Opening it again drops exactly its contents once more,
   so nothing is ever duplicated. Only what Carl actually carries down the stairs is in Floor 8's
   checkpoint: loot left lying on Floor 7 is not.
+  Levers and doors (Phase 15) follow the same rule. Floor 8's checkpoint is made before its lever
+  can be pulled: a retry, Return to Title or quitting before Floor 9 gives back the lever up, the
+  side-room door closed, its chest closed, no loot lying around and the inventory Carl had on
+  entering. Only what Carl carries down to Floor 9 is in its checkpoint; skipping the side room
+  gives nothing.
 
 Persistent save (canonical since Phase 5):
 - There is one save slot, holding one floor-entry checkpoint: the floor Carl last entered,
@@ -566,6 +585,8 @@ Persistent save (canonical since Phase 5):
 - Phase 14 keeps **version 3**: Floor 8 is one more floor id, chest loot Carl carries is ordinary
   inventory, and whether a chest is open is never saved (the floor-entry checkpoint is made before
   it can be opened). The Interact key is a setting (section 15c).
+- Phase 15 keeps **version 3** (and the settings keep **version 2**): Floor 9 is one more floor id,
+  and whether a lever is pulled or a door open is never saved.
 - No mid-floor saving, multiple save slots or cloud saves in the prototype.
 
 Current-run state (what survives level changes during one playthrough, held in memory) is
@@ -704,6 +725,27 @@ Persisted state should eventually include at least:
   so a retry, Return to Title or Continue always finds the chest closed and its loot not yet given.
 - Chests are solid: Carl, Donut and the enemies walk around them, and projectiles stop at them.
 
+## 15e. Levers and controlled doors (canonical since Phase 15)
+
+- **Lever:** an interactable ("Pull Lever"): "E: Pull Lever" (or the current Interact key) within
+  the same 56 px and line of sight as a chest, the nearest interactable winning as before. Pulling
+  it moves the handle over and turns its knob from red to green. It is **one-shot**: it stays
+  pulled, its prompt disappears and it can never be pulled again during that visit of the floor (it
+  does not toggle). Like everything else, it cannot be pulled from a menu, the Settings screen,
+  GAME OVER or while Carl is down.
+- **Controlled door:** a solid iron door that Carl cannot open himself (no prompt). It starts
+  **closed**: it blocks Carl, Donut, the enemies, projectiles, line of sight and blasts like a wall.
+  Something in the level opens it (on Floor 8, its lever); it then shows open, nothing is blocked
+  any more, and it **stays open** for that visit. Opening it never hurts or pushes anyone.
+- **Connection:** each lever is connected to what it opens by the level itself; nothing else in
+  the game knows about it.
+- **Never progression:** levers and doors only open optional places. They never lock or unlock
+  stairs, and nothing else locks stairs (the objective-locked stairs are a later feature).
+- **Saving:** none of it is saved (section 15). A retry, Return to Title or Continue finds every
+  lever up, every door closed and every chest closed, and the inventory back at the floor-entry
+  checkpoint, so nothing found behind a door can be kept twice. Only what Carl carries down the
+  stairs is part of the next floor's checkpoint.
+
 ## 16. HUD
 
 Eventually display:
@@ -750,7 +792,7 @@ Do not implement unless the user later expands scope:
 - randomized item affixes
 - advanced lighting/rendering
 - voice acting
-- floors 9–20 (Floor 4 was added in Phase 7, Floor 5 in Phase 8, Floor 6 in Phase 9, Floor 7
-  in Phase 12 and Floor 8 in Phase 14 as test floors)
+- floors 10–20 (Floor 4 was added in Phase 7, Floor 5 in Phase 8, Floor 6 in Phase 9, Floor 7
+  in Phase 12, Floor 8 in Phase 14 and Floor 9 in Phase 15 as test floors)
 - achievements
 - mod support

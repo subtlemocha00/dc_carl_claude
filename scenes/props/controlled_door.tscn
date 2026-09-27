@@ -1,0 +1,78 @@
+[gd_scene format=3 uid="uid://bpxocp3430jhu"]
+
+[ext_resource type="Script" uid="uid://b4w8nhbjotcmb" path="res://scripts/props/controlled_door.gd" id="1_door"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_door"]
+size = Vector2(64, 32)
+
+[node name="ControlledDoor" type="StaticBody2D"]
+collision_mask = 0
+script = ExtResource("1_door")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("RectangleShape2D_door")
+
+[node name="ClosedLook" type="Node2D" parent="."]
+
+[node name="Frame" type="Polygon2D" parent="ClosedLook"]
+color = Color(0.14, 0.13, 0.15, 1)
+polygon = PackedVector2Array(-32, -16, 32, -16, 32, 16, -32, 16)
+
+[node name="Slab" type="Polygon2D" parent="ClosedLook"]
+color = Color(0.36, 0.38, 0.43, 1)
+polygon = PackedVector2Array(-29, -12, 29, -12, 29, 12, -29, 12)
+
+[node name="Bar1" type="Polygon2D" parent="ClosedLook"]
+color = Color(0.21, 0.22, 0.26, 1)
+polygon = PackedVector2Array(-23.5, -12, -20.5, -12, -20.5, 12, -23.5, 12)
+
+[node name="Bar2" type="Polygon2D" parent="ClosedLook"]
+color = Color(0.21, 0.22, 0.26, 1)
+polygon = PackedVector2Array(-12.5, -12, -9.5, -12, -9.5, 12, -12.5, 12)
+
+[node name="Bar3" type="Polygon2D" parent="ClosedLook"]
+color = Color(0.21, 0.22, 0.26, 1)
+polygon = PackedVector2Array(9.5, -12, 12.5, -12, 12.5, 12, 9.5, 12)
+
+[node name="Bar4" type="Polygon2D" parent="ClosedLook"]
+color = Color(0.21, 0.22, 0.26, 1)
+polygon = PackedVector2Array(20.5, -12, 23.5, -12, 23.5, 12, 20.5, 12)
+
+[node name="Band" type="Polygon2D" parent="ClosedLook"]
+color = Color(0.55, 0.57, 0.62, 1)
+polygon = PackedVector2Array(-29, -2, 29, -2, 29, 2, -29, 2)
+
+[node name="LockPlate" type="Polygon2D" parent="ClosedLook"]
+color = Color(0.14, 0.13, 0.15, 1)
+polygon = PackedVector2Array(-5, -6, 5, -6, 5, 6, -5, 6)
+
+[node name="LockLight" type="Polygon2D" parent="ClosedLook"]
+color = Color(0.9, 0.22, 0.16, 1)
+polygon = PackedVector2Array(-3, -3, 3, -3, 3, 3, -3, 3)
+
+[node name="OpenLook" type="Node2D" parent="."]
+visible = false
+
+[node name="Threshold" type="Polygon2D" parent="OpenLook"]
+color = Color(0.16, 0.14, 0.13, 0.55)
+polygon = PackedVector2Array(-26, -3, 26, -3, 26, 3, -26, 3)
+
+[node name="PostLeft" type="Polygon2D" parent="OpenLook"]
+color = Color(0.14, 0.13, 0.15, 1)
+polygon = PackedVector2Array(-32, -16, -25, -16, -25, 16, -32, 16)
+
+[node name="PostLeftFace" type="Polygon2D" parent="OpenLook"]
+color = Color(0.36, 0.38, 0.43, 1)
+polygon = PackedVector2Array(-30, -13, -27, -13, -27, 13, -30, 13)
+
+[node name="PostRight" type="Polygon2D" parent="OpenLook"]
+color = Color(0.14, 0.13, 0.15, 1)
+polygon = PackedVector2Array(25, -16, 32, -16, 32, 16, 25, 16)
+
+[node name="PostRightFace" type="Polygon2D" parent="OpenLook"]
+color = Color(0.36, 0.38, 0.43, 1)
+polygon = PackedVector2Array(27, -13, 30, -13, 30, 13, 27, 13)
+
+[node name="OpenLight" type="Polygon2D" parent="OpenLook"]
+color = Color(0.3, 0.86, 0.34, 1)
+polygon = PackedVector2Array(-30, -2, -27, -2, -27, 2, -30, 2)

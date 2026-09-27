@@ -42,6 +42,7 @@ const FLOOR_5_PATH := "res://scenes/levels/floor_05.tscn"
 const FLOOR_6_PATH := "res://scenes/levels/floor_06.tscn"
 const FLOOR_7_PATH := "res://scenes/levels/floor_07.tscn"
 const FLOOR_8_PATH := "res://scenes/levels/floor_08.tscn"
+const FLOOR_9_PATH := "res://scenes/levels/floor_09.tscn"
 const BLOB_PATH := "res://scenes/enemies/gelatinous_blob.tscn"
 const SPITTER_PATH := "res://scenes/enemies/spitting_blob.tscn"
 const FISTS: ActionDefinition = preload("res://resources/actions/fists.tres")
@@ -75,11 +76,11 @@ func _run_checks() -> void:
 
 
 func _check_downward_only() -> void:
-	print("-- Every exit leads one floor down; Floor 8 has none (Phase 14)")
+	print("-- Every exit leads one floor down; Floor 8's to Floor 9 (Phase 15), Floor 9 has none")
 	var expected := {
 		SURFACE_PATH: [FLOOR_1_PATH], FLOOR_1_PATH: [FLOOR_2_PATH], FLOOR_2_PATH: [FLOOR_3_PATH],
 		FLOOR_3_PATH: [FLOOR_4_PATH], FLOOR_4_PATH: [FLOOR_5_PATH], FLOOR_5_PATH: [FLOOR_6_PATH],
-		FLOOR_6_PATH: [FLOOR_7_PATH], FLOOR_7_PATH: [FLOOR_8_PATH], FLOOR_8_PATH: [],
+		FLOOR_6_PATH: [FLOOR_7_PATH], FLOOR_7_PATH: [FLOOR_8_PATH], FLOOR_8_PATH: [FLOOR_9_PATH], FLOOR_9_PATH: [],
 	}
 	for level_path: String in expected:
 		var level: Node = (load(level_path) as PackedScene).instantiate()

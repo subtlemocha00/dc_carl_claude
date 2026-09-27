@@ -631,3 +631,54 @@ Required:
       Quit Game, the test guards for saves and settings. The chest, its prompt, its loot, Floor 8 and
       the Settings screen are readable at 1280×720, 640×360 and 1024×768.
 - [ ] Version in Project Settings: `0.14.0` (save format 3, settings format 2).
+
+# Phase 15 — Levers, Controlled Doors, Optional Mechanisms and Floor 9
+
+The Phase 3–14 rules still apply. No Floor 10, stair locking, objective-required stairs, countdown
+timers, quests, dialogue, NPCs, keys or keycards, locked chests, toggle switches, auto-closing doors,
+moving platforms, traps, environmental damage, new weapons, consumables or enemies, bosses,
+currency, shops, crafting, procedural generation, controller support, graphics/audio settings. The
+lever/door system never gates downward progression.
+
+Required:
+- [ ] **Lever** (`scenes/props/lever.tscn`, `Lever`): a solid object with an `Interactable` child
+      ("Pull Lever", one-shot), used through the Phase 14 system (the same 56 px range, walls block,
+      nearest wins, deterministic ties; no lever code in Carl or the controller). Starts inactive;
+      "<Interact key>: Pull Lever" ("E: Pull Lever", "Q: Pull Lever" when rebound; E then does
+      nothing). Pulling it shows it active, turns its Interactable off, removes the prompt and emits
+      `activated` exactly once; it never activates again that live floor (no toggle).
+- [ ] The Lever's code knows no floor, door, stairs, chest, inventory, save or absolute node path.
+- [ ] **Controlled Door** (`scenes/props/controlled_door.tscn`, `ControlledDoor`): not interactable;
+      starts closed and solid (`world` collision): it stops Carl, Donut, slingshot stones and thrown
+      Blast Bombs (the bomb explodes in front of it, and the door shields the blast). `open()`
+      shows it open and removes its collision: Carl and Donut pass, projectiles fly through. Calling
+      `open()` again is harmless; it never closes; opening hurts or pushes no one.
+- [ ] **Connection:** the lever's `activated` is connected to the door's `open()` in the level scene
+      (a local, editor-made connection). No new autoload, event bus, global channel or mechanism id.
+- [ ] **Floor 8 side room:** one Lever in the main room, one Controlled Door closing the side room's
+      only doorway, and the Phase 14 Treasure Chest inside holding Small Health Potion x1 and Blast
+      Bomb x1 (data; physical pickups; only Carl collects them). No enemy has to path through the
+      door; opening it needs no navigation rebake.
+- [ ] **Stairs are never gated:** Floor 8's stairs to Floor 9 are in the main room and work with the
+      lever inactive, the door closed and the chest closed (tested by walking there directly). The
+      stairs look at no lever, door, chest, enemy count or inventory.
+- [ ] **Rollback:** a Floor 8 retry, Return to Title + Continue, or quitting and relaunching before
+      Floor 9 gives back the lever inactive, the door closed, the chest closed, no loot lying
+      around, the Floor 8 entry inventory, HP and enemies; reusing it gives exactly one set; nothing
+      duplicates; pulling, opening and collecting never save.
+- [ ] **Carry-forward:** only what Carl collected and carries down is in the Floor 9 checkpoint (both
+      items, only the potion, or nothing when the side room is skipped).
+- [ ] **Floor 9** (`floor_09`, "Floor 9"): collision, safe arrival for Carl and Donut, HUD, action
+      menu, pause/Settings, a Floor 9 label, a Gelatinous Blob and a Spitting Blob, navigation
+      geometry; no stairs up and no exit (no Floor 10). Registered in `FloorRegistry`; `floor_10` is
+      unknown. Its checkpoint, retry and Continue work as for every floor.
+- [ ] Modal safety as Phase 14: the lever cannot be pulled from the action menu, the pause menu, the
+      Settings screen (key capture included), GAME OVER or while Carl is down; no free pull on
+      resume.
+- [ ] Save compatibility: version 1, 2 and 3 saves still load; a Floor 9 version 3 save loads; a
+      real Phase 14 settings file (version 2) loads unchanged; version 1 settings still migrate.
+- [ ] Phase 11–14 infrastructure unchanged: the `DC CARL` folder, `opengl3_angle` on Windows, title
+      Quit Game, the test guards for saves and settings. The lever, its prompt, the door (closed and
+      open), the side room, its chest and loot, and Floor 9 are readable at 1280×720, 640×360 and
+      1024×768.
+- [ ] Version in Project Settings: `0.15.0` (save format 3, settings format 2).

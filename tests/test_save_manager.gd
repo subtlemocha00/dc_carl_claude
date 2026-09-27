@@ -1,7 +1,7 @@
 extends "res://tests/support/game_test.gd"
-## Phase 5-14 SaveManager checks, on this test's own save file (never the player's):
+## Phase 5-15 SaveManager checks, on this test's own save file (never the player's):
 ## - the registries: every floor and action id maps back to itself, the known floors are
-##   exactly surface and floor_01 to floor_08 (Phase 14), and the known actions are Fists, the
+##   exactly surface and floor_01 to floor_09 (Phase 15), and the known actions are Fists, the
 ##   potion, the Slingshot, (Phase 9) the Baseball Bat and (Phase 12) the Blast Bomb;
 ## - a checkpoint is written as JSON (save_version 3, Phase 8) with stable ids only, and loads
 ##   back unchanged, Donut's HP included; a Floor 3 checkpoint keeps the owned Slingshot in
@@ -84,8 +84,8 @@ func _check_registries() -> void:
 		check(ResourceLoader.exists(scene_path) and FloorRegistry.get_floor_id(scene_path) == floor_id,
 				"floor '%s' maps to an existing scene and back" % floor_id)
 	check(FloorRegistry.get_scene_path(&"floor_99") == "" and not FloorRegistry.has_floor(&"floor_99"), "an unknown floor has no scene")
-	check(FloorRegistry.FLOORS.keys() == [&"surface", &"floor_01", &"floor_02", &"floor_03", &"floor_04", &"floor_05", &"floor_06", &"floor_07", &"floor_08"],
-			"the known floors are surface and floor_01 to floor_08", str(FloorRegistry.FLOORS.keys()))
+	check(FloorRegistry.FLOORS.keys() == [&"surface", &"floor_01", &"floor_02", &"floor_03", &"floor_04", &"floor_05", &"floor_06", &"floor_07", &"floor_08", &"floor_09"],
+			"the known floors are surface and floor_01 to floor_09", str(FloorRegistry.FLOORS.keys()))
 	check(FloorRegistry.get_display_name(&"floor_04") == "Floor 4", "floor_04 is shown as 'Floor 4'")
 	check(FloorRegistry.get_display_name(&"floor_05") == "Floor 5" and FloorRegistry.get_scene_path(&"floor_05") == FLOOR_5_PATH,
 			"floor_05 is shown as 'Floor 5' and opens floor_05.tscn")
@@ -95,7 +95,9 @@ func _check_registries() -> void:
 			"floor_07 (Phase 12) is shown as 'Floor 7' and opens floor_07.tscn")
 	check(FloorRegistry.get_display_name(&"floor_08") == "Floor 8" and FloorRegistry.get_scene_path(&"floor_08") == FLOOR_8_PATH,
 			"floor_08 (Phase 14) is shown as 'Floor 8' and opens floor_08.tscn")
-	check(not FloorRegistry.has_floor(&"floor_09"), "there is no floor_09")
+	check(FloorRegistry.get_display_name(&"floor_09") == "Floor 9" and FloorRegistry.get_scene_path(&"floor_09") == "res://scenes/levels/floor_09.tscn",
+			"floor_09 (Phase 15) is shown as 'Floor 9' and opens floor_09.tscn")
+	check(not FloorRegistry.has_floor(&"floor_10"), "there is no floor_10")
 
 
 func _check_round_trip() -> void:
@@ -266,7 +268,7 @@ func _check_rejected_data() -> void:
 		"no save_version": func(d: Dictionary) -> void: d.erase("save_version"),
 		"no floor_id": func(d: Dictionary) -> void: d.erase("floor_id"),
 		"an unknown floor": func(d: Dictionary) -> void: d["floor_id"] = "floor_99",
-		"floor_09, which does not exist": func(d: Dictionary) -> void: d["floor_id"] = "floor_09",
+		"floor_10, which does not exist": func(d: Dictionary) -> void: d["floor_id"] = "floor_10",
 		"a scene path instead of a floor id": func(d: Dictionary) -> void: d["floor_id"] = FLOOR_2_PATH,
 		"no carl": func(d: Dictionary) -> void: d.erase("carl"),
 		"HP as a string": func(d: Dictionary) -> void: d["carl"]["health"] = "90",
